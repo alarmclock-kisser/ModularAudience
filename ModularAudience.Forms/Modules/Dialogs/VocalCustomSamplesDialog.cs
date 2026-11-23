@@ -65,7 +65,11 @@ public sealed partial class VocalCustomSamplesDialog : Form
 
         foreach (AudioObj audio in openAudio)
         {
-            if (!seen.Add(audio) || !VocalCustomSampleStore.IsEligibleAudio(audio)) continue;
+            if (!seen.Add(audio) || !VocalCustomSampleStore.IsEligibleAudio(audio))
+            {
+                continue;
+            }
+
             double duration = audio.Data.Length / (double)(audio.Channels * audio.AdjustedSampleRate);
             string name = string.IsNullOrWhiteSpace(audio.Name) ? "Unnamed audio" : audio.Name;
             choices.Add(new AudioChoice(
@@ -83,16 +87,28 @@ public sealed partial class VocalCustomSamplesDialog : Form
 
     private void MappingsGrid_DefaultValuesNeeded(object? sender, DataGridViewRowEventArgs e)
     {
-        if (refreshing) return;
+        if (refreshing)
+        {
+            return;
+        }
+
         e.Row.Tag = VocalCustomSampleStore.Add();
         e.Row.Cells["Audio"].Value = Guid.Empty;
     }
 
     private void MappingsGrid_CellEndEdit(object? sender, DataGridViewCellEventArgs e)
     {
-        if (refreshing || e.RowIndex < 0 || e.ColumnIndex != ipaColumn.Index) return;
+        if (refreshing || e.RowIndex < 0 || e.ColumnIndex != ipaColumn.Index)
+        {
+            return;
+        }
+
         DataGridViewRow row = mappingsGrid.Rows[e.RowIndex];
-        if (row.IsNewRow) return;
+        if (row.IsNewRow)
+        {
+            return;
+        }
+
         try
         {
             Guid id = EnsureEntry(row);
@@ -110,15 +126,27 @@ public sealed partial class VocalCustomSamplesDialog : Form
 
     private void MappingsGrid_CellValueChanged(object? sender, DataGridViewCellEventArgs e)
     {
-        if (refreshing || e.RowIndex < 0 || e.ColumnIndex != audioColumn.Index) return;
+        if (refreshing || e.RowIndex < 0 || e.ColumnIndex != audioColumn.Index)
+        {
+            return;
+        }
+
         DataGridViewRow row = mappingsGrid.Rows[e.RowIndex];
-        if (row.IsNewRow || row.Cells["Audio"].Value is not Guid choiceKey) return;
+        if (row.IsNewRow || row.Cells["Audio"].Value is not Guid choiceKey)
+        {
+            return;
+        }
+
         try
         {
             Guid id = EnsureEntry(row);
             VocalCustomSampleEntrySnapshot? existing = VocalCustomSampleStore.GetEntries()
                 .FirstOrDefault(entry => entry.Id == id);
-            if (existing?.AudioChoiceId == choiceKey) return;
+            if (existing?.AudioChoiceId == choiceKey)
+            {
+                return;
+            }
+
             if (choiceKey == Guid.Empty)
             {
                 VocalCustomSampleStore.ClearAudio(id);
@@ -127,11 +155,17 @@ public sealed partial class VocalCustomSamplesDialog : Form
             {
                 AudioChoice? choice = audioChoices.FirstOrDefault(candidate => candidate.ChoiceKey == choiceKey);
                 if (choice?.Source is not null)
+                {
                     VocalCustomSampleStore.SetAudio(id, choice.Source);
+                }
                 else if (choice?.CachedEntryId is Guid cachedId)
+                {
                     VocalCustomSampleStore.SetAudioFromEntry(id, cachedId);
+                }
                 else
+                {
                     throw new InvalidOperationException("The selected audio source is no longer available.");
+                }
             }
             RefreshGrid();
             MappingsChanged?.Invoke(this, EventArgs.Empty);
@@ -147,13 +181,19 @@ public sealed partial class VocalCustomSamplesDialog : Form
     {
         if (mappingsGrid.IsCurrentCellDirty
             && mappingsGrid.CurrentCell is DataGridViewComboBoxCell)
+        {
             mappingsGrid.CommitEdit(DataGridViewDataErrorContexts.Commit);
+        }
     }
 
     private void MappingsGrid_UserDeletingRow(object? sender, DataGridViewRowCancelEventArgs e)
     {
         DataGridViewRow? row = e.Row;
-        if (row?.Tag is not Guid id) return;
+        if (row?.Tag is not Guid id)
+        {
+            return;
+        }
+
         VocalCustomSampleStore.Remove(id);
         MappingsChanged?.Invoke(this, EventArgs.Empty);
         UpdateStatus();
@@ -181,7 +221,11 @@ public sealed partial class VocalCustomSamplesDialog : Form
 
     private void MappingsGrid_DragDrop(object? sender, DragEventArgs e)
     {
-        if (e.Data is null || GetDraggedAudio(e.Data) is not AudioObj audio) return;
+        if (e.Data is null || GetDraggedAudio(e.Data) is not AudioObj audio)
+        {
+            return;
+        }
+
         Point clientPoint = mappingsGrid.PointToClient(new Point(e.X, e.Y));
         DataGridView.HitTestInfo hit = mappingsGrid.HitTest(clientPoint.X, clientPoint.Y);
         Guid entryId;
@@ -203,7 +247,11 @@ public sealed partial class VocalCustomSamplesDialog : Form
             int rowIndex = mappingsGrid.Rows
                 .Cast<DataGridViewRow>()
                 .FirstOrDefault(row => row.Tag is Guid id && id == entryId)?.Index ?? -1;
-            if (rowIndex >= 0) mappingsGrid.CurrentCell = mappingsGrid.Rows[rowIndex].Cells["Ipa"];
+            if (rowIndex >= 0)
+            {
+                mappingsGrid.CurrentCell = mappingsGrid.Rows[rowIndex].Cells["Ipa"];
+            }
+
             statusLabel.Text = "Audio sample assigned. Enter an IPA substring for this row.";
         }
         catch (Exception error) when (error is InvalidOperationException or ArgumentException)
@@ -216,20 +264,32 @@ public sealed partial class VocalCustomSamplesDialog : Form
     {
         IEnumerable<AudioObj>? audios = null;
         if (data.GetDataPresent(typeof(AudioObj[])))
+        {
             audios = data.GetData(typeof(AudioObj[])) as AudioObj[];
+        }
         else if (data.GetDataPresent(typeof(List<AudioObj>)))
+        {
             audios = data.GetData(typeof(List<AudioObj>)) as List<AudioObj>;
+        }
         else if (data.GetDataPresent(typeof(IEnumerable<AudioObj>)))
+        {
             audios = data.GetData(typeof(IEnumerable<AudioObj>)) as IEnumerable<AudioObj>;
+        }
         else if (data.GetDataPresent(typeof(AudioObj)))
+        {
             audios = data.GetData(typeof(AudioObj)) is AudioObj single ? [single] : null;
+        }
 
         return audios?.FirstOrDefault(VocalCustomSampleStore.IsEligibleAudio);
     }
 
     private Guid EnsureEntry(DataGridViewRow row)
     {
-        if (row.Tag is Guid id) return id;
+        if (row.Tag is Guid id)
+        {
+            return id;
+        }
+
         id = VocalCustomSampleStore.Add();
         row.Tag = id;
         return id;

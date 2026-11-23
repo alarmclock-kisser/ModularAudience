@@ -49,8 +49,14 @@ public sealed partial class MixTrackView
     {
         if (playback is not null)
         {
-            if (Arrangement.Loop) this.ApplyPlaybackLoop(playback);
-            else if (playback.LoopEnabled) playback.UpdateLoopFraction(0, playback.Data.LongLength, playback.Data.LongLength, false, false);
+            if (Arrangement.Loop)
+            {
+                this.ApplyPlaybackLoop(playback);
+            }
+            else if (playback.LoopEnabled)
+            {
+                playback.UpdateLoopFraction(0, playback.Data.LongLength, playback.Data.LongLength, false, false);
+            }
         }
         canvas.Invalidate();
     }
@@ -65,14 +71,26 @@ public sealed partial class MixTrackView
     }
     private void AutoPanClipDrag(int x)
     {
-        if (this.dragMode is not (1 or 2 or 3)) return;
+        if (this.dragMode is not (1 or 2 or 3))
+        {
+            return;
+        }
+
         int direction = x < Header + 8 ? -1 : x > canvas.Width - 12 ? 1 : 0;
-        if (direction == 0) return;
+        if (direction == 0)
+        {
+            return;
+        }
+
         int amount = Math.Max(1, (int)Math.Round(600 / pixelsPerSecond));
         // Never extend the viewport into negative time. Auto-pan stops at zero, but
         // clips can still be dragged into the header area (x < Header) to gain a
         // negative offset while the view itself stays at zero.
-        if (direction > 0 && scroll.Value + amount >= scroll.Maximum - scroll.LargeChange) scroll.Maximum = Math.Min(int.MaxValue - 200, scroll.Maximum + amount * 8);
+        if (direction > 0 && scroll.Value + amount >= scroll.Maximum - scroll.LargeChange)
+        {
+            scroll.Maximum = Math.Min(int.MaxValue - 200, scroll.Maximum + amount * 8);
+        }
+
         scroll.Value = Math.Clamp(scroll.Value + direction * amount, 0, scroll.Maximum - scroll.LargeChange + 1);
     }
 
@@ -87,11 +105,18 @@ public sealed partial class MixTrackView
         foreach (var pair in this.joined.ToArray())
         {
             TrackView view = pair.Value;
-            if (view.IsDisposed || view.Disposing || !ReferenceEquals(view.JoinedMix, this)) continue;
+            if (view.IsDisposed || view.Disposing || !ReferenceEquals(view.JoinedMix, this))
+            {
+                continue;
+            }
+
             view.SetJoinedMix(null);
             bool alive = this.joinedOrigins.TryGetValue(pair.Key, out var origin) && origin.Collection is { IsDisposed: false, Disposing: false } collection &&
                 WindowMain.CollectionViews.Contains(collection) && collection.AudioC.Audios.Any(audio => audio.Id == origin.Audio);
-            if (alive) view.Show();
+            if (alive)
+            {
+                view.Show();
+            }
             else { view.Hide(); view.Close(); }
         }
     }

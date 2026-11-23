@@ -10,14 +10,18 @@ public sealed class AppUpdatedReceiver : BroadcastReceiver
     public override void OnReceive(Context? context, Intent? intent)
     {
         if (context == null)
+        {
             return;
+        }
 
         try
         {
             Intent? launchIntent = context.PackageManager?.GetLaunchIntentForPackage(
                 context.PackageName ?? string.Empty);
             if (launchIntent == null)
+            {
                 return;
+            }
 
             launchIntent.AddFlags(ActivityFlags.NewTask | ActivityFlags.ClearTop);
             context.StartActivity(launchIntent);

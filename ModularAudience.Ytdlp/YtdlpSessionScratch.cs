@@ -13,7 +13,11 @@ internal sealed class YtdlpSessionScratch : IDisposable
     public YtdlpSessionScratch(ProcessStartInfo start, string jobDirectory, IProgress<string>? progress, string? cookieContents)
     {
         this.progress = progress;
-        if (cookieContents is null && !start.ArgumentList.Contains("--cookies-from-browser") && !start.ArgumentList.Contains("--cookies")) return;
+        if (cookieContents is null && !start.ArgumentList.Contains("--cookies-from-browser") && !start.ArgumentList.Contains("--cookies"))
+        {
+            return;
+        }
+
         path = Path.Combine(jobDirectory, "browser-session-" + Guid.NewGuid().ToString("N"));
         Directory.CreateDirectory(path);
         // yt-dlp can copy a browser database before reading it; keep that scratch inside the owned job.
@@ -58,7 +62,11 @@ internal sealed class YtdlpSessionScratch : IDisposable
 
     public void Dispose()
     {
-        if (path is null) return;
+        if (path is null)
+        {
+            return;
+        }
+
         try { Directory.Delete(path, recursive: true); }
         catch (DirectoryNotFoundException) { }
         catch (Exception error) when (error is IOException or UnauthorizedAccessException)

@@ -39,7 +39,10 @@ public sealed class QuantumBeatEngineTests
         scope.Store.SaveWorkspace(Workspace() with { ConnectionProfile = "Studio" });
         scope.Store.SaveExperiment("Amen", Workspace());
         foreach (string file in Directory.GetFiles(scope.Root, "*.json", SearchOption.AllDirectories))
+        {
             Assert.IsFalse(File.ReadAllText(file).Contains(secret, StringComparison.Ordinal));
+        }
+
         Assert.AreEqual(0, Directory.GetFiles(scope.Root, "*.tmp", SearchOption.AllDirectories).Length);
     }
 
@@ -214,7 +217,11 @@ public sealed class QuantumBeatEngineTests
         const string secret = "PRIVATE-SECRET";
         Exception[] errors = [new Exception(secret), new InvalidOperationException(secret), new ArgumentException(secret), new IOException(secret),
             new CryptographicException(secret), new JsonException(secret), new HttpRequestException(secret), new TimeoutException(secret)];
-        foreach (var error in errors) Assert.IsFalse(QuantumBeatEngineDialog.EnglishError(error).Contains(secret, StringComparison.Ordinal));
+        foreach (var error in errors)
+        {
+            Assert.IsFalse(QuantumBeatEngineDialog.EnglishError(error).Contains(secret, StringComparison.Ordinal));
+        }
+
         using var circuit = QuantumDiagramRenderer.Circuit(QuantumCircuitComposer.CreatePreset("Bell break", 16));
         using var sequence = QuantumDiagramRenderer.Sequence(null, ["Kick", "Snare"], 16, 64);
         Assert.IsTrue(circuit.Height >= 16 * QuantumDiagramRenderer.WireHeight);
@@ -239,7 +246,11 @@ public sealed class QuantumBeatEngineTests
         internal string Root { get; } = Path.Combine(Path.GetTempPath(), "ModularAudienceQuantum-" + Guid.NewGuid().ToString("N"));
         internal QuantumStudioStore Store { get; }
         internal StoreScope() => this.Store = new(this.Root);
-        public void Dispose() { if (Directory.Exists(this.Root)) Directory.Delete(this.Root, true); }
+        public void Dispose() { if (Directory.Exists(this.Root))
+            {
+                Directory.Delete(this.Root, true);
+            }
+        }
     }
     private sealed class Fixture : IDisposable
     {
@@ -251,7 +262,7 @@ public sealed class QuantumBeatEngineTests
             this.Scope.Store.SaveWorkspace(Workspace(useIbm: useIbm));
             this.Editor = new(this.Sources, this.Session, this.Scope.Store, new FakePlayer());
         }
-        public void Dispose() { this.Editor.Close(); this.Editor.Dispose(); foreach (var sample in this.Sources) sample.Dispose(); this.Scope.Dispose(); }
+        public void Dispose() { this.Editor.Close(); this.Editor.Dispose(); foreach (var sample in this.Sources) { sample.Dispose(); } this.Scope.Dispose(); }
     }
     private sealed class FakePlayer : IEffectPreviewPlayer
     {

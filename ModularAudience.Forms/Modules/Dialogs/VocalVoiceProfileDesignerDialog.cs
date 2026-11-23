@@ -58,7 +58,11 @@ public sealed class VocalVoiceProfileDesignerDialog : Form
         var baseRow = new FlowLayoutPanel { Dock = DockStyle.Fill, AutoSize = true, WrapContents = true };
         baseRow.Controls.Add(new Label { Text = "Base preset", AutoSize = true, Margin = new Padding(4, 8, 2, 0) });
         var baseCombo = new ComboBox { DropDownStyle = ComboBoxStyle.DropDownList, Width = 180 };
-        foreach (var p in VocalVoicePreset.BuiltIn) baseCombo.Items.Add(p.Name);
+        foreach (var p in VocalVoicePreset.BuiltIn)
+        {
+            baseCombo.Items.Add(p.Name);
+        }
+
         baseCombo.SelectedIndex = Math.Max(0, VocalVoicePreset.BuiltIn.ToList().FindIndex(p => p.Id == profile.BasePresetId));
         baseCombo.SelectedIndexChanged += (_, _) =>
         {

@@ -63,7 +63,10 @@ public sealed class QuantumDrumRollTests
             good with { SliceCutOffsetMs = -1 }, good with { SliceCutOffsetMs = double.NaN }
         ];
         foreach (DrumSliceTrigger slice in invalid)
+        {
             await Assert.ThrowsExactlyAsync<ArgumentException>(() => QuantumAudioPatternRenderer.PrepareAsync(source, Pattern([slice]), CancellationToken.None));
+        }
+
         await Assert.ThrowsExactlyAsync<ArgumentException>(() => QuantumAudioPatternRenderer.PrepareAsync(source, Pattern([]), CancellationToken.None));
         await Assert.ThrowsExactlyAsync<ArgumentException>(() => QuantumAudioPatternRenderer.PrepareAsync(source, Pattern([good, good]), CancellationToken.None));
         await Assert.ThrowsExactlyAsync<ArgumentException>(() => QuantumAudioPatternRenderer.PrepareAsync(source, Pattern([null!]), CancellationToken.None));
@@ -200,7 +203,11 @@ public sealed class QuantumDrumRollTests
         var watch = Stopwatch.StartNew();
         while (!done())
         {
-            if (watch.Elapsed > TimeSpan.FromSeconds(10)) throw new AssertFailedException("The quantum UI operation did not complete.");
+            if (watch.Elapsed > TimeSpan.FromSeconds(10))
+            {
+                throw new AssertFailedException("The quantum UI operation did not complete.");
+            }
+
             Application.DoEvents();
             Thread.Sleep(1);
         }

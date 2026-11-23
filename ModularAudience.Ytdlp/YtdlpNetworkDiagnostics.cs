@@ -12,17 +12,30 @@ public static partial class YtdlpNetworkDiagnostics
     public static async Task<string> InspectAsync(string error, IReadOnlyList<string> arguments, CancellationToken token)
     {
         if (YtdlpProcessException.Classify(error) == YtdlpFailureKind.NameResolution)
+        {
             return "Network diagnosis: DNS/address resolution failed before HTTPS or audio download. " + DescribeRoute(arguments) +
                 " Forced IPv6 requires a usable IPv6 DNS/network route. Try Automatic or an explicitly confirmed IPv4 recovery; " +
                 "if resolution still fails, check DNS and the authorized proxy/network. Cookies and disabling TLS verification cannot repair DNS. No settings were changed.";
+        }
+
         if (error.Contains("CERTIFICATE_VERIFY_FAILED", StringComparison.OrdinalIgnoreCase))
+        {
             return "Network diagnosis: TLS certificate-chain verification failed before media download. " +
                 "Check the certificate chain and any authorized HTTPS inspection/proxy with your administrator. " +
                 "Do not disable certificate verification; this is not a codec or retry problem. No trust settings were changed.";
+        }
+
         if (error.Contains("HTTP Error 503", StringComparison.OrdinalIgnoreCase))
+        {
             return "Network diagnosis: HTTP 503 Service Unavailable was returned by an upstream server or gateway. " +
                 "This response does not establish a local audio-conversion defect; no successful download is claimed.";
-        if (!IsConnectionRefused(error)) return string.Empty;
+        }
+
+        if (!IsConnectionRefused(error))
+        {
+            return string.Empty;
+        }
+
         var lines = new List<string>
         {
             "Network diagnosis: TCP connection refused before TLS/audio conversion. Additional retries or disabling certificate checks cannot repair this.",
@@ -32,7 +45,11 @@ public static partial class YtdlpNetworkDiagnostics
                     name + "=" + (string.IsNullOrEmpty(Environment.GetEnvironmentVariable(name)) ? "unset" : "set")))
         };
         var hosts = CdnHostPattern().Matches(error).Select(match => match.Value).Distinct(StringComparer.OrdinalIgnoreCase).Take(2);
-        foreach (string host in hosts) lines.Add(await ProbeHostAsync(host, token));
+        foreach (string host in hosts)
+        {
+            lines.Add(await ProbeHostAsync(host, token));
+        }
+
         lines.Add("Direct TCP probes do not test a configured proxy and cannot identify which firewall, security product, gateway or remote server refused the original connection. Permit the required googlevideo.com HTTPS route or configure an authorized proxy explicitly. No route or security settings were changed.");
         return string.Join(Environment.NewLine, lines);
     }

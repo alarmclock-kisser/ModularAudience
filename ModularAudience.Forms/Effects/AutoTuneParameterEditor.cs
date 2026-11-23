@@ -80,7 +80,11 @@ internal sealed class AutoTuneParameterEditor : UserControl
         this.curves.Add(EffectCurveTargets.Amount, amount); amount.SettingsChanged += this.ChangedControl; Field(output, "Effect amount (%)", amount);
         output.Controls.Add(this.protectPeak);
         this.protectPeak.CheckedChanged += this.ChangedControl;
-        foreach (ComboBox combo in new[] { this.scale, this.rootNote, this.analysisChannel, this.fftSize, this.overlap }) combo.SelectedIndexChanged += this.ChangedControl;
+        foreach (ComboBox combo in new[] { this.scale, this.rootNote, this.analysisChannel, this.fftSize, this.overlap })
+        {
+            combo.SelectedIndexChanged += this.ChangedControl;
+        }
+
         this.noteLength.SelectedItemChanged += this.ChangedControl;
         this.ApplySettings(new AutoTuneSettings());
     }
@@ -123,12 +127,24 @@ internal sealed class AutoTuneParameterEditor : UserControl
         {
             this.hadAutomation = settings.Automation is not null;
             this.timing.Apply(settings.Automation?.Timing ?? new());
-            foreach (var (key, curve) in this.curves) curve.Apply(settings.Automation?.Parameters.GetValueOrDefault(key));
+            foreach (var (key, curve) in this.curves)
+            {
+                curve.Apply(settings.Automation?.Parameters.GetValueOrDefault(key));
+            }
+
             this.scale.SelectedItem = settings.Scale; this.rootNote.SelectedIndex = settings.RootNote;
             this.analysisChannel.SelectedItem = settings.AnalysisChannel; this.fftSize.SelectedItem = settings.FftSize; this.overlap.SelectedItem = settings.Overlap;
             this.noteLength.SelectedItem = settings.MinimumNoteLength; this.protectPeak.Checked = settings.ProtectPeak;
-            for (int i = 0; i < 12; i++) this.notes[i].Checked = (settings.CustomNotesMask & (1 << i)) != 0;
-            foreach (NumberField field in this.numbers.Values) field.Control.Value = field.Read(settings);
+            for (int i = 0; i < 12; i++)
+            {
+                this.notes[i].Checked = (settings.CustomNotesMask & (1 << i)) != 0;
+            }
+
+            foreach (NumberField field in this.numbers.Values)
+            {
+                field.Control.Value = field.Read(settings);
+            }
+
             this.customNotes.Enabled = settings.Scale == AutoTuneScale.Custom;
         }
         finally { this.syncing = false; }
@@ -145,7 +161,11 @@ internal sealed class AutoTuneParameterEditor : UserControl
 
     private void ChangedControl(object? sender, EventArgs e)
     {
-        if (this.syncing) return;
+        if (this.syncing)
+        {
+            return;
+        }
+
         this.customNotes.Enabled = this.scale.SelectedItem is AutoTuneScale.Custom;
         this.SettingsChanged?.Invoke(this, EventArgs.Empty);
     }
@@ -184,7 +204,11 @@ internal sealed class AutoTuneParameterEditor : UserControl
 
     protected override void Dispose(bool disposing)
     {
-        if (disposing) this.tips.Dispose();
+        if (disposing)
+        {
+            this.tips.Dispose();
+        }
+
         base.Dispose(disposing);
     }
 }

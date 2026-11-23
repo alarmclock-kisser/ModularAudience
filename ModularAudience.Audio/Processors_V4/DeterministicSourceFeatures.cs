@@ -20,7 +20,10 @@ namespace ModularAudience.Audio.Processors_V4
             double[]? cqtEnergyPerBin = null;
             double pyinPitch = 0, pyinVoiced = 0;
             if (source != null && settings.UseCqtAnalysis)
+            {
                 cqtEnergyPerBin = MeasureCqtEnergy(source, bins, sampleRate, settings, token);
+            }
+
             if (source != null && settings.UsePyin)
             {
                 (pyinPitch, pyinVoiced) = MeasurePyinEvidence(source, sampleRate, settings, token);
@@ -35,20 +38,33 @@ namespace ModularAudience.Audio.Processors_V4
                 double[] envelope = bands.Select(row => row[component]).ToArray();
                 (double h, double p, double pan) = Character(data, bands, prediction, activation, component, token);
                 (double frequency, double score) = DeterministicPitchFeatures.Estimate(spectrum, sampleRate, settings.WindowSize, token);
-                if (h < 0.35 || p > h) frequency = 0;
+                if (h < 0.35 || p > h)
+                {
+                    frequency = 0;
+                }
+
                 double centroid = 0;
-                for (int bin = 0; bin < spectrum.Length; bin++) centroid += spectrum[bin] * bin * sampleRate / settings.WindowSize;
+                for (int bin = 0; bin < spectrum.Length; bin++)
+                {
+                    centroid += spectrum[bin] * bin * sampleRate / settings.WindowSize;
+                }
 
                 // CQT evidence: correlate component spectrum with aggregate constant-Q band energy.
                 double cqtEnergy = 0;
                 if (cqtEnergyPerBin != null)
                 {
                     double specNorm = 0;
-                    for (int bin = 0; bin < spectrum.Length; bin++) specNorm += spectrum[bin];
+                    for (int bin = 0; bin < spectrum.Length; bin++)
+                    {
+                        specNorm += spectrum[bin];
+                    }
+
                     if (specNorm > 0)
                     {
                         for (int bin = 0; bin < spectrum.Length; bin++)
+                        {
                             cqtEnergy += spectrum[bin] / specNorm * cqtEnergyPerBin[bin];
+                        }
                     }
                 }
 
@@ -58,12 +74,18 @@ namespace ModularAudience.Audio.Processors_V4
                 {
                     double ratio = Math.Max(frequency, pyinPitch) / Math.Min(frequency, pyinPitch);
                     double cents = 1200 * Math.Log2(ratio);
-                    if (cents < 50) compPyinPitch = pyinPitch;
+                    if (cents < 50)
+                    {
+                        compPyinPitch = pyinPitch;
+                    }
                 }
                 else if (pyinPitch > 0 && frequency == 0)
                 {
                     // Component has no estimated fundamental; use pYIN pitch if component is tonal.
-                    if (h >= 0.35) compPyinPitch = pyinPitch;
+                    if (h >= 0.35)
+                    {
+                        compPyinPitch = pyinPitch;
+                    }
                 }
 
                 result[component] = new(component, activation.Sum(), h, p, pan,
@@ -96,7 +118,10 @@ namespace ModularAudience.Audio.Processors_V4
             {
                 long idx = (startSample + i) * channels;
                 mono[i] = source.Samples[idx];
-                if (channels == 2) mono[i] += source.Samples[idx + 1];
+                if (channels == 2)
+                {
+                    mono[i] += source.Samples[idx + 1];
+                }
             }
 
             Complex[][] coefficients = cqt.Forward(mono, token);
@@ -125,7 +150,11 @@ namespace ModularAudience.Audio.Processors_V4
             for (int bin = 1; bin < cqtEnergy.Length; bin++)
             {
                 double freq = bin * binHz;
-                if (freq <= 0) continue;
+                if (freq <= 0)
+                {
+                    continue;
+                }
+
                 double energy = 0;
                 for (int b = 0; b < numPositive; b++)
                 {
@@ -156,7 +185,10 @@ namespace ModularAudience.Audio.Processors_V4
             {
                 long idx = i * channels;
                 mono[(int)i] = source.Samples[idx];
-                if (channels == 2) mono[(int)i] += source.Samples[idx + 1];
+                if (channels == 2)
+                {
+                    mono[(int)i] += source.Samples[idx + 1];
+                }
             }
 
             PyinPitchFrame[] frames = PyinPitchTracker.Track(mono, sampleRate,
@@ -168,7 +200,11 @@ namespace ModularAudience.Audio.Processors_V4
             Dictionary<double, double> pitchMass = new();
             foreach (PyinPitchFrame frame in frames)
             {
-                if (frame.FrequencyHz <= 0) continue;
+                if (frame.FrequencyHz <= 0)
+                {
+                    continue;
+                }
+
                 totalVoiced += frame.VoicedProbability;
                 // Quantize to nearest semitone for aggregation.
                 double semitone = Math.Round(12 * Math.Log2(frame.FrequencyHz / 27.5));
@@ -176,7 +212,11 @@ namespace ModularAudience.Audio.Processors_V4
                 pitchMass[quantized] = pitchMass.GetValueOrDefault(quantized) + frame.VoicedProbability;
             }
 
-            if (totalVoiced <= 0) return (0, 0);
+            if (totalVoiced <= 0)
+            {
+                return (0, 0);
+            }
+
             double avgVoiced = totalVoiced / frames.Length;
             double bestPitch = 0;
             double bestMass = 0;
@@ -196,7 +236,11 @@ namespace ModularAudience.Audio.Processors_V4
             double[][] result = DeterministicSpectrogram.Allocate(bandMap[^1] + 1, dictionary[0].Length);
             for (int bin = 0; bin < dictionary.Length; bin++)
             {
-                if ((bin & 255) == 0) token.ThrowIfCancellationRequested();
+                if ((bin & 255) == 0)
+                {
+                    token.ThrowIfCancellationRequested();
+                }
+
                 for (int component = 0; component < dictionary[bin].Length; component++)
                 {
                     result[bandMap[bin]][component] += dictionary[bin][component];
@@ -211,7 +255,10 @@ namespace ModularAudience.Audio.Processors_V4
             for (int frame = 0; frame < activations.Length; frame++)
             {
                 token.ThrowIfCancellationRequested();
-                for (int band = 0; band < bands.Length; band++) result[frame][band] = DeterministicNmf.Dot(bands[band], activations[frame]);
+                for (int band = 0; band < bands.Length; band++)
+                {
+                    result[frame][band] = DeterministicNmf.Dot(bands[band], activations[frame]);
+                }
             }
             return result;
         }
@@ -256,7 +303,11 @@ namespace ModularAudience.Audio.Processors_V4
 
         internal static double ActivationCorrelation(double[] first, double[] second, CancellationToken token)
         {
-            if (first.Length < 3) return 0;
+            if (first.Length < 3)
+            {
+                return 0;
+            }
+
             double firstMean = first.Average();
             double secondMean = second.Average();
             double covariance = 0;
@@ -264,7 +315,11 @@ namespace ModularAudience.Audio.Processors_V4
             double secondVariance = 0;
             for (int frame = 0; frame < first.Length; frame++)
             {
-                if ((frame & 255) == 0) token.ThrowIfCancellationRequested();
+                if ((frame & 255) == 0)
+                {
+                    token.ThrowIfCancellationRequested();
+                }
+
                 double a = first[frame] - firstMean;
                 double b = second[frame] - secondMean;
                 covariance += a * b;

@@ -29,7 +29,11 @@ internal static class QuantumDiagramRenderer
         for (int index = 0; index < definition.Gates.Count; index++)
         {
             var gate = definition.Gates[index];
-            if (gate.Qubit < 0 || gate.Qubit >= definition.QubitCount) continue;
+            if (gate.Qubit < 0 || gate.Qubit >= definition.QubitCount)
+            {
+                continue;
+            }
+
             float x = CircuitLeft + index * spacing, y = CircuitTop + gate.Qubit * WireHeight;
             Color color = !gate.Enabled ? Color.SlateGray : gate.Kind switch
             {
@@ -55,7 +59,10 @@ internal static class QuantumDiagramRenderer
                 string text = gate.Kind switch { QuantumGateKind.Hadamard => "H", QuantumGateKind.BitFlip => "X", _ => "Ry" };
                 graphics.DrawString(text, font, dark, x + 1, y - 8);
             }
-            if (index == selectedGate) graphics.DrawRectangle(Pens.White, x - 2, y - 12, width + 4, 24);
+            if (index == selectedGate)
+            {
+                graphics.DrawRectangle(Pens.White, x - 2, y - 12, width + 4, 24);
+            }
         }
         graphics.DrawString("M → c (q0 is the rightmost bit)", font, ink, CircuitLeft, bitmap.Height - 18);
         return bitmap;
@@ -83,21 +90,37 @@ internal static class QuantumDiagramRenderer
             int x = 176 + step * cell;
             graphics.DrawLine(step % stepsPerBar == 0 ? barPen : grid, x, 34, x, bitmap.Height - 8);
             if (step < steps && (cell >= 18 || step % stepsPerBar == 0))
+            {
                 graphics.DrawString(step % stepsPerBar == 0 ? $"B{step / stepsPerBar + 1}" : (step % stepsPerBar + 1).ToString(), font, brush, x + 2, 12);
+            }
         }
         if (sequence is not null)
+        {
             foreach (var note in sequence.Notes)
             {
-                if (note.TrackIndex < 0 || note.TrackIndex >= sampleNames.Count) continue;
+                if (note.TrackIndex < 0 || note.TrackIndex >= sampleNames.Count)
+                {
+                    continue;
+                }
+
                 Color color = note.IsGhost ? Color.FromArgb(140, 158, 194) : note.Reverse ? Color.FromArgb(215, 132, 234)
                     : note.VarispeedFactor != 1 ? Color.FromArgb(247, 185, 87) : Color.FromArgb(59, 206, 184);
                 using var fill = new SolidBrush(Color.FromArgb(Math.Clamp((int)(70 + note.Velocity * 185), 0, 255), color));
                 float x = 176 + (float)note.StartStep * cell, y = 40 + note.TrackIndex * 32;
                 float length = Math.Max(3, (float)Math.Min(note.DurationSteps, steps - note.StartStep) * cell - 2);
                 graphics.FillRectangle(fill, x + 1, y, length, 23);
-                if (cell >= 24) graphics.DrawString(note.Velocity.ToString("0.0", System.Globalization.CultureInfo.InvariantCulture), font, Brushes.Black, x + 2, y + 3);
+                if (cell >= 24)
+                {
+                    graphics.DrawString(note.Velocity.ToString("0.0", System.Globalization.CultureInfo.InvariantCulture), font, Brushes.Black, x + 2, y + 3);
+                }
             }
-        if (sampleNames.Count == 0) graphics.DrawString("Select samples in an audio collection to create instrument tracks.", font, brush, 12, 72);
+        }
+
+        if (sampleNames.Count == 0)
+        {
+            graphics.DrawString("Select samples in an audio collection to create instrument tracks.", font, brush, 12, 72);
+        }
+
         return bitmap;
     }
 }

@@ -30,7 +30,11 @@ public sealed partial class MixTrackView
             var answer = !hasAudio ? DialogResult.No : this.ConfirmTempoChange is not null ? await this.ConfirmTempoChange(initial, target) :
                 await this.windowGroup.AskAsync($"Change mix tempo from {initial:0.##} to {target:0.##} BPM?\n\nYes: render again from the preserved ORIGINAL audio, never from a previous stretch.\nNo: change the beat grid only.\nCancel: keep the current tempo.",
                     "Mix tempo", MessageBoxButtons.YesNoCancel);
-            if (closing || released) return;
+            if (closing || released)
+            {
+                return;
+            }
+
             if (answer == DialogResult.Cancel) { SetTempoControl(initial); return; }
             if (answer == DialogResult.Yes)
             {
@@ -42,7 +46,11 @@ public sealed partial class MixTrackView
                 dialog.LimitConfigurationTarget(bpm.Minimum, bpm.Maximum);
                 dialog.SetConfigurationTempo((float)initial, (float)target);
                 DialogResult configured = await this.ShowMixDialogAsync(dialog);
-                if (closing || released) return;
+                if (closing || released)
+                {
+                    return;
+                }
+
                 if (configured != DialogResult.OK || dialog.ConfirmedSettings == null) { SetTempoControl(initial); return; }
                 target = dialog.ConfirmedSettings.TargetBpm;
                 var settings = dialog.ConfirmedSettings;
@@ -64,7 +72,11 @@ public sealed partial class MixTrackView
                 });
                 if (!completed) { SetTempoControl(initial); return; }
             }
-            else Arrangement.Bpm = target;
+            else
+            {
+                Arrangement.Bpm = target;
+            }
+
             SetTempoControl(Arrangement.Bpm);
             Changed();
         }
@@ -72,10 +84,18 @@ public sealed partial class MixTrackView
     }
     private void ApplyPreparedTempo(double initial, double target, IReadOnlyDictionary<Guid, MixSource> prepared)
     {
-        foreach (var pair in prepared) Arrangement.Sources.Add(pair.Value.Id, pair.Value);
+        foreach (var pair in prepared)
+        {
+            Arrangement.Sources.Add(pair.Value.Id, pair.Value);
+        }
+
         foreach (var clip in Arrangement.Lanes.SelectMany(l => l.Clips))
         {
-            if (!prepared.TryGetValue(clip.SourceId, out var replacement)) continue;
+            if (!prepared.TryGetValue(clip.SourceId, out var replacement))
+            {
+                continue;
+            }
+
             var old = Arrangement.Sources[clip.SourceId];
             double sourceBpm = old.Bpm > 0 && float.IsFinite(old.Bpm) ? old.Bpm : initial;
             double ratio = replacement.TempoOriginId is not null

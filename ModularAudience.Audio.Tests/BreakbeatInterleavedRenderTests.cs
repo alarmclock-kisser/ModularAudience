@@ -21,14 +21,21 @@ public sealed class BreakbeatInterleavedRenderTests
         Assert.IsTrue(notes.All(n => n.PitchSemitones * 2 == MathF.Round(n.PitchSemitones * 2)));
         CollectionAssert.AreEqual(notes, BreakbeatGenerator_V2.CreateGeneratedPitchNotes(pattern, [source, source], 100, 64, true, 3.5f, 100, 123));
         Assert.IsTrue(BreakbeatGenerator_V2.CreateGeneratedPitchNotes(pattern, [source, source], 100, 64, true, 3.5f, 0, 123).All(n => n.PitchSemitones == 0));
-        for (int i = 0; i + 1 < notes.Count; i++) Assert.IsTrue(notes[i].StartTick + notes[i].DurationTicks <= notes[i + 1].StartTick);
+        for (int i = 0; i + 1 < notes.Count; i++)
+        {
+            Assert.IsTrue(notes[i].StartTick + notes[i].DurationTicks <= notes[i + 1].StartTick);
+        }
     }
 
     [TestMethod]
     public async Task GeneratedPitchIsAudibleAndDoesNotMutateSource()
     {
         using var source = new AudioObj { Data = new float[4410], SampleRate = 44100, Channels = 1, Volume = 100 };
-        for (int i = 0; i < source.Data.Length; i++) source.Data[i] = (float)(0.2 * Math.Sin(2 * Math.PI * 440 * i / 44100));
+        for (int i = 0; i < source.Data.Length; i++)
+        {
+            source.Data[i] = (float)(0.2 * Math.Sin(2 * Math.PI * 440 * i / 44100));
+        }
+
         var before = (float[])source.Data.Clone();
         List<bool[]> pattern = [new[] { true, false, false, false }];
         using var plain = await BreakbeatGenerator_V2.RenderBreakbeatAsync(pattern, [source], 120, 4, 0, interleaved: true);
@@ -46,7 +53,11 @@ public sealed class BreakbeatInterleavedRenderTests
         using var first = new AudioObj { Data = Enumerable.Repeat(0.25f, 44100 * 6).ToArray(), Channels = 1, SampleRate = 44100, Volume = 100 };
         using var second = new AudioObj { Data = Enumerable.Repeat(-0.25f, 44100 * 6).ToArray(), Channels = 1, SampleRate = 44100, Volume = 100 };
         var pattern = new List<bool[]> { new bool[128], new bool[128] };
-        for (int step = 0; step < 128; step++) pattern[step % 2][step] = true;
+        for (int step = 0; step < 128; step++)
+        {
+            pattern[step % 2][step] = true;
+        }
+
         using var result = await BreakbeatGenerator_V2.RenderBreakbeatAsync(pattern, [first, second], 100, 64, 0, interleaved: true);
         Assert.AreEqual(4.8, result.Data.Length / (double)(result.SampleRate * result.Channels), 0.0001);
         double Rms(int begin, int end) => Math.Sqrt(result.Data.Skip(begin).Take(end - begin).Sum(v => (double)v * v) / (end - begin));

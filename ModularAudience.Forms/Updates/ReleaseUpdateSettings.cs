@@ -29,7 +29,10 @@ internal sealed class ReleaseUpdateSettingsStore
         {
             string appData = Environment.GetFolderPath(Environment.SpecialFolder.ApplicationData);
             if (string.IsNullOrEmpty(appData) || !Path.IsPathFullyQualified(appData))
+            {
                 throw new DirectoryNotFoundException("The AppData directory is unavailable.");
+            }
+
             return Path.Combine(appData, "ModularAudience", "update-settings.json");
         }
     }
@@ -45,14 +48,22 @@ internal sealed class ReleaseUpdateSettingsStore
 
     internal ReleaseUpdateSettings LoadAndRecordRunningRelease(long? releaseNumber)
     {
-        if (releaseNumber is <= 0) throw new ArgumentOutOfRangeException(nameof(releaseNumber));
+        if (releaseNumber is <= 0)
+        {
+            throw new ArgumentOutOfRangeException(nameof(releaseNumber));
+        }
+
         return WithLock(() =>
         {
             bool exists = File.Exists(path);
             ReleaseUpdateSettings settings = LoadUnsafe();
             if (!exists || (releaseNumber.HasValue && settings.CurrentReleaseNumber != releaseNumber))
             {
-                if (releaseNumber.HasValue) settings.CurrentReleaseNumber = releaseNumber;
+                if (releaseNumber.HasValue)
+                {
+                    settings.CurrentReleaseNumber = releaseNumber;
+                }
+
                 SaveUnsafe(settings);
             }
             return settings;
@@ -96,7 +107,11 @@ internal sealed class ReleaseUpdateSettingsStore
 
     internal void RecordInstalledRelease(long releaseNumber)
     {
-        if (releaseNumber <= 0) throw new ArgumentOutOfRangeException(nameof(releaseNumber));
+        if (releaseNumber <= 0)
+        {
+            throw new ArgumentOutOfRangeException(nameof(releaseNumber));
+        }
+
         WithLock(() =>
         {
             ReleaseUpdateSettings settings = LoadUnsafe();
@@ -108,15 +123,28 @@ internal sealed class ReleaseUpdateSettingsStore
 
     private ReleaseUpdateSettings LoadUnsafe()
     {
-        if (!File.Exists(path)) return new ReleaseUpdateSettings();
+        if (!File.Exists(path))
+        {
+            return new ReleaseUpdateSettings();
+        }
+
         if (new FileInfo(path).Length > 65536)
+        {
             throw new InvalidDataException("The update settings file exceeds 64 KiB.");
+        }
+
         var settings = JsonSerializer.Deserialize<ReleaseUpdateSettings>(File.ReadAllText(path))
             ?? throw new InvalidDataException("The update settings file is empty.");
         if (settings.CurrentReleaseNumber is <= 0)
+        {
             throw new InvalidDataException("CurrentReleaseNumber must be a positive release number or null.");
+        }
+
         if (settings.SkipReleaseNumber is <= 0)
+        {
             throw new InvalidDataException("SkipReleaseNumber must be a positive release number or null.");
+        }
+
         return settings;
     }
 
@@ -131,12 +159,21 @@ internal sealed class ReleaseUpdateSettingsStore
                 JsonSerializer.Serialize(stream, settings, JsonOptions);
                 stream.Flush(flushToDisk: true);
             }
-            if (File.Exists(path)) File.Replace(temporary, path, null);
-            else File.Move(temporary, path);
+            if (File.Exists(path))
+            {
+                File.Replace(temporary, path, null);
+            }
+            else
+            {
+                File.Move(temporary, path);
+            }
         }
         finally
         {
-            if (File.Exists(temporary)) File.Delete(temporary);
+            if (File.Exists(temporary))
+            {
+                File.Delete(temporary);
+            }
         }
     }
 
@@ -148,12 +185,19 @@ internal sealed class ReleaseUpdateSettingsStore
         {
             try { acquired = mutex.WaitOne(TimeSpan.FromSeconds(10)); }
             catch (AbandonedMutexException) { acquired = true; }
-            if (!acquired) throw new IOException("The update settings are in use by another process.");
+            if (!acquired)
+            {
+                throw new IOException("The update settings are in use by another process.");
+            }
+
             return action();
         }
         finally
         {
-            if (acquired) mutex.ReleaseMutex();
+            if (acquired)
+            {
+                mutex.ReleaseMutex();
+            }
         }
     }
 }

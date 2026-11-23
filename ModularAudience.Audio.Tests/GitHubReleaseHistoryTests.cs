@@ -52,7 +52,10 @@ public sealed class GitHubReleaseHistoryTests
             bool second = request.RequestUri!.Query.Contains("&page=2", StringComparison.Ordinal);
             long first = second ? 104 : 131;
             if (IsReleases(request))
+            {
                 return Json(Enumerable.Range(0, 27).Select(offset => Tag(first - offset)).ToArray());
+            }
+
             return Json(new { workflow_runs = Enumerable.Range(0, 27)
                 .Select(offset => Run(first - offset, "Build " + (first - offset).ToString(CultureInfo.InvariantCulture))).ToArray() });
         });
@@ -70,8 +73,16 @@ public sealed class GitHubReleaseHistoryTests
     {
         using var api = new FakeApi(request =>
         {
-            if (IsReleases(request)) return Json(new[] { Tag(128), Tag(127) });
-            if (IsRuns(request)) return new HttpResponseMessage(HttpStatusCode.NotFound);
+            if (IsReleases(request))
+            {
+                return Json(new[] { Tag(128), Tag(127) });
+            }
+
+            if (IsRuns(request))
+            {
+                return new HttpResponseMessage(HttpStatusCode.NotFound);
+            }
+
             return Json(new { sha = Sha(128), commit = new { message = "Message from release tag", committer = new { date = "2026-11-08T20:37:40Z" } } });
         });
 
@@ -87,8 +98,16 @@ public sealed class GitHubReleaseHistoryTests
     {
         using var api = new FakeApi(request =>
         {
-            if (IsReleases(request)) return Json(new[] { Tag(128, pinnedSha: Sha(999)), Tag(127) });
-            if (IsRuns(request)) return Json(new { workflow_runs = new[] { Run(128, "Wrong commit") } });
+            if (IsReleases(request))
+            {
+                return Json(new[] { Tag(128, pinnedSha: Sha(999)), Tag(127) });
+            }
+
+            if (IsRuns(request))
+            {
+                return Json(new { workflow_runs = new[] { Run(128, "Wrong commit") } });
+            }
+
             return Json(new { sha = Sha(999), commit = new { message = "Correct tagged commit" } });
         });
 
@@ -104,8 +123,16 @@ public sealed class GitHubReleaseHistoryTests
     {
         using var api = new FakeApi(request =>
         {
-            if (IsReleases(request)) return Json(new[] { Tag(128), Tag(127) });
-            if (IsRuns(request)) return Json(new { workflow_runs = new[] { new { run_number = 128, head_commit = (object?)null } } });
+            if (IsReleases(request))
+            {
+                return Json(new[] { Tag(128), Tag(127) });
+            }
+
+            if (IsRuns(request))
+            {
+                return Json(new { workflow_runs = new[] { new { run_number = 128, head_commit = (object?)null } } });
+            }
+
             return Json(new { sha = Sha(128), commit = new { message = "Recovered message" } });
         });
 

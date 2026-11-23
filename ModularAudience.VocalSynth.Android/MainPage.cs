@@ -73,7 +73,9 @@ public sealed partial class MainPage : ContentPage
         RestorePersistedOptions();
         WireEvents();
         if (showSyllablesSwitch.IsToggled)
+        {
             _ = UpdateSyllablesAsync();
+        }
     }
 
     private void BuildPage()
@@ -390,14 +392,22 @@ public sealed partial class MainPage : ContentPage
 
         languagePicker.SelectedIndexChanged += (_, _) =>
         {
-            if (syncing || languagePicker.SelectedIndex < 0) return;
+            if (syncing || languagePicker.SelectedIndex < 0)
+            {
+                return;
+            }
+
             settings.Language = (VocalLanguage)languagePicker.SelectedIndex;
             PersistSession();
             _ = UpdateSyllablesAsync();
         };
         voicePicker.SelectedIndexChanged += (_, _) =>
         {
-            if (syncing) return;
+            if (syncing)
+            {
+                return;
+            }
+
             ApplyVoiceSelection();
             PersistSession();
         };
@@ -407,32 +417,53 @@ public sealed partial class MainPage : ContentPage
             PersistSession();
         };
         foreach (Slider slider in voiceSliders.Values)
+        {
             slider.ValueChanged += (_, _) =>
             {
-                if (!syncing) PersistSession();
+                if (!syncing)
+                {
+                    PersistSession();
+                }
             };
+        }
+
         singingSwitch.Toggled += (_, args) =>
         {
             settings.Singing = args.Value;
             androidSpeechSwitch.IsEnabled = !args.Value;
             midiTrackPicker.IsEnabled = args.Value && midi is not null;
-            if (!syncing) PersistSession();
+            if (!syncing)
+            {
+                PersistSession();
+            }
         };
         unsupportedBeepSwitch.Toggled += (_, args) =>
         {
             settings.BeepForUnsupportedSounds = args.Value;
-            if (!syncing) PersistSession();
+            if (!syncing)
+            {
+                PersistSession();
+            }
         };
         androidSpeechSwitch.Toggled += (_, _) =>
         {
             if (androidSpeechSwitch.IsToggled && singingSwitch.IsToggled)
+            {
                 androidSpeechSwitch.IsToggled = false;
-            if (!syncing) PersistSession();
+            }
+
+            if (!syncing)
+            {
+                PersistSession();
+            }
         };
         midiOffsetSlider.ValueChanged += (_, args) =>
         {
             settings.SingingMidiSemitoneOffset = args.NewValue;
-            if (!syncing) PersistSession();
+            if (!syncing)
+            {
+                PersistSession();
+            }
         };
         wavTrailingSilenceSlider.ValueChanged += (_, args) =>
         {
@@ -447,11 +478,18 @@ public sealed partial class MainPage : ContentPage
         midiTrackPicker.SelectedIndexChanged += (_, _) =>
         {
             ApplySelectedMidiTrack();
-            if (!syncing) PersistSession();
+            if (!syncing)
+            {
+                PersistSession();
+            }
         };
         showSyllablesSwitch.Toggled += async (_, _) =>
         {
-            if (!syncing) PersistSession();
+            if (!syncing)
+            {
+                PersistSession();
+            }
+
             await UpdateSyllablesAsync();
         };
         renderButton.Clicked += async (_, _) => await PreviewAsync();
@@ -477,12 +515,21 @@ public sealed partial class MainPage : ContentPage
     {
         Preferences.Default.Set("vocal.text", textEditor.Text ?? string.Empty);
         if (languagePicker.SelectedIndex >= 0)
+        {
             Preferences.Default.Set("vocal.language", languagePicker.SelectedIndex);
+        }
+
         Preferences.Default.Set("vocal.speed", speedSlider.Value);
         if (voicePicker.SelectedIndex >= 0 && voicePicker.SelectedIndex < voiceOptions.Count)
+        {
             Preferences.Default.Set("vocal.voice", voiceOptions[voicePicker.SelectedIndex]);
+        }
+
         foreach ((string key, Slider slider) in voiceSliders)
+        {
             Preferences.Default.Set("vocal.voice." + key, slider.Value);
+        }
+
         Preferences.Default.Set("vocal.singing", singingSwitch.IsToggled);
         Preferences.Default.Set("vocal.androidSpeech", androidSpeechSwitch.IsToggled);
         Preferences.Default.Set("vocal.unsupportedBeep", unsupportedBeepSwitch.IsToggled);

@@ -32,7 +32,11 @@ public sealed partial class MainPage
 
     private void ApplyVoiceSelection()
     {
-        if (syncing || voicePicker.SelectedIndex < 0 || voicePicker.SelectedIndex >= voiceOptions.Count) return;
+        if (syncing || voicePicker.SelectedIndex < 0 || voicePicker.SelectedIndex >= voiceOptions.Count)
+        {
+            return;
+        }
+
         string? text = textEditor.Text;
         VocalLanguage language = languagePicker.SelectedIndex >= 0
             ? (VocalLanguage)languagePicker.SelectedIndex
@@ -117,7 +121,11 @@ public sealed partial class MainPage
     private VocalEmphasisSyntax LoadEmphasisSyntaxFromEditor()
     {
         string json = emphasisEditor.Text ?? string.Empty;
-        if (string.IsNullOrWhiteSpace(json)) return VocalEmphasisSyntax.Default();
+        if (string.IsNullOrWhiteSpace(json))
+        {
+            return VocalEmphasisSyntax.Default();
+        }
+
         return JsonSerializer.Deserialize<VocalEmphasisSyntax>(json)
             ?? throw new InvalidDataException("The emphasis syntax JSON is empty.");
     }
@@ -170,16 +178,24 @@ public sealed partial class MainPage
         try
         {
             FileResult? file = await FilePicker.Default.PickAsync();
-            if (file is null) return;
+            if (file is null)
+            {
+                return;
+            }
+
             string extension = Path.GetExtension(file.FileName);
             if (!extension.Equals(".mid", StringComparison.OrdinalIgnoreCase)
                 && !extension.Equals(".midi", StringComparison.OrdinalIgnoreCase))
+            {
                 throw new InvalidDataException("Select a .mid or .midi file.");
+            }
 
             string cachePath = Path.Combine(FileSystem.CacheDirectory, Guid.NewGuid() + extension);
             await using (Stream input = await file.OpenReadAsync())
             await using (FileStream output = File.Create(cachePath))
+            {
                 await input.CopyToAsync(output);
+            }
 
             VocalMidiFileData loaded = await Task.Run(() => VocalMidiFileData.Load(cachePath));
             midi = loaded;
@@ -194,8 +210,11 @@ public sealed partial class MainPage
             midiTrackPicker.SelectedIndex = Enumerable.Range(0, loaded.Tracks.Count)
                 .FirstOrDefault(index => loaded.Tracks[index].Index == preferredTrack, -1);
             if (midiTrackPicker.SelectedIndex < 0)
+            {
                 midiTrackPicker.SelectedIndex = Enumerable.Range(0, loaded.Tracks.Count)
                     .FirstOrDefault(index => loaded.Tracks[index].Notes.Count > 0, -1);
+            }
+
             midiTrackPicker.IsEnabled = tracks.Count > 0;
             clearMidiButton.IsEnabled = true;
             singingSwitch.IsToggled = true;
@@ -248,7 +267,10 @@ public sealed partial class MainPage
             string preview = string.Join(" | ", ranges.Select((range, index) =>
             {
                 if (range.Start < 0 || range.Length <= 0 || range.Start > snapshot.Text.Length - range.Length)
+                {
                     return $"#{index + 1}";
+                }
+
                 return snapshot.Text.Substring(range.Start, range.Length);
             }));
             syllableLabel.Text = $"Syllables ({ranges.Count}): {preview}";
@@ -268,14 +290,20 @@ public sealed partial class MainPage
             VocalMidiSyllableFillResult result = VocalSynthEngine.FillMissingMidiSyllables(
                 settings, settings.Text);
             if (result.AppendedText.Length > 0)
+            {
                 textEditor.Text = (textEditor.Text ?? string.Empty) + result.AppendedText;
+            }
+
             settings.Text = textEditor.Text ?? string.Empty;
             settings.IgnoreTextPausesForMidiSinging = result.ExistingSyllables <= result.MidiSyllables;
             PersistSession();
             statusLabel.Text = result.AddedSyllables > 0
                 ? $"Added {result.AddedSyllables} syllables to match the MIDI track."
                 : "The text already matches the selected MIDI track.";
-            if (showSyllablesSwitch.IsToggled) await UpdateSyllablesAsync();
+            if (showSyllablesSwitch.IsToggled)
+            {
+                await UpdateSyllablesAsync();
+            }
         }
         catch (Exception error) when (error is ArgumentException or InvalidOperationException
             or InvalidDataException)
@@ -291,7 +319,10 @@ public sealed partial class MainPage
             ApplyControlsToSettings();
             string name = profileName.Text?.Trim() ?? string.Empty;
             if (string.IsNullOrWhiteSpace(name))
+            {
                 throw new ArgumentException("Enter a profile name before saving.");
+            }
+
             VocalVoiceProfile profile = new()
             {
                 Name = name,
@@ -324,12 +355,22 @@ public sealed partial class MainPage
         {
             if (voicePicker.SelectedIndex < 0
                 || !voiceOptions[voicePicker.SelectedIndex].StartsWith("Profile: ", StringComparison.Ordinal))
+            {
                 throw new InvalidOperationException("Select a saved profile to delete.");
+            }
+
             string name = voiceOptions[voicePicker.SelectedIndex]["Profile: ".Length..];
             bool confirm = await DisplayAlert("Delete profile", $"Delete '{name}'?", "Delete", "Cancel");
-            if (!confirm) return;
+            if (!confirm)
+            {
+                return;
+            }
+
             if (!profileStore.Delete(name))
+            {
                 throw new FileNotFoundException("The selected voice profile no longer exists.");
+            }
+
             RefreshVoicePicker("Built-in: " + settings.VoiceName);
             PersistSession();
             statusLabel.Text = $"Deleted profile '{name}'.";
@@ -362,18 +403,35 @@ public sealed partial class MainPage
         {
             string ipa = customSampleIpa.Text?.Trim() ?? string.Empty;
             if (!VocalSynthEngine.IsValidCustomSampleIpa(ipa))
+            {
                 throw new ArgumentException("Enter a valid IPA sequence before adding a sample.");
+            }
+
             FileResult? file = await FilePicker.Default.PickAsync();
-            if (file is null) return;
+            if (file is null)
+            {
+                return;
+            }
+
             await using Stream input = await file.OpenReadAsync();
             WaveAudioData wave = WaveAudioReader.Read(input);
             if (wave.Samples.Length / wave.Channels > wave.SampleRate * 60L)
+            {
                 throw new InvalidDataException("Custom sample audio must be shorter than one minute.");
+            }
+
             VocalCustomSampleMapping mapping = new(ipa, wave.Samples, wave.SampleRate, wave.Channels);
             int existing = customSamples.FindIndex(
                 item => string.Equals(item.IpaSubstring, ipa, StringComparison.Ordinal));
-            if (existing >= 0) customSamples[existing] = mapping;
-            else customSamples.Add(mapping);
+            if (existing >= 0)
+            {
+                customSamples[existing] = mapping;
+            }
+            else
+            {
+                customSamples.Add(mapping);
+            }
+
             settings.CustomSampleMappings = customSamples.ToArray();
             customSampleFileLabel.Text = $"{file.FileName} mapped to {ipa}";
             statusLabel.Text = "Custom sample mapping added.";
@@ -392,7 +450,11 @@ public sealed partial class MainPage
             try
             {
                 string text = textEditor.Text?.Trim() ?? string.Empty;
-                if (text.Length == 0) throw new ArgumentException("Enter text before previewing.");
+                if (text.Length == 0)
+                {
+                    throw new ArgumentException("Enter text before previewing.");
+                }
+
                 StopPlayback();
                 await TextToSpeech.Default.SpeakAsync(text);
                 statusLabel.Text = "Android speech finished.";
@@ -406,7 +468,11 @@ public sealed partial class MainPage
         }
 
         VocalAudioData? audio = await RenderAsync();
-        if (audio is null) return;
+        if (audio is null)
+        {
+            return;
+        }
+
         try
         {
             stopButton.IsEnabled = stopButton.IsVisible = true;
@@ -430,11 +496,19 @@ public sealed partial class MainPage
     private async Task CreateAndShareAsync()
     {
         VocalAudioData? audio = await RenderAsync();
-        if (audio is null) return;
+        if (audio is null)
+        {
+            return;
+        }
+
         try
         {
             string baseName = SafeFileName(audio.Name);
-            if (baseName.Length > 48) baseName = baseName[..48];
+            if (baseName.Length > 48)
+            {
+                baseName = baseName[..48];
+            }
+
             string fileName = $"{baseName}-{Guid.NewGuid():N}.wav";
             string path = Path.Combine(FileSystem.CacheDirectory, fileName);
             int trailingSilenceMilliseconds = (int)wavTrailingSilenceSlider.Value;
@@ -484,7 +558,11 @@ public sealed partial class MainPage
         ApplyControlsToSettings();
         VocalSynthSettings snapshot = settings.Clone();
         VocalAudioData? audio = await RenderAsync(snapshot);
-        if (audio is null) return;
+        if (audio is null)
+        {
+            return;
+        }
+
         try
         {
             IReadOnlyList<VocalPlaybackTextRange> timeline = await Task.Run(
@@ -518,8 +596,13 @@ public sealed partial class MainPage
         IReadOnlyList<VocalPlaybackTextRange> timeline, int textPosition)
     {
         foreach (VocalPlaybackTextRange range in timeline)
+        {
             if (textPosition < range.TextStart + range.TextLength)
+            {
                 return range.StartFrame;
+            }
+        }
+
         return null;
     }
 

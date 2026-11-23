@@ -28,7 +28,11 @@ public sealed class StructuredImportTests
             Assert.AreSame(third, collection.AudioC.Audios.Single());
             Assert.AreEqual(WindowMain.GetCollectionNumber(collection), WindowMain.AudioCollectionTags[third.Id]);
         }
-        finally { foreach (var view in WindowMain.CollectionViews.Where(view => !initial.Contains(view)).ToArray()) view.Close(); }
+        finally { foreach (var view in WindowMain.CollectionViews.Where(view => !initial.Contains(view)).ToArray())
+            {
+                view.Close();
+            }
+        }
     }
 
     [STATestMethod]
@@ -47,7 +51,11 @@ public sealed class StructuredImportTests
             Assert.IsFalse(target.CanAppendImportedAudio);
             Assert.IsTrue(WindowMain.CollectionViews.Any(view => !initial.Contains(view) && view != target && view.AudioC.Audios.Contains(third)));
         }
-        finally { foreach (var view in WindowMain.CollectionViews.Where(view => !initial.Contains(view)).ToArray()) view.Close(); }
+        finally { foreach (var view in WindowMain.CollectionViews.Where(view => !initial.Contains(view)).ToArray())
+            {
+                view.Close();
+            }
+        }
     }
     private static AudioObj Audio(string name) => new() { Name = name, Data = [0.1f, 0.2f], Channels = 1, SampleRate = 8000, Length = 2 };
 }

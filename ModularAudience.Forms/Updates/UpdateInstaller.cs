@@ -18,7 +18,10 @@ internal static class UpdateInstaller
         {
             string appData = Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData);
             if (string.IsNullOrEmpty(appData) || !Path.IsPathFullyQualified(appData))
+            {
                 throw new DirectoryNotFoundException("The local AppData directory is unavailable.");
+            }
+
             return Path.Combine(appData, "ModularAudience", "UpdateStaging");
         }
     }
@@ -43,7 +46,10 @@ internal static class UpdateInstaller
         try
         {
             if (Directory.Exists(workspace))
+            {
                 throw new IOException("The update staging directory already exists.");
+            }
+
             Directory.CreateDirectory(workspace);
             workspaceCreated = true;
             string expectedHash;
@@ -64,7 +70,9 @@ internal static class UpdateInstaller
             }
             if (!string.Equals(await GitHubReleaseSource.HashAsync(stagedPath, timeout.Token), expectedHash,
                 StringComparison.OrdinalIgnoreCase))
+            {
                 throw new InvalidDataException("The prepared update failed its SHA256 verification.");
+            }
 
             status.Report("Starting the update installer...");
             await StartHelperAsync(helperPath, targetPath, stagedPath, originalHash, expectedHash, settingsPath,
@@ -78,8 +86,15 @@ internal static class UpdateInstaller
         {
             if (!handedOff)
             {
-                if (stagedFileCreated) TryCleanupFile(stagedPath);
-                if (workspaceCreated) TryCleanupWorkspace(workspace);
+                if (stagedFileCreated)
+                {
+                    TryCleanupFile(stagedPath);
+                }
+
+                if (workspaceCreated)
+                {
+                    TryCleanupWorkspace(workspace);
+                }
             }
         }
     }
@@ -101,7 +116,10 @@ internal static class UpdateInstaller
             targetPath, stagedPath, originalHash, updateHash, releaseNumber.ToString(CultureInfo.InvariantCulture),
             settingsPath
         })
+        {
             start.ArgumentList.Add(argument);
+        }
+
         using var helper = Process.Start(start) ?? throw new InvalidOperationException("The update installer could not be started.");
         using var readyTimeout = CancellationTokenSource.CreateLinkedTokenSource(token);
         readyTimeout.CancelAfter(TimeSpan.FromMinutes(3));
@@ -120,11 +138,21 @@ internal static class UpdateInstaller
             using var reader = new StreamReader(pipe, Encoding.UTF8, false, 1024, leaveOpen: true);
             string? reply = await reader.ReadLineAsync(readyTimeout.Token);
             if (reply is not null && reply.StartsWith("ERROR ", StringComparison.Ordinal))
+            {
                 throw new InvalidOperationException(reply[6..]);
+            }
+
             if (reply != "READY")
+            {
                 throw new InvalidOperationException("The update installer did not confirm that it is ready.");
+            }
+
             token.ThrowIfCancellationRequested();
-            if (!commit.Set()) throw new InvalidOperationException("The update installer could not be authorized.");
+            if (!commit.Set())
+            {
+                throw new InvalidOperationException("The update installer could not be authorized.");
+            }
+
             onCommit();
         }
         catch (OperationCanceledException) when (!token.IsCancellationRequested)
@@ -158,23 +186,36 @@ internal static class UpdateInstaller
             using var parent = ValidateHelper(options);
             using var commit = EventWaitHandle.OpenExisting(options.EventName);
             writer.WriteLine("READY");
-            if (!commit.WaitOne(TimeSpan.FromMinutes(3))) return;
+            if (!commit.WaitOne(TimeSpan.FromMinutes(3)))
+            {
+                return;
+            }
+
             committed = true;
             if (!parent.WaitForExit(600_000))
+            {
                 throw new TimeoutException("The original application did not close. The update was not installed.");
+            }
+
             CompleteInstallation(options);
         }
         catch (Exception error) when (UpdateDiagnostics.IsExpected(error))
         {
-            if (committed) throw;
+            if (committed)
+            {
+                throw;
+            }
+
             try { writer.WriteLine("ERROR " + error.Message.Replace('\r', ' ').Replace('\n', ' ')); }
             catch (Exception pipeError) when (pipeError is IOException or ObjectDisposedException)
             {
                 string message = $"The update installer could not report its error to the original process: {error}. {pipeError.Message}";
                 string? logError = UpdateDiagnostics.WriteHelperLog(message, warning: true, options.SettingsPath);
                 if (logError is not null)
+                {
                     MessageBox.Show($"{message}\n\nThe update log could not be written: {logError}",
                         "Application update warning", MessageBoxButtons.OK, MessageBoxIcon.Warning);
+                }
             }
         }
     }
@@ -185,12 +226,17 @@ internal static class UpdateInstaller
         AtomicUpdateReplacement.ValidateHash(options.OriginalHash);
         AtomicUpdateReplacement.ValidateHash(options.UpdateHash);
         if (ApplicationRelease.RunningReleaseNumber() != options.ReleaseNumber)
+        {
             throw new InvalidDataException("The downloaded executable does not contain the expected release number.");
+        }
+
         string helperPath = Environment.ProcessPath
             ?? throw new InvalidOperationException("The update installer path is unavailable.");
         if (!AtomicUpdateReplacement.HashMatches(helperPath, options.UpdateHash) ||
             !AtomicUpdateReplacement.HashMatches(options.StagedPath, options.UpdateHash))
+        {
             throw new InvalidDataException("The downloaded or staged executable failed its SHA256 verification.");
+        }
 
         Process parent = Process.GetProcessById(options.ParentId);
         bool validated = false;
@@ -200,13 +246,19 @@ internal static class UpdateInstaller
             if (parent.HasExited || parent.StartTime.ToUniversalTime().Ticks != options.ParentStartTicks ||
                 parentPath is null || !string.Equals(Path.GetFullPath(parentPath), Path.GetFullPath(options.TargetPath),
                     StringComparison.OrdinalIgnoreCase))
+            {
                 throw new InvalidDataException("The original application process no longer matches the executable.");
+            }
+
             validated = true;
             return parent;
         }
         finally
         {
-            if (!validated) parent.Dispose();
+            if (!validated)
+            {
+                parent.Dispose();
+            }
         }
     }
 
@@ -241,14 +293,21 @@ internal static class UpdateInstaller
             !long.TryParse(args[8], NumberStyles.None, CultureInfo.InvariantCulture, out long release) || release <= 0 ||
             !Path.IsPathFullyQualified(args[9]) ||
             !string.Equals(Path.GetFileName(args[9]), "update-settings.json", StringComparison.OrdinalIgnoreCase))
+        {
             throw new InvalidDataException("The update installer arguments are invalid.");
+        }
+
         return new HelperOptions(args[1], EventPrefix + args[1][PipePrefix.Length..], parentId, parentStart,
             args[4], args[5], args[6], args[7], release, args[9]);
     }
 
     internal static void CleanupOldWorkspaces()
     {
-        if (!Directory.Exists(WorkspaceRoot)) return;
+        if (!Directory.Exists(WorkspaceRoot))
+        {
+            return;
+        }
+
         foreach (string directory in Directory.EnumerateDirectories(WorkspaceRoot))
         {
             try
@@ -257,7 +316,10 @@ internal static class UpdateInstaller
                 if (!Guid.TryParseExact(info.Name, "N", out _) ||
                     (info.Attributes & FileAttributes.ReparsePoint) != 0 ||
                     info.CreationTimeUtc > DateTime.UtcNow.AddHours(-1))
+                {
                     continue;
+                }
+
                 TryCleanupWorkspace(directory);
             }
             catch (Exception error) when (error is IOException or UnauthorizedAccessException)
@@ -271,9 +333,17 @@ internal static class UpdateInstaller
     {
         try
         {
-            if (!Directory.Exists(directory)) return;
+            if (!Directory.Exists(directory))
+            {
+                return;
+            }
+
             string helper = Path.Combine(directory, ApplicationRelease.AssetName);
-            if (File.Exists(helper)) File.Delete(helper);
+            if (File.Exists(helper))
+            {
+                File.Delete(helper);
+            }
+
             Directory.Delete(directory);
         }
         catch (Exception error) when (error is IOException or UnauthorizedAccessException)
@@ -284,7 +354,11 @@ internal static class UpdateInstaller
 
     private static void TryCleanupFile(string path)
     {
-        try { if (File.Exists(path)) File.Delete(path); }
+        try { if (File.Exists(path))
+            {
+                File.Delete(path);
+            }
+        }
         catch (Exception error) when (error is IOException or UnauthorizedAccessException)
         {
             LogManager.LogWarning($"The staged update could not be removed: {path}. {error.Message}");

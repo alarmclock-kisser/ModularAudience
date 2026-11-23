@@ -71,12 +71,31 @@ public sealed record AutoTuneSettings
 
     public void Validate(int? sampleRate = null)
     {
-        if (!Enum.IsDefined(Scale) || !Enum.IsDefined(AnalysisChannel)) throw new ArgumentException("Invalid Auto Tune mode.");
-        if (RootNote is < 0 or > 11) throw new ArgumentOutOfRangeException(nameof(RootNote));
-        if (PitchGridSemitones is < 1 or > 12) throw new ArgumentOutOfRangeException(nameof(PitchGridSemitones));
+        if (!Enum.IsDefined(Scale) || !Enum.IsDefined(AnalysisChannel))
+        {
+            throw new ArgumentException("Invalid Auto Tune mode.");
+        }
+
+        if (RootNote is < 0 or > 11)
+        {
+            throw new ArgumentOutOfRangeException(nameof(RootNote));
+        }
+
+        if (PitchGridSemitones is < 1 or > 12)
+        {
+            throw new ArgumentOutOfRangeException(nameof(PitchGridSemitones));
+        }
+
         if (CustomNotesMask is < 0 or > 4095 || (Scale == AutoTuneScale.Custom && CustomNotesMask == 0))
+        {
             throw new ArgumentException("A custom scale must contain at least one of the twelve pitch classes.");
-        if (!NoteLengths.Contains(MinimumNoteLength)) throw new ArgumentException("Choose a supported minimum note length.");
+        }
+
+        if (!NoteLengths.Contains(MinimumNoteLength))
+        {
+            throw new ArgumentException("Choose a supported minimum note length.");
+        }
+
         Check(IntensityPercent, 0, 100, nameof(IntensityPercent));
         Check(TempoBpm, 20, 400, nameof(TempoBpm));
         Check(MaximumCorrectionSemitones, 0, 24, nameof(MaximumCorrectionSemitones));
@@ -91,13 +110,24 @@ public sealed record AutoTuneSettings
         Check(FineTuneCents, -100, 100, nameof(FineTuneCents));
         Check(MinimumFrequencyHz, 20, 2000, nameof(MinimumFrequencyHz));
         Check(MaximumFrequencyHz, 21, 5000, nameof(MaximumFrequencyHz));
-        if (MaximumFrequencyHz <= MinimumFrequencyHz) throw new ArgumentException("Maximum detection frequency must exceed the minimum.");
+        if (MaximumFrequencyHz <= MinimumFrequencyHz)
+        {
+            throw new ArgumentException("Maximum detection frequency must exceed the minimum.");
+        }
+
         if (sampleRate is <= 0 || (sampleRate.HasValue && MaximumFrequencyHz >= sampleRate.Value / 2d))
+        {
             throw new ArgumentException("Detection frequencies must be below half the source sample rate (Nyquist).");
+        }
+
         Check(MinimumConfidence, 0, 1, nameof(MinimumConfidence));
         Check(SilenceThresholdDb, -100, 0, nameof(SilenceThresholdDb));
         Check(AnalysisHopMilliseconds, 5, 50, nameof(AnalysisHopMilliseconds));
-        if (!FftSizes.Contains(FftSize) || !Overlaps.Contains(Overlap)) throw new ArgumentException("Choose a supported FFT size and overlap.");
+        if (!FftSizes.Contains(FftSize) || !Overlaps.Contains(Overlap))
+        {
+            throw new ArgumentException("Choose a supported FFT size and overlap.");
+        }
+
         Check(VoicingFadeMilliseconds, 0, 200, nameof(VoicingFadeMilliseconds));
         Check(FormantPreservationPercent, 0, 100, nameof(FormantPreservationPercent));
         Check(FormantSmoothingHz, 50, 2500, nameof(FormantSmoothingHz));
@@ -110,6 +140,8 @@ public sealed record AutoTuneSettings
     private static void Check(double value, double minimum, double maximum, string name)
     {
         if (!double.IsFinite(value) || value < minimum || value > maximum)
+        {
             throw new ArgumentOutOfRangeException(name, $"{name} must be finite and between {minimum} and {maximum}.");
+        }
     }
 }

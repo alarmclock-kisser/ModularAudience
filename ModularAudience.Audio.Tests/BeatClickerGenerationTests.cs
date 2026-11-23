@@ -81,7 +81,11 @@ namespace ModularAudience.Audio.Tests
             for(int attempt=0; attempt<4 && spinners==0; attempt++){
                 InvokeGame(game,"GenerateBeatMap");
                 foreach(object item in GameObjects(game)){
-                    if(ItemField(item,"Type").ToString()!="Spinner") continue;
+                    if(ItemField(item,"Type").ToString()!="Spinner")
+                    {
+                        continue;
+                    }
+
                     spinners++;
                     Assert.AreEqual(0, (int)ItemField(item,"Number"));
                 }

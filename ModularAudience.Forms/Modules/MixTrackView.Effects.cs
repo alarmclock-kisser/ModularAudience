@@ -37,12 +37,19 @@ public sealed partial class MixTrackView
     internal MixEffectRegion[] CaptureEffectRegions()
     {
         if (selectionFirstRow >= 0 && selectionEnd > selectionStart && fullSelectedClips.Count == 0)
+        {
             return Arrangement.Lanes.Skip(selectionFirstRow).Take(selectionLastRow - selectionFirstRow + 1)
                 .Select(lane => new MixEffectRegion(lane.Id, selectionStart, selectionEnd,
                     lane.Clips.Where(clip => clip.Start < selectionEnd && clip.Start + Arrangement.ClipDuration(clip) > selectionStart)
                         .Select(clip => clip.Id).ToHashSet())).ToArray();
+        }
+
         var parts = SelectedParts();
-        if (parts.Count == 0) return [];
+        if (parts.Count == 0)
+        {
+            return [];
+        }
+
         double start = parts.Min(part => part.Clip.Start), end = parts.Max(part => part.Clip.Start + Arrangement.ClipDuration(part.Clip));
         return parts.GroupBy(part => part.Row).Select(group => new MixEffectRegion(Arrangement.Lanes[group.Key].Id, start, end,
             group.Select(part => part.Clip.Id).ToHashSet())).ToArray();
@@ -54,19 +61,31 @@ public sealed partial class MixTrackView
     {
         this.lastSelectedMixEffect = effect;
         if (this.mixEffectDialogs.TryGetValue(effect, out Form? existing) && !existing.IsDisposed) { existing.Activate(); return; }
-        if (busy || closing || released || this.mixEffectOpening || this.windowGroup.IsBlocked) return;
+        if (busy || closing || released || this.mixEffectOpening || this.windowGroup.IsBlocked)
+        {
+            return;
+        }
+
         MixEffectEditSession? session = null; bool ownedByDialog = false;
         this.mixEffectOpening = true;
         try
         {
             CancellationToken lifetime = this.mixEffectsLifetime.Token;
             MixEffectRegion[] regions = this.CaptureEffectRegions();
-            if (regions.Length == 0) return;
+            if (regions.Length == 0)
+            {
+                return;
+            }
+
             bool wasRange = selectionFirstRow >= 0 && selectionEnd > selectionStart && fullSelectedClips.Count == 0;
             this.status.Text = "Capturing selected audio and clip envelopes...";
             session = await MixEffectEditSession.CaptureAsync(Arrangement, regions, lifetime);
             lifetime.ThrowIfCancellationRequested();
-            if (!session.IsCurrent(Arrangement)) throw new InvalidOperationException("The selected mix audio changed during capture. Please reopen the effect.");
+            if (!session.IsCurrent(Arrangement))
+            {
+                throw new InvalidOperationException("The selected mix audio changed during capture. Please reopen the effect.");
+            }
+
             MixEffectEditSession captured = session;
             AudioEffectDefinition definition = AudioEffectCatalog.Get(effect);
             if (!definition.OpensOptions)
@@ -130,7 +149,11 @@ public sealed partial class MixTrackView
             this.mixEffectDialogs[effect] = dialog;
             dialog.FormClosed += (_, _) =>
             {
-                if (this.mixEffectDialogs.GetValueOrDefault(effect) == dialog) this.mixEffectDialogs.Remove(effect);
+                if (this.mixEffectDialogs.GetValueOrDefault(effect) == dialog)
+                {
+                    this.mixEffectDialogs.Remove(effect);
+                }
+
                 captured.Dispose();
             };
             this.windowGroup.Show(dialog); ownedByDialog = true;
@@ -140,9 +163,16 @@ public sealed partial class MixTrackView
         catch (Exception error) when (EffectOptionsEditor.IsEffectError(error))
         {
             LogManager.Log("Mix effect failed.", error);
-            if (!released && !closing) this.status.Text = error.Message;
+            if (!released && !closing)
+            {
+                this.status.Text = error.Message;
+            }
         }
-        finally { this.mixEffectOpening = false; if (!ownedByDialog) session?.Dispose(); }
+        finally { this.mixEffectOpening = false; if (!ownedByDialog)
+            {
+                session?.Dispose();
+            }
+        }
     }
 
     private async Task<AudioEffectResult[]> RenderMixEffectAsync(MixEffectEditSession session, AudioEffectSettings settings,
@@ -173,10 +203,22 @@ public sealed partial class MixTrackView
         bool wasRange, CancellationToken token, AudioEffectSettings? settings = null, AutoTuneSettings? autoTune = null)
     {
         token.ThrowIfCancellationRequested();
-        if (closing || released) throw new OperationCanceledException(token);
-        if (busy) throw new InvalidOperationException("Finish the current mix operation before applying this effect.");
+        if (closing || released)
+        {
+            throw new OperationCanceledException(token);
+        }
+
+        if (busy)
+        {
+            throw new InvalidOperationException("Finish the current mix operation before applying this effect.");
+        }
+
         await this.StopMixForEffectAsync(); token.ThrowIfCancellationRequested();
-        if (closing || released) throw new OperationCanceledException(token);
+        if (closing || released)
+        {
+            throw new OperationCanceledException(token);
+        }
+
         MixEffectCommit edit = session.Apply(Arrangement, results, effectName, settings, autoTune);
         if (!edit.Changed) { this.status.Text = "Effect bypass/no-op: mix and undo history unchanged."; return; }
         this.liveUpdateCancellation?.Cancel();
@@ -190,7 +232,11 @@ public sealed partial class MixTrackView
             this.selectionLastRow = Arrangement.Lanes.FindLastIndex(lane => session.LaneIds.Contains(lane.Id));
             this.selectionStart = session.Start; this.selectionEnd = session.Start + edit.NewDuration;
         }
-        else this.fullSelectedClips.UnionWith(edit.SelectedClipIds);
+        else
+        {
+            this.fullSelectedClips.UnionWith(edit.SelectedClipIds);
+        }
+
         this.Changed(); // Exactly one existing arrangement-level undo/redo step.
         this.status.Text = $"{effectName} applied to {session.Inputs.Count} selected lane(s). Ctrl+Z / Ctrl+Y available.";
     }
@@ -201,9 +247,17 @@ public sealed partial class MixTrackView
         {
             editor.Close();
         }
-        if (this.mixEffectWindowsClosed) return;
+        if (this.mixEffectWindowsClosed)
+        {
+            return;
+        }
+
         this.mixEffectWindowsClosed = true; this.mixEffectsLifetime.Cancel();
-        foreach (Form dialog in this.mixEffectDialogs.Values.ToArray()) dialog.Close();
+        foreach (Form dialog in this.mixEffectDialogs.Values.ToArray())
+        {
+            dialog.Close();
+        }
+
         this.mixEffectDialogs.Clear(); this.mixEffectsLifetime.Dispose();
     }
 

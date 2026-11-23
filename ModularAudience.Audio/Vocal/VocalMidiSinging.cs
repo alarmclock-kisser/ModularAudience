@@ -28,7 +28,10 @@ internal static class VocalMidiSinging
         IVocalMidiFile midi = settings.SingingMidiFile
             ?? throw new ArgumentException("A MIDI file is required for MIDI singing.", nameof(settings));
         if (settings.SingingMidiTrackIndex is not int trackIndex)
+        {
             throw new ArgumentException("Select a MIDI track for singing.", nameof(settings));
+        }
+
         IVocalMidiTrack track = midi.Tracks.FirstOrDefault(candidate => candidate.Index == trackIndex)
             ?? throw new ArgumentOutOfRangeException(nameof(settings), "The selected MIDI track does not exist.");
 
@@ -38,7 +41,9 @@ internal static class VocalMidiSinging
         var (syllables, trailingPauseMilliseconds) =
             VocalSinging.CreateSyllables(settings.Language, timelineTokens, cancellationToken);
         if (syllables.Count == 0)
+        {
             throw new InvalidOperationException("The text contains no singable syllables.");
+        }
 
         double[] syllableDurationsMilliseconds = syllables
             .Select(syllable => syllable.NaturalDurationMilliseconds)
@@ -52,24 +57,35 @@ internal static class VocalMidiSinging
             syllableDurationsMilliseconds[^1],
             cancellationToken);
         if (noteGroups.Length == 0)
+        {
             throw new InvalidOperationException("The selected MIDI page contains no notes.");
+        }
 
         double secondsPerTick = 60.0 / midi.DefaultBpm / Math.Max(1, midi.TicksPerQuarterNote) / settings.Speed;
         int FramesForTicks(long ticks)
         {
             double frames = Math.Round(Math.Max(0, ticks) * secondsPerTick * settings.SampleRate);
             if (!double.IsFinite(frames) || frames > VocalSynthEngine.MaxOutputSamples / settings.Channels)
+            {
                 throw new InvalidOperationException("The MIDI-sung vocal would exceed the supported output size.");
+            }
+
             return Math.Max(0, (int)frames);
         }
 
         int FramesForPause(double milliseconds)
         {
             if (!double.IsFinite(milliseconds) || milliseconds < 0)
+            {
                 throw new ArgumentOutOfRangeException(nameof(tokens), "A text pause has an invalid duration.");
+            }
+
             double frames = Math.Round(milliseconds * settings.SampleRate / (1000 * settings.Speed));
             if (!double.IsFinite(frames) || frames > VocalSynthEngine.MaxOutputSamples / settings.Channels)
+            {
                 throw new InvalidOperationException("The MIDI-sung vocal would exceed the supported output size.");
+            }
+
             return Math.Max(0, (int)frames);
         }
 
@@ -114,7 +130,10 @@ internal static class VocalMidiSinging
                 cancellationToken.ThrowIfCancellationRequested();
                 IVocalMidiNote note = chord[noteIndex];
                 if (note.NoteNumber is < 0 or > 127)
+                {
                     throw new InvalidDataException($"MIDI note number {note.NoteNumber} is outside the supported range.");
+                }
+
                 int noteStartFrame = repeated
                     ? checked(startFrame + FramesForTicks(checked(note.StartTick - groupStartTick)))
                     : checked(FramesForTicks(note.StartTick) + accumulatedPauseFrames);
@@ -136,17 +155,23 @@ internal static class VocalMidiSinging
             }
 
             if (repeated)
+            {
                 repeatedCursor = checked(startFrame + repeatedDurationFrames);
+            }
         }
 
         int trailingPauseFrames = FramesForPause(trailingPauseMilliseconds);
         int outputFrames = checked(latestVoiceEnd + trailingPauseFrames);
         if ((long)outputFrames * settings.Channels > VocalSynthEngine.MaxOutputSamples)
+        {
             throw new InvalidOperationException("The MIDI-sung vocal would exceed the supported output size.");
+        }
 
         long renderWorkSamples = scheduledNotes.Sum(note => (long)note.DurationFrames * settings.Channels);
         if (renderWorkSamples > VocalSynthEngine.MaxOutputSamples)
+        {
             throw new InvalidOperationException("The MIDI-sung vocal layers would exceed the supported render size.");
+        }
 
         return new VocalMidiSingingPlan(
             syllables,
@@ -169,7 +194,9 @@ internal static class VocalMidiSinging
             long onsetDuration = Math.Max(1, onset.DurationTicks);
             if (candidateVelocity > onsetVelocity
                 || candidateVelocity == onsetVelocity && candidateDuration > onsetDuration)
+            {
                 onsetIndex = index;
+            }
         }
         return onsetIndex;
     }
@@ -202,7 +229,9 @@ internal static class VocalMidiSinging
             || !double.IsFinite(speed) || speed <= 0
             || !double.IsFinite(fallbackSyllableDurationMilliseconds)
             || fallbackSyllableDurationMilliseconds <= 0)
+        {
             throw new InvalidDataException("The MIDI timing is invalid for syllable grouping.");
+        }
 
         IVocalMidiNote[] orderedNotes = track.Notes
             .OrderBy(note => note.StartTick)
@@ -271,7 +300,10 @@ internal static class VocalMidiSinging
         }
 
         if (currentGroup.Count > 0)
+        {
             noteGroups.Add(currentGroup.ToArray());
+        }
+
         return noteGroups.ToArray();
     }
 
@@ -287,12 +319,17 @@ internal static class VocalMidiSinging
             ? syllableDurationsMilliseconds[syllableIndex]
             : fallbackSyllableDurationMilliseconds;
         if (!double.IsFinite(durationMilliseconds) || durationMilliseconds <= 0)
+        {
             throw new InvalidDataException("A MIDI singing syllable has an invalid natural duration.");
+        }
 
         double naturalDurationTicksValue =
             durationMilliseconds * bpm * quarterTicks * speed / 60_000.0;
         if (!double.IsFinite(naturalDurationTicksValue) || naturalDurationTicksValue >= long.MaxValue)
+        {
             throw new InvalidDataException("The MIDI syllable duration exceeds the supported timing range.");
+        }
+
         long naturalDurationTicks = Math.Max(1, (long)Math.Ceiling(naturalDurationTicksValue));
         return new SyllableGroupingTiming(
             naturalDurationTicks,

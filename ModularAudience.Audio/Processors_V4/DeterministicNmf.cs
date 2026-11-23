@@ -52,7 +52,11 @@ namespace ModularAudience.Audio.Processors_V4
             double[] denominator = new double[activation.Length];
             for (int bin = 0; bin < power.Length; bin++)
             {
-                if ((bin & 127) == 0) token.ThrowIfCancellationRequested();
+                if ((bin & 127) == 0)
+                {
+                    token.ThrowIfCancellationRequested();
+                }
+
                 double prediction = Math.Max(1e-30, Dot(dictionary[bin], activation));
                 double inverse = 1 / prediction;
                 double ratio = Math.Max(floor, power[bin]) * inverse * inverse;
@@ -75,7 +79,11 @@ namespace ModularAudience.Audio.Processors_V4
             {
                 for (int bin = 0; bin < dictionary.Length; bin++)
                 {
-                    if ((bin & 127) == 0) options.CancellationToken.ThrowIfCancellationRequested();
+                    if ((bin & 127) == 0)
+                    {
+                        options.CancellationToken.ThrowIfCancellationRequested();
+                    }
+
                     prediction[frame][bin] = Math.Max(1e-30, Dot(dictionary[bin], activations[frame]));
                 }
             });
@@ -95,7 +103,11 @@ namespace ModularAudience.Audio.Processors_V4
             double[] denominator = new double[weights.Length];
             for (int frame = 0; frame < power.Length; frame++)
             {
-                if ((frame & 63) == 0) token.ThrowIfCancellationRequested();
+                if ((frame & 63) == 0)
+                {
+                    token.ThrowIfCancellationRequested();
+                }
+
                 double inverse = 1 / prediction[frame][bin];
                 double ratio = Math.Max(floor, power[frame][bin]) * inverse * inverse;
                 for (int component = 0; component < weights.Length; component++)
@@ -115,7 +127,11 @@ namespace ModularAudience.Audio.Processors_V4
             // IS (beta=0) majorization-minimization requires exponent 1/2, not a KL/Euclidean update.
             double ratio = Math.Clamp(numerator / Math.Max(denominator, 1e-100), 1e-60, 1e60);
             double updated = value * Math.Sqrt(ratio);
-            if (!double.IsFinite(updated)) throw new ArithmeticException("Non-finite IS-NMF update.");
+            if (!double.IsFinite(updated))
+            {
+                throw new ArithmeticException("Non-finite IS-NMF update.");
+            }
+
             return Math.Clamp(updated, 1e-30, 1e100);
         }
 
@@ -125,11 +141,23 @@ namespace ModularAudience.Audio.Processors_V4
             Parallel.For(0, dictionary[0].Length, options, component =>
             {
                 double sum = 0;
-                for (int bin = 0; bin < dictionary.Length; bin++) sum += dictionary[bin][component];
-                for (int bin = 0; bin < dictionary.Length; bin++) dictionary[bin][component] /= sum;
+                for (int bin = 0; bin < dictionary.Length; bin++)
+                {
+                    sum += dictionary[bin][component];
+                }
+
+                for (int bin = 0; bin < dictionary.Length; bin++)
+                {
+                    dictionary[bin][component] /= sum;
+                }
+
                 for (int frame = 0; frame < activations.Length; frame++)
                 {
-                    if ((frame & 127) == 0) options.CancellationToken.ThrowIfCancellationRequested();
+                    if ((frame & 127) == 0)
+                    {
+                        options.CancellationToken.ThrowIfCancellationRequested();
+                    }
+
                     activations[frame][component] *= sum;
                 }
             });
@@ -138,7 +166,11 @@ namespace ModularAudience.Audio.Processors_V4
         internal static double Dot(double[] left, double[] right)
         {
             double sum = 0;
-            for (int index = 0; index < left.Length; index++) sum += left[index] * right[index];
+            for (int index = 0; index < left.Length; index++)
+            {
+                sum += left[index] * right[index];
+            }
+
             return sum;
         }
     }

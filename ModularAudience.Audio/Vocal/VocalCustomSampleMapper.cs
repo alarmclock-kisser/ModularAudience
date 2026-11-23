@@ -30,7 +30,11 @@ internal static class VocalCustomSampleMapper
 
     internal static bool IsValidIpaSubstring(string? value)
     {
-        if (string.IsNullOrWhiteSpace(value) || value.Length > 512) return false;
+        if (string.IsNullOrWhiteSpace(value) || value.Length > 512)
+        {
+            return false;
+        }
+
         return VocalIpa.TryParseNotation(value, CancellationToken.None, out List<VocalPronunciationPhone> phones)
             && phones.Count is > 0 and <= 256;
     }
@@ -41,15 +45,24 @@ internal static class VocalCustomSampleMapper
         foreach (VocalCustomSampleMapping mapping in mappings)
         {
             ArgumentNullException.ThrowIfNull(mapping);
-            if (string.IsNullOrWhiteSpace(mapping.IpaSubstring)) continue;
+            if (string.IsNullOrWhiteSpace(mapping.IpaSubstring))
+            {
+                continue;
+            }
+
             if (!IsValidIpaSubstring(mapping.IpaSubstring))
+            {
                 throw new ArgumentException(
                     $"Custom sample mapping '{mapping.IpaSubstring}' must be a valid IPA sequence, such as /tʃ/.",
                     nameof(mappings));
+            }
+
             if (mapping.SampleRate <= 0 || mapping.Channels is < 1 or > 2
                 || mapping.Samples is null || mapping.Samples.Length == 0
                 || mapping.Samples.Length % mapping.Channels != 0)
+            {
                 throw new ArgumentException("A custom sample mapping has an invalid audio format.", nameof(mappings));
+            }
         }
     }
 
@@ -62,7 +75,11 @@ internal static class VocalCustomSampleMapper
         bool splitForSinging,
         CancellationToken cancellationToken)
     {
-        if (mappings.Count == 0) return tokens;
+        if (mappings.Count == 0)
+        {
+            return tokens;
+        }
+
         ValidateMappings(mappings);
 
         List<CompiledMapping> compiled = [];
@@ -70,13 +87,23 @@ internal static class VocalCustomSampleMapper
         {
             cancellationToken.ThrowIfCancellationRequested();
             VocalCustomSampleMapping mapping = mappings[order];
-            if (string.IsNullOrWhiteSpace(mapping.IpaSubstring)) continue;
+            if (string.IsNullOrWhiteSpace(mapping.IpaSubstring))
+            {
+                continue;
+            }
+
             if (!VocalIpa.TryParseNotation(
                 mapping.IpaSubstring, cancellationToken, out List<VocalPronunciationPhone> phones))
+            {
                 throw new ArgumentException($"Custom sample mapping '{mapping.IpaSubstring}' is not valid IPA.");
+            }
+
             compiled.Add(new CompiledMapping(mapping, phones.Select(phone => phone.Symbol).ToArray(), order));
         }
-        if (compiled.Count == 0) return tokens;
+        if (compiled.Count == 0)
+        {
+            return tokens;
+        }
 
         CompiledMapping[] orderedMappings = compiled
             .OrderByDescending(mapping => mapping.PhoneSymbols.Length)
@@ -119,8 +146,10 @@ internal static class VocalCustomSampleMapper
                 : 1;
             int sourceFrameCount = match.Mapping.Samples.Length / match.Mapping.Channels;
             if (sourceFrameCount < partCount)
+            {
                 throw new InvalidDataException(
                     $"Custom sample mapping '{match.Mapping.IpaSubstring}' is too short for its {partCount} sung syllables.");
+            }
 
             for (int part = 0; part < partCount; part++)
             {
@@ -150,7 +179,11 @@ internal static class VocalCustomSampleMapper
         IReadOnlyList<VocalCustomSampleToken> samples,
         CancellationToken cancellationToken)
     {
-        if (samples.Count == 0) return speechTokens;
+        if (samples.Count == 0)
+        {
+            return speechTokens;
+        }
+
         List<VocalToken> result = [];
         HashSet<int> emittedMatches = [];
         foreach (VocalToken token in speechTokens)
@@ -181,14 +214,27 @@ internal static class VocalCustomSampleMapper
                 int sampleStart = Math.Clamp(sample.SourceStart, tokenStart, tokenEnd);
                 int sampleEnd = Math.Clamp(sample.SourceStart + sample.SourceLength, tokenStart, tokenEnd);
                 if (sampleStart > cursor)
+                {
                     result.Add(SliceTextToken(textToken, cursor, sampleStart));
+                }
+
                 if (emittedMatches.Add(sample.MatchId))
+                {
                     result.AddRange(matchParts);
+                }
+
                 cursor = Math.Max(cursor, sampleEnd);
             }
 
-            if (cursor < tokenEnd) result.Add(SliceTextToken(textToken, cursor, tokenEnd));
-            if (overlappingMatches.Length == 0) result.Add(textToken);
+            if (cursor < tokenEnd)
+            {
+                result.Add(SliceTextToken(textToken, cursor, tokenEnd));
+            }
+
+            if (overlappingMatches.Length == 0)
+            {
+                result.Add(textToken);
+            }
         }
         return result;
     }
@@ -207,12 +253,18 @@ internal static class VocalCustomSampleMapper
 
     private static bool Matches(IReadOnlyList<VocalToken> tokens, int start, IReadOnlyList<string> phones)
     {
-        if (start > tokens.Count - phones.Count) return false;
+        if (start > tokens.Count - phones.Count)
+        {
+            return false;
+        }
+
         for (int offset = 0; offset < phones.Count; offset++)
         {
             if (tokens[start + offset] is not VocalPhonemeToken token
                 || !string.Equals(token.Phoneme, phones[offset], StringComparison.Ordinal))
+            {
                 return false;
+            }
         }
         return true;
     }
@@ -228,7 +280,11 @@ internal static class VocalCustomSampleMapper
                 && (phone.Phoneme.StartsWith("beat-", StringComparison.Ordinal)
                     || language == VocalLanguage.AnimalCrossing
                     || phone.Phoneme != previousSymbol);
-            if (isNucleus) count++;
+            if (isNucleus)
+            {
+                count++;
+            }
+
             previousSymbol = phone.Phoneme;
         }
         return count;
@@ -251,18 +307,28 @@ internal static class VocalCustomSampleMapper
         if (tokens[tokenIndex] is not VocalPhonemeToken first
             || first.SourceStart < 0 || first.SourceLength <= 0
             || first.SourceStart > text.Length - first.SourceLength)
+        {
             return (-1, 0);
+        }
 
         int sourceStart = first.SourceStart;
         int sourceLength = first.SourceLength;
         int firstWordPhone = tokenIndex;
         int wordEndPhone = tokenIndex + 1;
         while (firstWordPhone > 0 && IsFromSourceWord(tokens[firstWordPhone - 1], sourceStart, sourceLength))
+        {
             firstWordPhone--;
+        }
+
         while (wordEndPhone < tokens.Count && IsFromSourceWord(tokens[wordEndPhone], sourceStart, sourceLength))
+        {
             wordEndPhone++;
+        }
+
         if (wordEndPhone - firstWordPhone == matchPhoneCount)
+        {
             return (sourceStart, sourceLength);
+        }
 
         string word = text.Substring(sourceStart, sourceLength);
         int[] graphemeStarts = StringInfo.ParseCombiningCharacters(word);
@@ -288,7 +354,11 @@ internal static class VocalCustomSampleMapper
                         .OfType<VocalPhonemeToken>()
                         .Select(phone => phone.Phoneme)
                         .ToArray();
-                    if (candidatePhones.Count != matchPhoneCount) continue;
+                    if (candidatePhones.Count != matchPhoneCount)
+                    {
+                        continue;
+                    }
+
                     bool equal = true;
                     for (int phone = 0; phone < matchPhoneCount; phone++)
                     {
@@ -301,16 +371,26 @@ internal static class VocalCustomSampleMapper
                             break;
                         }
                     }
-                    if (!equal) continue;
+                    if (!equal)
+                    {
+                        continue;
+                    }
 
                     double cost = Math.Abs(firstGrapheme - expectedStart)
                         + Math.Abs(endGrapheme - expectedEnd);
-                    if (cost >= bestCost) continue;
+                    if (cost >= bestCost)
+                    {
+                        continue;
+                    }
+
                     bestCost = cost;
                     best = (sourceStart + charStart, charEnd - charStart);
                 }
             }
-            if (best is { } located) return located;
+            if (best is { } located)
+            {
+                return located;
+            }
         }
 
         int phoneOffset = tokenIndex - firstWordPhone;

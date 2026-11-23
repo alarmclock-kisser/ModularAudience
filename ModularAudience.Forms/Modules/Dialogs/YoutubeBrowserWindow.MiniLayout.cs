@@ -22,16 +22,28 @@ public partial class YoutubeBrowserWindow
 
     private void UpdateMiniLayout()
     {
-        if (rootLayout is null || switchingMiniLayout || resourcesReleased) return;
+        if (rootLayout is null || switchingMiniLayout || resourcesReleased)
+        {
+            return;
+        }
+
         UpdateCondensedLayout();
         bool compact = Width < normalLayoutThreshold.Width || Height < normalLayoutThreshold.Height;
-        if (compact == miniLayout) return;
+        if (compact == miniLayout)
+        {
+            return;
+        }
+
         switchingMiniLayout = true;
         rootLayout.SuspendLayout();
         try
         {
             miniLayout = compact;
-            if (compact) normalSplitterDistance = mainSplit.SplitterDistance;
+            if (compact)
+            {
+                normalSplitterDistance = mainSplit.SplitterDistance;
+            }
+
             foreach (int row in new[] { 0, 3, 4, 5, 6 })
             {
                 var style = rootLayout.RowStyles[row];
@@ -44,7 +56,9 @@ public partial class YoutubeBrowserWindow
                 else if (normalRowStyles.TryGetValue(row, out var saved))
                 { style.SizeType = saved.Type; style.Height = saved.Height; }
                 if (rootLayout.GetControlFromPosition(0, row) is { } control)
+                {
                     control.Visible = !compact && (!condensedLayout || row is 1 or 2);
+                }
             }
             // The same tables stay alive: selection, downloads and history survive layout switches.
             mainSplit.Panel1MinSize = compact ? 100 : condensedLayout ? 240 : 420;
@@ -52,7 +66,10 @@ public partial class YoutubeBrowserWindow
             resultsSummary.Visible = !compact;
             if (settingsTab is not null)
             {
-                if (condensedLayout && !browsingTabs.TabPages.Contains(settingsTab)) browsingTabs.TabPages.Add(settingsTab);
+                if (condensedLayout && !browsingTabs.TabPages.Contains(settingsTab))
+                {
+                    browsingTabs.TabPages.Add(settingsTab);
+                }
             }
             queryPanel.GetControlFromPosition(1, 0)!.Visible = !compact;
             playlistButton.Visible = !compact;
@@ -61,8 +78,11 @@ public partial class YoutubeBrowserWindow
             queryPanel.ColumnStyles[3].SizeType = compact ? SizeType.Absolute : SizeType.AutoSize;
             queryPanel.ColumnStyles[3].Width = 0;
             if (!compact)
+            {
                 mainSplit.SplitterDistance = Math.Clamp(normalSplitterDistance, mainSplit.Panel1MinSize,
                     Math.Max(mainSplit.Panel1MinSize, mainSplit.Width - mainSplit.Panel2MinSize - mainSplit.SplitterWidth));
+            }
+
             rootLayout.Padding = new Padding(compact ? 3 : 8);
             HideThumbnailPopup();
         }
@@ -73,11 +93,17 @@ public partial class YoutubeBrowserWindow
     private void UpdateCondensedLayout()
     {
         bool condensed = Width < 1000 || Height < 780;
-        if (condensed == condensedLayout) return;
+        if (condensed == condensedLayout)
+        {
+            return;
+        }
         // Restore the mini-only row changes before changing the underlying normal layout.
         if (miniLayout)
+        {
             foreach (var pair in normalRowStyles)
             { rootLayout.RowStyles[pair.Key].SizeType = pair.Value.Type; rootLayout.RowStyles[pair.Key].Height = pair.Value.Height; }
+        }
+
         rootLayout.SuspendLayout();
         try
         {
@@ -100,7 +126,10 @@ public partial class YoutubeBrowserWindow
                     expandedRowStyles[row] = (style.SizeType, style.Height);
                     style.SizeType = SizeType.Absolute;
                     style.Height = 0;
-                    if (rootLayout.GetControlFromPosition(0, row) is { } control) control.Visible = false;
+                    if (rootLayout.GetControlFromPosition(0, row) is { } control)
+                    {
+                        control.Visible = false;
+                    }
                 }
                 settingsLayout!.Controls.Add(optionsGroup, 0, 0);
                 settingsLayout.Controls.Add(normalActions!, 0, 1);
@@ -151,7 +180,11 @@ public partial class YoutubeBrowserWindow
         if (!Hints.HintPolicy.Enabled || !miniLayout || !thumbnailCheck.Checked || closing || !ContainsFocus) { HideThumbnailPopup(); return; }
         if (resultsList.GetItemAt(e.X, e.Y)?.Tag is not ModularAudience.Ytdlp.YtdlpVideo video)
         { HideThumbnailPopup(); return; }
-        if (hoveredThumbnailId == video.Id) return;
+        if (hoveredThumbnailId == video.Id)
+        {
+            return;
+        }
+
         HideThumbnailPopup();
         hoveredThumbnailId = video.Id;
         var source = new CancellationTokenSource(TimeSpan.FromSeconds(15));
@@ -162,7 +195,11 @@ public partial class YoutubeBrowserWindow
         finally
         {
             previewTasks.Remove(task);
-            if (ReferenceEquals(popupCancellation, source)) popupCancellation = null;
+            if (ReferenceEquals(popupCancellation, source))
+            {
+                popupCancellation = null;
+            }
+
             source.Dispose();
         }
 
@@ -171,9 +208,17 @@ public partial class YoutubeBrowserWindow
             try
             {
                 await Task.Delay(350, source.Token);
-                if (!Hints.HintPolicy.Enabled || hoveredThumbnailId != video.Id || !miniLayout || closing) return;
+                if (!Hints.HintPolicy.Enabled || hoveredThumbnailId != video.Id || !miniLayout || closing)
+                {
+                    return;
+                }
+
                 using var preview = await YoutubeThumbnailLoader.LoadAsync(thumbnailClient, video, _ => { }, source.Token);
-                if (!Hints.HintPolicy.Enabled || hoveredThumbnailId != video.Id || !miniLayout || closing || resourcesReleased || !ContainsFocus) return;
+                if (!Hints.HintPolicy.Enabled || hoveredThumbnailId != video.Id || !miniLayout || closing || resourcesReleased || !ContainsFocus)
+                {
+                    return;
+                }
+
                 var point = resultsList.PointToScreen(new Point(e.X + 20, e.Y + 20));
                 var bounds = Screen.FromPoint(point).WorkingArea;
                 point.X = Math.Clamp(point.X, bounds.Left, Math.Max(bounds.Left, bounds.Right - preview.Width));

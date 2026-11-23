@@ -10,7 +10,11 @@ public sealed class YtdlpRetryBudget
 
     public YtdlpRetryBudget(int maxRetries, Func<TimeSpan, CancellationToken, Task>? delay = null)
     {
-        if (maxRetries is < 0 or > MaximumRetries) throw new ArgumentOutOfRangeException(nameof(maxRetries));
+        if (maxRetries is < 0 or > MaximumRetries)
+        {
+            throw new ArgumentOutOfRangeException(nameof(maxRetries));
+        }
+
         this.MaxRetries = maxRetries;
         this.delay = delay ?? ((pause, token) => Task.Delay(pause, token));
     }
@@ -31,7 +35,10 @@ public sealed class YtdlpRetryBudget
                 token.ThrowIfCancellationRequested();
                 TimeSpan pause = error is YtdlpProcessException { RetryNotBeforeUtc: { } deadline }
                     ? deadline - DateTimeOffset.UtcNow : TimeSpan.FromMilliseconds(500);
-                if (pause > TimeSpan.Zero) await this.delay(pause, token);
+                if (pause > TimeSpan.Zero)
+                {
+                    await this.delay(pause, token);
+                }
             }
         }
     }

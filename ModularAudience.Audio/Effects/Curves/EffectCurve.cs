@@ -37,14 +37,24 @@ public sealed record EffectCurve
 
     public CompiledEffectCurve Compile()
     {
-        if (!Enum.IsDefined(this.Mode) || !Enum.IsDefined(this.Interpolation)) throw new ArgumentException("Invalid curve mode or interpolation.");
+        if (!Enum.IsDefined(this.Mode) || !Enum.IsDefined(this.Interpolation))
+        {
+            throw new ArgumentException("Invalid curve mode or interpolation.");
+        }
+
         if (!double.IsFinite(this.Cycles) || this.Cycles is < 0 or > 1000 || !double.IsFinite(this.Phase) || Math.Abs(this.Phase) > 1000 ||
             new[] { this.A, this.B, this.C, this.D }.Any(value => !double.IsFinite(value) || Math.Abs(value) > 10000))
+        {
             throw new ArgumentException("Curve parameters must be finite (cycles 0–1000, phase ±1000, a/b/c/d ±10000).");
+        }
+
         if (this.Points is null || this.Points.Count is < 2 or > 512 || this.Points.Any(point => point is null ||
                 !double.IsFinite(point.X) || !double.IsFinite(point.Y) || point.X is < 0 or > 1 || Math.Abs(point.Y) > 1000000) ||
             this.Points[0].X != 0 || this.Points[^1].X != 1 || this.Points.Zip(this.Points.Skip(1)).Any(pair => pair.First.X >= pair.Second.X))
+        {
             throw new ArgumentException("Use 2–512 finite checkpoints, strictly increasing x values, starting at x=0 and ending at x=1.");
+        }
+
         Func<double, double> evaluate;
         bool constant;
         if (this.Mode == EffectCurveMode.Equation)
@@ -59,9 +69,21 @@ public sealed record EffectCurve
             EffectCurveInterpolation interpolation = this.Interpolation;
             evaluate = x =>
             {
-                if (x >= 1) return points[^1].Y;
+                if (x >= 1)
+                {
+                    return points[^1].Y;
+                }
+
                 int low = 0, high = points.Length - 1;
-                while (low + 1 < high) { int mid = (low + high) / 2; if (points[mid].X <= x) low = mid; else high = mid; }
+                while (low + 1 < high) { int mid = (low + high) / 2; if (points[mid].X <= x)
+                    {
+                        low = mid;
+                    }
+                    else
+                    {
+                        high = mid;
+                    }
+                }
                 double t = (x - points[low].X) / (points[high].X - points[low].X);
                 t = interpolation switch { EffectCurveInterpolation.Smooth => t * t * (3 - 2 * t), EffectCurveInterpolation.Hold => 0, _ => t };
                 return points[low].Y + (points[high].Y - points[low].Y) * t;
@@ -69,7 +91,11 @@ public sealed record EffectCurve
         }
         var compiled = new CompiledEffectCurve(evaluate, constant);
         // Catch domain errors before enabling/saving. Every render evaluation is checked as well.
-        for (int i = 0; i <= 4096; i++) compiled.At(i / 4096d);
+        for (int i = 0; i <= 4096; i++)
+        {
+            compiled.At(i / 4096d);
+        }
+
         return compiled;
     }
 }
@@ -84,10 +110,17 @@ public sealed class CompiledEffectCurve
     }
     public double At(double x)
     {
-        if (!double.IsFinite(x)) throw new ArgumentOutOfRangeException(nameof(x));
+        if (!double.IsFinite(x))
+        {
+            throw new ArgumentOutOfRangeException(nameof(x));
+        }
+
         double value = this.evaluate(Math.Clamp(x, 0, 1));
         if (!double.IsFinite(value) || Math.Abs(value) > 1e12)
+        {
             throw new ArgumentException($"The curve is undefined or excessively large near x={x.ToString("G8", CultureInfo.InvariantCulture)}. Avoid poles, division by zero and invalid logarithms/roots.");
+        }
+
         return value;
     }
 }

@@ -229,9 +229,14 @@ public sealed class MidiFileData : IVocalMidiFile
     private static void ValidateTimeSignature(int numerator, int denominator)
     {
         if (numerator <= 0)
+        {
             throw new ArgumentOutOfRangeException("timeSignatureNumerator");
+        }
+
         if (denominator <= 0 || (denominator & (denominator - 1)) != 0)
+        {
             throw new ArgumentOutOfRangeException("timeSignatureDenominator");
+        }
     }
 
     private static bool IsValidTimeSignature(int numerator, int denominator) =>
@@ -347,7 +352,10 @@ public sealed class MidiFileData : IVocalMidiFile
                 if (midiEvent is TimeSignatureEvent timeSignatureEvent && !hasTimeSignature)
                 {
                     if (!IsValidTimeSignature(timeSignatureEvent.Numerator, timeSignatureEvent.Denominator))
+                    {
                         throw new InvalidDataException("The MIDI file contains an invalid time signature.");
+                    }
+
                     timeSignatureNumerator = timeSignatureEvent.Numerator;
                     timeSignatureDenominator = timeSignatureEvent.Denominator;
                     hasTimeSignature = true;
@@ -427,7 +435,10 @@ public sealed class MidiFileData : IVocalMidiFile
     {
         ValidateAudio(audioObj, out int channels, out int frameCount, out double bpm);
         if (preset == MidiConversionPreset.Synth)
+        {
             return MelodyMidiProcessor.Convert(audioObj, bpm, 1, CancellationToken.None, null);
+        }
+
         if (preset == MidiConversionPreset.Polyphonic)
         {
             return PolyphonicMidiProcessor.Convert(audioObj, bpm, 1, CancellationToken.None, null);
@@ -467,7 +478,10 @@ public sealed class MidiFileData : IVocalMidiFile
         maxWorkers = Math.Clamp(maxWorkers <= 0 ? Environment.ProcessorCount : maxWorkers, 1, Math.Min(Environment.ProcessorCount, frameCount));
         cancellationToken.ThrowIfCancellationRequested();
         if (preset == MidiConversionPreset.Synth)
+        {
             return await Task.Run(() => MelodyMidiProcessor.Convert(audioObj, bpm, maxWorkers, cancellationToken, progress), cancellationToken).ConfigureAwait(false);
+        }
+
         if (preset == MidiConversionPreset.Polyphonic)
         {
             return await Task.Run(() => PolyphonicMidiProcessor.Convert(audioObj, bpm, maxWorkers, cancellationToken, progress),

@@ -42,7 +42,11 @@ internal sealed class CoOpConnectionMenu : IDisposable
     internal void SetHosts(IReadOnlyList<CoOpDiscoveredHost> hosts)
     {
         Hosts.Items.Clear();
-        foreach (CoOpDiscoveredHost host in hosts) Hosts.Items.Add(host);
+        foreach (CoOpDiscoveredHost host in hosts)
+        {
+            Hosts.Items.Add(host);
+        }
+
         Hosts.SelectedIndex = -1;
     }
 
@@ -56,7 +60,9 @@ internal sealed class CoOpConnectionMenu : IDisposable
     private void HostSelectionCommitted(object? sender, EventArgs e)
     {
         if (Hosts.Enabled && Hosts.SelectedItem is CoOpDiscoveredHost host)
+        {
             HostSelected?.Invoke(this, new CoOpHostSelectionEventArgs(host));
+        }
     }
 
     public void Dispose()

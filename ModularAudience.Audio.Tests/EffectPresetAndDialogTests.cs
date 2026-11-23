@@ -56,7 +56,9 @@ public sealed class EffectPresetAndDialogTests
                 Assert.IsTrue(preset.Parameters.SoundEquals(editor.CaptureSettings()), definition.Name + "/" + preset.Name);
             }
             foreach (EffectParameter parameter in definition.Parameters.Where(parameter => parameter.Kind == EffectParameterKind.Choice))
+            {
                 Assert.IsInstanceOfType<ComboBox>(Descendants(editor).Single(control => control.Name == parameter.Key));
+            }
         }
     }
 
@@ -191,7 +193,11 @@ public sealed class EffectPresetAndDialogTests
     }
     private static IEnumerable<Control> Descendants(Control control)
     {
-        foreach (Control child in control.Controls) { yield return child; foreach (Control descendant in Descendants(child)) yield return descendant; }
+        foreach (Control child in control.Controls) { yield return child; foreach (Control descendant in Descendants(child))
+            {
+                yield return descendant;
+            }
+        }
     }
     private static void Drain(Task task)
     {

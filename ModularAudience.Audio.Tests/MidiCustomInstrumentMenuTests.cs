@@ -33,8 +33,15 @@ public sealed class MidiCustomInstrumentMenuTests
                 // Exercise the same item-click dismissal sequence as a real mouse selection.
                 typeof(ToolStripDropDown).GetMethod("OnItemClicked", flags)!.Invoke(menu, [new ToolStripItemClickedEventArgs(item)]);
                 Assert.IsFalse(menu.IsDisposed);
-                if (instrument == 7) Assert.AreSame(collection, Field("customCollection"));
-                else Assert.IsNotNull(Field("customSample"));
+                if (instrument == 7)
+                {
+                    Assert.AreSame(collection, Field("customCollection"));
+                }
+                else
+                {
+                    Assert.IsNotNull(Field("customSample"));
+                }
+
                 menu.Close();
             }
             window.Dispose();

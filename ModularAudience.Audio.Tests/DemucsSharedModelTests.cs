@@ -44,9 +44,17 @@ public sealed class DemucsSharedModelTests
         var leases = await Task.WhenAll(Enumerable.Range(0, 12).Select(_ => pool.AcquireAsync("model", "options", Load)));
         Assert.AreEqual(1, loads);
         var model = leases[0]!.Model;
-        foreach (var lease in leases) Assert.AreSame(model, lease!.Model);
+        foreach (var lease in leases)
+        {
+            Assert.AreSame(model, lease!.Model);
+        }
+
         leases[0]!.AddAlias("effective-options");
-        using (var alias = await pool.AcquireAsync("model", "effective-options", null)) Assert.AreSame(model, alias!.Model);
+        using (var alias = await pool.AcquireAsync("model", "effective-options", null))
+        {
+            Assert.AreSame(model, alias!.Model);
+        }
+
         foreach (var lease in leases.Take(11)) { lease!.KeepAlive = TimeSpan.Zero; lease.Dispose(); }
         pool.ClearIdle(); Assert.AreEqual(0, model.Disposals);
         leases[11]!.KeepAlive = TimeSpan.FromMilliseconds(80); leases[11]!.Dispose();
@@ -80,7 +88,11 @@ public sealed class DemucsSharedModelTests
         await Assert.ThrowsExactlyAsync<IOException>(async () => await pool.AcquireAsync("model", "a", () => throw new IOException("failed")));
         var model = new Model(); var lease = await pool.AcquireAsync("model", "a", () => model);
         lease!.KeepAlive = TimeSpan.FromMilliseconds(30); lease.Dispose(); lease.Dispose();
-        for (int i = 0; i < 100 && model.Disposals == 0; i++) await Task.Delay(10);
+        for (int i = 0; i < 100 && model.Disposals == 0; i++)
+        {
+            await Task.Delay(10);
+        }
+
         Assert.AreEqual(1, model.Disposals); pool.ClearIdle(); Assert.AreEqual(1, model.Disposals);
     }
     [TestMethod]
@@ -139,7 +151,10 @@ public sealed class DemucsSharedModelTests
         }
         finally
         {
-            if (Directory.Exists(directory)) Directory.Delete(directory, true);
+            if (Directory.Exists(directory))
+            {
+                Directory.Delete(directory, true);
+            }
         }
     }
 

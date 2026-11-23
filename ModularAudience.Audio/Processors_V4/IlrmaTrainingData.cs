@@ -33,7 +33,11 @@ namespace ModularAudience.Audio.Processors_V4
             IlrmaTrainingData data = new(frames, settings.WindowSize / 2 + 1);
             progress?.Report(new(0, "Checking stereo samples and global spatial rank"));
             data.Scan(source, settings, available, progress, token);
-            if (data.IsSilent) return data;
+            if (data.IsSilent)
+            {
+                return data;
+            }
+
             data.WorkingBytes = EstimateMemory(data.Bins, frames, settings);
             IlrmaNumerics.RequireMemory(data.WorkingBytes, "training");
             data.Left = new Complex[data.Bins][];
@@ -64,7 +68,10 @@ namespace ModularAudience.Audio.Processors_V4
             double[] strongest = new double[this.Frames];
             double leftEnergy = 0, rightEnergy = 0, cross = 0;
             for (int frame = 0; frame < this.Frames; frame++)
+            {
                 this.FrameIndices[frame] = (int)((long)frame * available / this.Frames);
+            }
+
             for (int sample = 0; sample < sampleFrames; sample++)
             {
                 if ((sample & 65535) == 0)
@@ -74,7 +81,10 @@ namespace ModularAudience.Audio.Processors_V4
                 }
                 double left = source.Samples[2 * sample], right = source.Samples[2 * sample + 1];
                 if (!double.IsFinite(left) || !double.IsFinite(right))
+                {
                     throw new ArgumentException($"ILRMA input contains a non-finite sample at stereo frame {sample}.", nameof(source));
+                }
+
                 this.SamplePeak = Math.Max(this.SamplePeak, Math.Max(Math.Abs(left), Math.Abs(right)));
                 leftEnergy += left * left;
                 rightEnergy += right * right;
@@ -89,7 +99,10 @@ namespace ModularAudience.Audio.Processors_V4
                 }
             }
             token.ThrowIfCancellationRequested();
-            if (!this.IsSilent) ValidateRank(leftEnergy, rightEnergy, cross);
+            if (!this.IsSilent)
+            {
+                ValidateRank(leftEnergy, rightEnergy, cross);
+            }
         }
 
         private static void ValidateRank(double left, double right, double cross)
@@ -98,7 +111,9 @@ namespace ModularAudience.Audio.Processors_V4
             double correlation = left > 0 && right > 0 ? cross / Math.Sqrt(left) / Math.Sqrt(right) : 1;
             double normalizedDeterminant = 1 - correlation * correlation;
             if (!double.IsFinite(normalizedDeterminant) || normalizedDeterminant <= 1e-10)
+            {
                 throw new ArgumentException("ILRMA requires two spatially independent channels. The global channel covariance is rank-deficient (including proportional or antiphase duplicates).");
+            }
         }
 
         private void ReadFrames(DeterministicAudioSnapshot source, DeterministicSeparationSettings settings,
@@ -113,12 +128,18 @@ namespace ModularAudience.Audio.Processors_V4
                 Complex[] right = this.Transform(source, offset, 1, window, token);
                 for (int bin = 0; bin < this.Bins; bin++)
                 {
-                    if ((bin & 255) == 0) token.ThrowIfCancellationRequested();
+                    if ((bin & 255) == 0)
+                    {
+                        token.ThrowIfCancellationRequested();
+                    }
+
                     this.Left[bin][frame] = left[bin];
                     this.Right[bin][frame] = right[bin];
                 }
                 if ((frame & 15) == 0 || frame == this.Frames - 1)
+                {
                     progress?.Report(new(0.06 + 0.14 * (frame + 1) / this.Frames, "Sampling distributed complex stereo STFT frames"));
+                }
             }
         }
 
@@ -129,10 +150,16 @@ namespace ModularAudience.Audio.Processors_V4
             double scale = Math.Sqrt(window.Length);
             for (int i = 0; i < spectrum.Length; i++)
             {
-                if ((i & 255) == 0) token.ThrowIfCancellationRequested();
+                if ((i & 255) == 0)
+                {
+                    token.ThrowIfCancellationRequested();
+                }
+
                 long sample = offset + i;
                 if (sample >= 0 && sample < source.Samples.Length / 2)
+                {
                     spectrum[i] = new Complex(source.Samples[2 * (int)sample + channel] / this.SamplePeak / scale * window[i], 0);
+                }
             }
             IlrmaNumerics.Transform(spectrum, false, token);
             spectrum[0] = new Complex(spectrum[0].Real, 0);
@@ -147,10 +174,15 @@ namespace ModularAudience.Audio.Processors_V4
             {
                 token.ThrowIfCancellationRequested();
                 for (int frame = 0; frame < this.Frames; frame++)
+                {
                     total += IlrmaNumerics.Power(this.Left[bin][frame]) + IlrmaNumerics.Power(this.Right[bin][frame]);
+                }
             }
             if (!(total > 0) || !double.IsFinite(total))
+            {
                 throw new ArithmeticException("The nonsilent ILRMA input has no finite sampled STFT energy.");
+            }
+
             double scale = Math.Sqrt(2.0 * this.Bins * this.Frames / total);
             for (int bin = 0; bin < this.Bins; bin++)
             {

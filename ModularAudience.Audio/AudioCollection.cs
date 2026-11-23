@@ -64,7 +64,10 @@ namespace ModularAudience.Audio
             Directory.CreateDirectory(this.ExportPath);
             Directory.CreateDirectory(this.RecordPath);
             this.Exporter = new AudioExporter(this.ExportPath);
-            if (followDefault) AudioStoragePaths.FollowDefaultWorkingDirectory(this);
+            if (followDefault)
+            {
+                AudioStoragePaths.FollowDefaultWorkingDirectory(this);
+            }
 
             this.Audios.ListChanged += (s, e) =>
             {

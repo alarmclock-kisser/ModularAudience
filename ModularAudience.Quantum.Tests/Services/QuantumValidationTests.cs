@@ -31,7 +31,9 @@ public sealed class QuantumValidationTests
             options => options.MaxReadRetries = 11
         ];
         foreach (var configure in invalid)
+        {
             Assert.Throws<ArgumentException>(() => { using var fixture = new IbmClientFixture(configure: configure); });
+        }
     }
 
     [TestMethod]

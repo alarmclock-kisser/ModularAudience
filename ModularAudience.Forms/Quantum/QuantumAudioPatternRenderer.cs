@@ -17,9 +17,15 @@ internal static class QuantumAudioPatternRenderer
         ArgumentNullException.ThrowIfNull(pattern.Slices);
         cancellationToken.ThrowIfCancellationRequested();
         if (source.SampleRate <= 0 || source.Channels <= 0 || source.Data.Length < source.Channels || source.Data.Length % source.Channels != 0)
+        {
             throw new ArgumentException("Quantum patterns require a sample with complete audio frames and a valid format.");
+        }
+
         if (source.Data.Length > MaximumPreparedSamples)
+        {
             throw new ArgumentException("The sample exceeds the 256 MiB quantum preparation limit. Use a shorter slice.");
+        }
+
         DrumSliceTrigger[] slices = pattern.Slices.ToArray();
         if (slices.Length is < 1 or > 1024 ||
             slices.Any(slice => slice is null || slice.StepIndex < 0 || slice.StepIndex >= slices.Length ||
@@ -28,7 +34,9 @@ internal static class QuantumAudioPatternRenderer
                 !double.IsFinite(slice.TimeStretchFactor) || slice.TimeStretchFactor is < 0.5 or > 2 ||
                 !double.IsFinite(slice.SliceCutOffsetMs) || slice.SliceCutOffsetMs < 0) ||
             slices.Select(slice => slice.StepIndex).Distinct().Count() != slices.Length)
+        {
             throw new ArgumentException("The quantum pattern contains invalid step indices or DSP parameters.");
+        }
 
         using AudioObj snapshot = source.Clone();
         return await Task.Run(() => Prepare(snapshot, slices, cancellationToken), cancellationToken).ConfigureAwait(false);
@@ -43,8 +51,15 @@ internal static class QuantumAudioPatternRenderer
         {
             for (int i = 0; i < source.Data.Length; i++)
             {
-                if ((i & 4095) == 0) token.ThrowIfCancellationRequested();
-                if (!float.IsFinite(source.Data[i])) throw new ArgumentException("Quantum patterns require finite source audio samples.");
+                if ((i & 4095) == 0)
+                {
+                    token.ThrowIfCancellationRequested();
+                }
+
+                if (!float.IsFinite(source.Data[i]))
+                {
+                    throw new ArgumentException("Quantum patterns require finite source audio samples.");
+                }
             }
             foreach (DrumSliceTrigger slice in slices.Where(slice => slice.IsTriggered))
             {
@@ -56,7 +71,10 @@ internal static class QuantumAudioPatternRenderer
                     int cutFrame = (int)Math.Clamp(Math.Floor(slice.SliceCutOffsetMs * source.SampleRate / 1000), 0, frames - 1);
                     double estimate = Math.Ceiling((frames - cutFrame) * slice.TimeStretchFactor) * source.Channels;
                     if (estimate > MaximumPreparedSamples - preparedSamples)
+                    {
                         throw new ArgumentException("Prepared quantum slices would exceed 256 MiB. Use a shorter sample or fewer variations.");
+                    }
+
                     using var cut = new AudioObj
                     {
                         Data = source.Data[(cutFrame * source.Channels)..], SampleRate = source.SampleRate,
@@ -66,16 +84,26 @@ internal static class QuantumAudioPatternRenderer
                     cut.Rename(source.Name + " [Quantum]");
                     var settings = new SampleModellerSettings();
                     if (slice.PitchShiftCents != 0)
+                    {
                         settings.Effects.Add(new SampleEffect { Kind = SampleEffectKind.PitchShift, Semitones = slice.PitchShiftCents / 100 });
+                    }
+
                     if (slice.TimeStretchFactor != 1)
+                    {
                         settings.Effects.Add(new SampleEffect { Kind = SampleEffectKind.TimeStretch, Factor = slice.TimeStretchFactor });
+                    }
+
                     rendered = SampleModellerDsp.Render(cut, settings, token);
                     // Track ownership immediately, including when cancellation occurs in the gain pass.
                     cache.Add(key, rendered);
                     preparedSamples = checked(preparedSamples + rendered.Data.Length);
                     for (int i = 0; i < rendered.Data.Length; i++)
                     {
-                        if ((i & 4095) == 0) token.ThrowIfCancellationRequested();
+                        if ((i & 4095) == 0)
+                        {
+                            token.ThrowIfCancellationRequested();
+                        }
+
                         rendered.Data[i] *= (float)slice.Velocity;
                     }
                 }
@@ -83,12 +111,20 @@ internal static class QuantumAudioPatternRenderer
             }
             token.ThrowIfCancellationRequested();
             var steps = new bool[slices.Length];
-            foreach (DrumSliceTrigger slice in slices) steps[slice.StepIndex] = slice.IsTriggered;
+            foreach (DrumSliceTrigger slice in slices)
+            {
+                steps[slice.StepIndex] = slice.IsTriggered;
+            }
+
             return new(steps, samples);
         }
         catch
         {
-            foreach (AudioObj audio in cache.Values) audio.Dispose();
+            foreach (AudioObj audio in cache.Values)
+            {
+                audio.Dispose();
+            }
+
             throw;
         }
     }
@@ -101,6 +137,9 @@ internal sealed class PreparedQuantumPattern(bool[] steps, IReadOnlyDictionary<i
 
     public void Dispose()
     {
-        foreach (AudioObj audio in this.Samples.Values.Distinct()) audio.Dispose();
+        foreach (AudioObj audio in this.Samples.Values.Distinct())
+        {
+            audio.Dispose();
+        }
     }
 }

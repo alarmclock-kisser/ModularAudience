@@ -15,7 +15,10 @@ namespace ModularAudience.Audio.Tests
             ConstantQTransform transform = ConstantQTransform.Create(8000, binsPerOctave, 220);
             double[] input = new double[transform.Length];
             for (int i = 0; i < input.Length; i++)
+            {
                 input[i] = 0.125 + 0.2 * Math.Sin(2 * Math.PI * 440 * i / 8000) + (i % 2 == 0 ? 0.1 : -0.1);
+            }
+
             input[0] += 0.3;
             input[^1] -= 0.2;
             var coefficients = transform.Forward(input, CancellationToken.None);
@@ -23,7 +26,13 @@ namespace ModularAudience.Audio.Tests
                 "Constant-Q bands must have different time resolutions.");
             AssertError(input, transform.Inverse(coefficients, CancellationToken.None), 1, 1e-9);
             foreach (var band in coefficients)
-                for (int i = 0; i < band.Length; i++) band[i] *= 0.5;
+            {
+                for (int i = 0; i < band.Length; i++)
+                {
+                    band[i] *= 0.5;
+                }
+            }
+
             AssertError(input, transform.Inverse(coefficients, CancellationToken.None), 0.5, 1e-9);
         }
 
@@ -31,7 +40,11 @@ namespace ModularAudience.Audio.Tests
         public void PyinTracksKnownPitchRejectsSilenceAndIsRepeatable()
         {
             float[] tone = new float[4000];
-            for (int i = 0; i < tone.Length; i++) tone[i] = (float)(0.4 * Math.Sin(2 * Math.PI * 220 * i / 8000));
+            for (int i = 0; i < tone.Length; i++)
+            {
+                tone[i] = (float)(0.4 * Math.Sin(2 * Math.PI * 220 * i / 8000));
+            }
+
             PyinPitchFrame[] first = PyinPitchTracker.Track(tone, 8000, 128, 100, 500, 1, CancellationToken.None);
             PyinPitchFrame[] repeated = PyinPitchTracker.Track(tone, 8000, 128, 100, 500,
                 Math.Min(2, Environment.ProcessorCount), CancellationToken.None);
@@ -113,7 +126,9 @@ namespace ModularAudience.Audio.Tests
                 baseline with { UseCqtAnalysis = true, UsePyin = true, UseCqtSynthesis = true }
             ];
             foreach (var settings in allAdvanced)
+            {
                 _ = DeterministicSeparationProcessor.AnalyzeAsync(source, settings).GetAwaiter().GetResult();
+            }
         }
 
         [TestMethod]

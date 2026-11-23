@@ -89,7 +89,11 @@ public partial class ProgressDialog : Form
 
     public void Complete()
     {
-        if (this.IsDisposed || this.Disposing) return;
+        if (this.IsDisposed || this.Disposing)
+        {
+            return;
+        }
+
         if (this.InvokeRequired) { this.PostToUi(this.Complete); return; }
         this.operationCompleted = true;
         this.timer_elapsed.Stop();
@@ -138,7 +142,11 @@ public partial class ProgressDialog : Form
 
     private void RequestCancellation()
     {
-        if (this.cancellationRequested || this.operationCompleted) return;
+        if (this.cancellationRequested || this.operationCompleted)
+        {
+            return;
+        }
+
         this.cancellationRequested = true;
         try { this.cancellationSource?.Cancel(); }
         catch (ObjectDisposedException)
@@ -157,20 +165,30 @@ public partial class ProgressDialog : Form
 
     private void PostToUi(Action action)
     {
-        if (this.IsDisposed || this.Disposing || !this.IsHandleCreated) return;
-        try { this.BeginInvoke((Action)(() => { if (!this.IsDisposed && !this.Disposing) action(); })); }
+        if (this.IsDisposed || this.Disposing || !this.IsHandleCreated)
+        {
+            return;
+        }
+
+        try { this.BeginInvoke((Action)(() => { if (!this.IsDisposed && !this.Disposing) { action(); } })); }
         catch (InvalidOperationException) when (this.IsDisposed || this.Disposing || !this.IsHandleCreated) { }
     }
 
     private void QueueClose()
     {
-        if (this.IsHandleCreated) this.PostToUi(this.Close);
+        if (this.IsHandleCreated)
+        {
+            this.PostToUi(this.Close);
+        }
     }
 
     protected override void OnShown(EventArgs e)
     {
         base.OnShown(e);
-        if (this.cancellationToken.IsCancellationRequested) this.PostToUi(this.Close);
+        if (this.cancellationToken.IsCancellationRequested)
+        {
+            this.PostToUi(this.Close);
+        }
     }
 
     private void UpdateTimeLabels(double progress, bool sampleProgress = false)

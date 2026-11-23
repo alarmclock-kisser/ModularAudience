@@ -11,7 +11,9 @@ internal static class UpdatedApplicationLauncher
         ArgumentNullException.ThrowIfNull(startProcess);
         if (!Path.IsPathFullyQualified(targetPath) ||
             !targetPath.EndsWith(".exe", StringComparison.OrdinalIgnoreCase))
+        {
             throw new ArgumentException("The updated application path must be an absolute executable path.", nameof(targetPath));
+        }
 
         string executablePath = Path.GetFullPath(targetPath);
         try

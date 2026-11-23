@@ -32,7 +32,11 @@ namespace ModularAudience.Forms
             {
                 var progress = new Progress<string>(msg =>
                 {
-                    if (this.IsDisposed) return;
+                    if (this.IsDisposed)
+                    {
+                        return;
+                    }
+
                     this.label_status.Text = msg;
 
                     // Parse percentage from status text: "Downloaded: 45.2 MB / 100.5 MB (44.9%)"
@@ -45,7 +49,10 @@ namespace ModularAudience.Forms
                     else if (msg.StartsWith("Downloading", StringComparison.OrdinalIgnoreCase))
                     {
                         // No percentage yet - show indeterminate-style partial progress
-                        if (this.progressBar_install.Value < 10) this.progressBar_install.Value = 5;
+                        if (this.progressBar_install.Value < 10)
+                        {
+                            this.progressBar_install.Value = 5;
+                        }
                     }
                     else if (msg.StartsWith("Extracting", StringComparison.OrdinalIgnoreCase))
                     {

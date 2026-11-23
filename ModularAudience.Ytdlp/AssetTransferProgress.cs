@@ -14,7 +14,11 @@ internal sealed class AssetTransferProgress(string name, long totalBytes, IProgr
     internal void Report(long downloadedBytes, bool completed = false)
     {
         long now = Environment.TickCount64;
-        if (!completed && lastTick != long.MinValue && now - lastTick < 250) return;
+        if (!completed && lastTick != long.MinValue && now - lastTick < 250)
+        {
+            return;
+        }
+
         lastTick = now;
         var elapsed = clock.Elapsed;
         double seconds = (elapsed - lastElapsed).TotalSeconds;

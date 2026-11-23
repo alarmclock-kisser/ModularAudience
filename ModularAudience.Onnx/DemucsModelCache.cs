@@ -23,7 +23,11 @@ public static class DemucsModelCache
             catch { service.Dispose(); throw; }
         } : null, token).ConfigureAwait(false);
         // Provider fallback/DirectML normalization must reuse the same native session.
-        if (lease?.Model.EffectiveOptions is { } effective) lease.AddAlias(Key(path, effective));
+        if (lease?.Model.EffectiveOptions is { } effective)
+        {
+            lease.AddAlias(Key(path, effective));
+        }
+
         return lease;
     }
 
@@ -78,10 +82,18 @@ public static class DemucsModelCache
         Entry? entry;
         lock (Gate)
         {
-            if (!Idle.Remove(key, out entry)) return null;
+            if (!Idle.Remove(key, out entry))
+            {
+                return null;
+            }
+
             entry.Timer?.Dispose();
         }
-        if (entry.Expires > DateTime.UtcNow && entry.Service.IsOnline) return entry.Service;
+        if (entry.Expires > DateTime.UtcNow && entry.Service.IsOnline)
+        {
+            return entry.Service;
+        }
+
         entry.Service.Dispose();
         return null;
     }
@@ -104,7 +116,11 @@ public static class DemucsModelCache
     {
         lock (Gate)
         {
-            if (!Idle.TryGetValue(key, out var entry) || !ReferenceEquals(entry, expected)) return;
+            if (!Idle.TryGetValue(key, out var entry) || !ReferenceEquals(entry, expected))
+            {
+                return;
+            }
+
             Idle.Remove(key);
         }
         expected.Timer?.Dispose();

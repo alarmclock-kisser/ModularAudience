@@ -118,7 +118,11 @@ namespace ModularAudience.Forms.Modules.Dialogs
 
         public static BreakbeatGenerateOptions Normalize(BreakbeatGenerateOptions options, int maxNoteLengthSteps = 256)
         {
-            if (!BreakbeatTrackPresets.All.Any(p => p.Name == options.Preset)) options.Preset = "- None -";
+            if (!BreakbeatTrackPresets.All.Any(p => p.Name == options.Preset))
+            {
+                options.Preset = "- None -";
+            }
+
             options.PresetIntensityPercent = Math.Clamp(options.PresetIntensityPercent, 0, 100);
             options.PhraseBars = Math.Clamp(options.PhraseBars, 1, 16);
             options.DensityPercent = Math.Clamp(options.DensityPercent, 0, 100);

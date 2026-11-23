@@ -14,7 +14,11 @@ public static class VocalTextParser
         VocalLanguage language, string text, VocalEmphasisSyntax syntax, CancellationToken cancellationToken = default)
     {
         var result = new List<VocalToken>();
-        if (string.IsNullOrEmpty(text)) return result;
+        if (string.IsNullOrEmpty(text))
+        {
+            return result;
+        }
+
         ParseSegment(language, text, syntax, VocalEmphasis.Normal, result, 0, false, cancellationToken, 0);
         return result;
     }
@@ -40,10 +44,16 @@ public static class VocalTextParser
             var syllable = syllables[i];
             if (syllable.SourceStart < 0 || syllable.SourceLength <= 0
                 || syllable.SourceStart + syllable.SourceLength > text.Length)
+            {
                 continue;
+            }
+
             var key = (syllable.SourceStart, syllable.SourceLength);
             if (!wordGroups.TryGetValue(key, out List<int>? indices))
+            {
                 wordGroups.Add(key, indices = []);
+            }
+
             indices.Add(i);
         }
 
@@ -60,7 +70,11 @@ public static class VocalTextParser
             {
                 int firstGrapheme = boundaries[part];
                 int endGrapheme = boundaries[part + 1];
-                if (endGrapheme <= firstGrapheme) continue;
+                if (endGrapheme <= firstGrapheme)
+                {
+                    continue;
+                }
+
                 int start = word.Start + graphemeStarts[firstGrapheme];
                 int end = endGrapheme == graphemeCount
                     ? word.Start + word.Length
@@ -78,7 +92,11 @@ public static class VocalTextParser
         List<(int Start, int End)> vowelNuclei = [];
         for (int index = 0; index < graphemeCount;)
         {
-            if ((index & 255) == 0) cancellationToken.ThrowIfCancellationRequested();
+            if ((index & 255) == 0)
+            {
+                cancellationToken.ThrowIfCancellationRequested();
+            }
+
             if (!IsVowelGrapheme(word, graphemeStarts, index))
             {
                 index++;
@@ -88,14 +106,20 @@ public static class VocalTextParser
             int start = index++;
             while (index < graphemeCount && IsVowelGrapheme(word, graphemeStarts, index))
             {
-                if ((index & 255) == 0) cancellationToken.ThrowIfCancellationRequested();
+                if ((index & 255) == 0)
+                {
+                    cancellationToken.ThrowIfCancellationRequested();
+                }
+
                 index++;
             }
             vowelNuclei.Add((start, index));
         }
 
         if (vowelNuclei.Count != syllableCount)
+        {
             return CreateEvenSyllableBoundaries(graphemeCount, syllableCount, cancellationToken);
+        }
 
         int[] boundaries = new int[syllableCount + 1];
         boundaries[^1] = graphemeCount;
@@ -113,7 +137,10 @@ public static class VocalTextParser
             };
             int boundary = nextStart - nextOnsetLength;
             if (boundary <= boundaries[syllable - 1] || boundary >= graphemeCount)
+            {
                 return CreateEvenSyllableBoundaries(graphemeCount, syllableCount, cancellationToken);
+            }
+
             boundaries[syllable] = boundary;
         }
 
@@ -129,7 +156,10 @@ public static class VocalTextParser
         {
             if (CharUnicodeInfo.GetUnicodeCategory(character) is
                 UnicodeCategory.NonSpacingMark or UnicodeCategory.SpacingCombiningMark or UnicodeCategory.EnclosingMark)
+            {
                 continue;
+            }
+
             return "aeiouyæøœı".Contains(char.ToLowerInvariant(character));
         }
         return false;
@@ -141,7 +171,11 @@ public static class VocalTextParser
         int[] boundaries = new int[syllableCount + 1];
         for (int part = 0; part <= syllableCount; part++)
         {
-            if ((part & 255) == 0) cancellationToken.ThrowIfCancellationRequested();
+            if ((part & 255) == 0)
+            {
+                cancellationToken.ThrowIfCancellationRequested();
+            }
+
             boundaries[part] = (int)((long)part * graphemeCount / syllableCount);
         }
         return boundaries;
@@ -159,7 +193,11 @@ public static class VocalTextParser
         VocalLanguage language, string text, VocalEmphasisSyntax syntax, VocalEmphasis baseEmphasis,
         List<VocalToken> output, int depth, bool preserveText, CancellationToken cancellationToken, int sourceOffset)
     {
-        if (depth > 32) throw new ArgumentException("Emphasis markers are nested too deeply.", nameof(text));
+        if (depth > 32)
+        {
+            throw new ArgumentException("Emphasis markers are nested too deeply.", nameof(text));
+        }
+
         int i = 0;
         var pending = baseEmphasis;
         int n = text.Length;
@@ -187,9 +225,20 @@ public static class VocalTextParser
                 int spaceCount = 0;
                 while (i < n && char.IsWhiteSpace(text[i]))
                 {
-                    if ((i & 255) == 0) cancellationToken.ThrowIfCancellationRequested();
-                    if (text[i] == '\n' || text[i] == '\r') hasNewline = true;
-                    else spaceCount++;
+                    if ((i & 255) == 0)
+                    {
+                        cancellationToken.ThrowIfCancellationRequested();
+                    }
+
+                    if (text[i] == '\n' || text[i] == '\r')
+                    {
+                        hasNewline = true;
+                    }
+                    else
+                    {
+                        spaceCount++;
+                    }
+
                     i++;
                 }
                 if (hasNewline)
@@ -212,7 +261,11 @@ public static class VocalTextParser
                 output.Add(new VocalPauseToken(75));
                 for (int dot = 0; dot < 3; dot++)
                 {
-                    if (dot > 0) output.Add(new VocalPauseToken(85 + dot * 15));
+                    if (dot > 0)
+                    {
+                        output.Add(new VocalPauseToken(85 + dot * 15));
+                    }
+
                     output.Add(new VocalPhonemeToken("animal-dot", pending)
                     {
                         SourceStart = sourceOffset + i,
@@ -263,7 +316,11 @@ public static class VocalTextParser
                     i += inlineRule.Marker.Length;
                     while (i < n && text[i] is not '\r' and not '\n')
                     {
-                        if ((i & 255) == 0) cancellationToken.ThrowIfCancellationRequested();
+                        if ((i & 255) == 0)
+                        {
+                            cancellationToken.ThrowIfCancellationRequested();
+                        }
+
                         i++;
                     }
                     continue;
@@ -322,7 +379,11 @@ public static class VocalTextParser
                         or '《' or '》' or '【' or '】' or '«' or '»' or '“' or '”' or '"' => 0,
                     _ => 240,
                 };
-                if (pause > 0) output.Add(new VocalPauseToken(pause));
+                if (pause > 0)
+                {
+                    output.Add(new VocalPauseToken(pause));
+                }
+
                 i++;
                 continue;
             }
@@ -333,7 +394,11 @@ public static class VocalTextParser
                 && !IsMarkerStart(syntax, text, i)
                 && !(language == VocalLanguage.AnimalCrossing && IsEllipsisAt(text, i)))
             {
-                if ((i & 255) == 0) cancellationToken.ThrowIfCancellationRequested();
+                if ((i & 255) == 0)
+                {
+                    cancellationToken.ThrowIfCancellationRequested();
+                }
+
                 sb.Append(text[i]);
                 i++;
             }
@@ -343,8 +408,16 @@ public static class VocalTextParser
                 bool isQuestion = i < n && text[i] is '?' or '？' or '؟';
                 bool isExclamation = i < n && text[i] is '!' or '！';
                 var emphasis = pending;
-                if (emphasis == VocalEmphasis.Normal && isQuestion) emphasis = VocalEmphasis.PitchUp;
-                if (emphasis == VocalEmphasis.Normal && isExclamation) emphasis = VocalEmphasis.Strong;
+                if (emphasis == VocalEmphasis.Normal && isQuestion)
+                {
+                    emphasis = VocalEmphasis.PitchUp;
+                }
+
+                if (emphasis == VocalEmphasis.Normal && isExclamation)
+                {
+                    emphasis = VocalEmphasis.Strong;
+                }
+
                 bool capitalized = IsCapitalized(word, allowSingleLetter: false);
 
                 if (preserveText)
@@ -361,6 +434,7 @@ public static class VocalTextParser
                         && VocalIpa.TryParseNotation(word, cancellationToken, out var ipaPhones))
                     {
                         foreach (var phone in ipaPhones)
+                        {
                             output.Add(new VocalPhonemeToken(phone.Symbol, emphasis, phone.Stressed, capitalized, isQuestion)
                             {
                                 Tone = phone.Tone,
@@ -370,6 +444,8 @@ public static class VocalTextParser
                                 SourceStart = sourceOffset + wordStart,
                                 SourceLength = word.Length,
                             });
+                        }
+
                         pending = baseEmphasis;
                         continue;
                     }
@@ -377,6 +453,7 @@ public static class VocalTextParser
                     {
                         var phones = VocalMultilingualPhonemizer.PhonemizeWord(language, word, cancellationToken);
                         foreach (var phone in phones)
+                        {
                             output.Add(new VocalPhonemeToken(phone.Symbol, emphasis, phone.Stressed, capitalized, isQuestion)
                             {
                                 Tone = phone.Tone,
@@ -386,15 +463,22 @@ public static class VocalTextParser
                                 SourceStart = sourceOffset + wordStart,
                                 SourceLength = word.Length,
                             });
+                        }
+
                         pending = baseEmphasis;
                         continue;
                     }
                     IReadOnlyList<int>? repetitions = null;
                     IReadOnlyList<string> phonemes;
                     if (language is VocalLanguage.English or VocalLanguage.German)
+                    {
                         (phonemes, repetitions) = VocalPhonemizer.PhonemizeWithRepetitions(language, word, cancellationToken);
+                    }
                     else
+                    {
                         phonemes = VocalPhonemizer.Phonemize(language, word, cancellationToken);
+                    }
+
                     int stressed = -1;
                     if (language != VocalLanguage.AnimalCrossing && !UnstressedWords.Contains(word))
                     {
@@ -403,26 +487,41 @@ public static class VocalTextParser
                         if (language == VocalLanguage.German && word.StartsWith("ver", StringComparison.OrdinalIgnoreCase)
                             && phonemes.Count > 3 && phonemes[0] == "f" && phonemes[1] == "e" && onsetR.Contains(phonemes[2])
                             && phonemes.Skip(3).Any(p => p != "de-schwa" && VocalPhonemeInventory.Get(p).IsVowel))
+                        {
                             stressStart = 3;
+                        }
+
                         for (int p = stressStart; p < phonemes.Count; p++)
                         {
-                            if (!VocalPhonemeInventory.Get(phonemes[p]).IsVowel) continue;
-                            if (language == VocalLanguage.German && phonemes[p] == "de-schwa") continue;
+                            if (!VocalPhonemeInventory.Get(phonemes[p]).IsVowel)
+                            {
+                                continue;
+                            }
+
+                            if (language == VocalLanguage.German && phonemes[p] == "de-schwa")
+                            {
+                                continue;
+                            }
+
                             stressed = p;
                             bool lastVowel = word.Equals("hello", StringComparison.OrdinalIgnoreCase);
                             bool secondVowel = word.Equals("intrigued", StringComparison.OrdinalIgnoreCase);
                             if ((!lastVowel && !secondVowel) || lastVowel && p == phonemes.Count - 1
                                 || secondVowel && phonemes[p] == "ee")
+                            {
                                 break;
+                            }
                         }
                     }
                     for (int p = 0; p < phonemes.Count; p++)
+                    {
                         output.Add(new VocalPhonemeToken(phonemes[p], emphasis, p == stressed, capitalized, isQuestion)
                         {
                             SourceRepetitionLength = repetitions is null ? 0 : repetitions[p],
                             SourceStart = sourceOffset + wordStart,
                             SourceLength = word.Length,
                         });
+                    }
                 }
                 pending = baseEmphasis;
             }
@@ -434,8 +533,16 @@ public static class VocalTextParser
         int letters = 0;
         foreach (char c in text)
         {
-            if (!char.IsLetter(c)) continue;
-            if (!char.IsUpper(c)) return false;
+            if (!char.IsLetter(c))
+            {
+                continue;
+            }
+
+            if (!char.IsUpper(c))
+            {
+                return false;
+            }
+
             letters++;
         }
         return letters >= (allowSingleLetter ? 1 : 2);

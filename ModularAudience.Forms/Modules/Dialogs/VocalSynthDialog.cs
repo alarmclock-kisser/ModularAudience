@@ -110,7 +110,10 @@ public sealed partial class VocalSynthDialog : Form
             WaveFormat = WaveFormat.CreateIeeeFloatWaveFormat(sampleRate, channels);
             long startPosition = (long)startFrame * channels;
             if (startFrame < 0 || startPosition >= data.Length)
+            {
                 throw new ArgumentOutOfRangeException(nameof(startFrame));
+            }
+
             initialPosition = (int)startPosition;
             pos = initialPosition;
         }
@@ -136,7 +139,11 @@ public sealed partial class VocalSynthDialog : Form
             data.AsSpan(position, n).CopyTo(buffer);
             position += n;
             Volatile.Write(ref pos, position);
-            if (position >= data.Length && !Loop) Volatile.Write(ref finished, 1);
+            if (position >= data.Length && !Loop)
+            {
+                Volatile.Write(ref finished, 1);
+            }
+
             return n;
         }
     }
@@ -165,7 +172,11 @@ public sealed partial class VocalSynthDialog : Form
         try
         {
             VocalLanguage[] languages = Enum.GetValues<VocalLanguage>();
-            foreach (VocalLanguage language in languages) languageCombo.Items.Add(language.DisplayName());
+            foreach (VocalLanguage language in languages)
+            {
+                languageCombo.Items.Add(language.DisplayName());
+            }
+
             int languageIndex = Array.IndexOf(languages, settings.Language);
             if (languageIndex < 0)
             {
@@ -193,10 +204,18 @@ public sealed partial class VocalSynthDialog : Form
         UpdateSpeechBackend();
         languageCombo.SelectedIndexChanged += (_, _) =>
         {
-            if (syncing) return;
+            if (syncing)
+            {
+                return;
+            }
+
             settings.Language = (VocalLanguage)languageCombo.SelectedIndex;
             UpdateSpeechBackend();
-            if (showSyllablesCheckBox.Checked) QueueSyllablePreview(immediate: true);
+            if (showSyllablesCheckBox.Checked)
+            {
+                QueueSyllablePreview(immediate: true);
+            }
+
             QueueRender();
         };
 
@@ -206,7 +225,10 @@ public sealed partial class VocalSynthDialog : Form
         bool restoredVoice = string.Equals(
             voiceCombo.SelectedItem?.ToString(), preferredVoice, StringComparison.Ordinal);
         voiceCombo.SelectedIndexChanged += (_, _) => ApplyVoiceSelection();
-        if (!restoredVoice) ApplyVoiceSelection();
+        if (!restoredVoice)
+        {
+            ApplyVoiceSelection();
+        }
 
         speed.ValueChanged += (_, _) => { if (!syncing) { settings.Speed = (double)speed.Value; QueueRender(); } };
 
@@ -233,9 +255,17 @@ public sealed partial class VocalSynthDialog : Form
         // events
         textEditor.TextChanged += (_, _) =>
         {
-            if (syncing || formattingSyllables) return;
+            if (syncing || formattingSyllables)
+            {
+                return;
+            }
+
             settings.Text = textEditor.Text;
-            if (!fillingSyllables) settings.IgnoreTextPausesForMidiSinging = false;
+            if (!fillingSyllables)
+            {
+                settings.IgnoreTextPausesForMidiSinging = false;
+            }
+
             UpdateButtonState();
             QueueSyllablePreview();
             if (string.IsNullOrWhiteSpace(textEditor.Text))
@@ -265,7 +295,11 @@ public sealed partial class VocalSynthDialog : Form
         };
         textEditor.KeyDown += async (_, args) =>
         {
-            if (args.KeyCode != Keys.Enter || !args.Shift || args.Control || args.Alt) return;
+            if (args.KeyCode != Keys.Enter || !args.Shift || args.Control || args.Alt)
+            {
+                return;
+            }
+
             args.Handled = true;
             args.SuppressKeyPress = true;
             await ToggleHearAsync(startFromCursor: true);
@@ -294,8 +328,15 @@ public sealed partial class VocalSynthDialog : Form
         settings.Text = textEditor.Text;
         displayedSyllableText = textEditor.Text;
         UpdateButtonState();
-        if (!string.IsNullOrWhiteSpace(textEditor.Text)) QueueRender();
-        if (showSyllablesCheckBox.Checked) QueueSyllablePreview(immediate: true);
+        if (!string.IsNullOrWhiteSpace(textEditor.Text))
+        {
+            QueueRender();
+        }
+
+        if (showSyllablesCheckBox.Checked)
+        {
+            QueueSyllablePreview(immediate: true);
+        }
     }
 
     private static SessionSnapshot? ReadSessionSnapshot()
@@ -310,7 +351,11 @@ public sealed partial class VocalSynthDialog : Form
 
     private static string? FindExistingMidiDirectory(string? path)
     {
-        if (string.IsNullOrWhiteSpace(path)) return null;
+        if (string.IsNullOrWhiteSpace(path))
+        {
+            return null;
+        }
+
         string? directory = Directory.Exists(path) ? path : Path.GetDirectoryName(path);
         return !string.IsNullOrWhiteSpace(directory) && Directory.Exists(directory)
             ? directory
@@ -378,7 +423,10 @@ public sealed partial class VocalSynthDialog : Form
                 }
             }
         }
-        if (selectedPage < 0) selectedPage = 0;
+        if (selectedPage < 0)
+        {
+            selectedPage = 0;
+        }
 
         settings.SingingMidiTrackIndex = midi.Tracks[selectedPage].Index;
         midiTrackNumber.Maximum = Math.Max(1, midi.Tracks.Count);
@@ -399,7 +447,11 @@ public sealed partial class VocalSynthDialog : Form
         MidiFileData? midi = settings.SingingMidiFile as MidiFileData;
         int trackCount = midi?.Tracks.Count ?? 0;
         decimal maximum = Math.Max(1, trackCount);
-        if (midiTrackNumber.Value > maximum) midiTrackNumber.Value = maximum;
+        if (midiTrackNumber.Value > maximum)
+        {
+            midiTrackNumber.Value = maximum;
+        }
+
         midiTrackNumber.Maximum = maximum;
         midiTrackNumber.Enabled = trackCount > 0;
         midiSemitoneOffset.Enabled = trackCount > 0;
@@ -425,7 +477,11 @@ public sealed partial class VocalSynthDialog : Form
         int pageNumber = Math.Clamp((int)midiTrackNumber.Value, 1, midi.Tracks.Count);
         string fileName = Path.GetFileName(midi.FilePath);
         string trackName = midi.Tracks[pageNumber - 1].Name;
-        if (string.IsNullOrWhiteSpace(trackName)) trackName = $"Track {pageNumber}";
+        if (string.IsNullOrWhiteSpace(trackName))
+        {
+            trackName = $"Track {pageNumber}";
+        }
+
         string bpm = midi.DefaultBpm.ToString("F1", CultureInfo.InvariantCulture);
         midiFileLabel.Text = $"{fileName} (#{pageNumber} {trackName}) [BPM: {bpm}]";
     }
@@ -440,17 +496,27 @@ public sealed partial class VocalSynthDialog : Form
             CheckFileExists = true,
             Multiselect = false,
         };
-        if (dialog.ShowDialog(this) != DialogResult.OK) return;
+        if (dialog.ShowDialog(this) != DialogResult.OK)
+        {
+            return;
+        }
+
         lastMidiFolder = Path.GetDirectoryName(dialog.FileName) ?? lastMidiFolder;
 
         try
         {
             MidiFileData midi = MidiFileData.Load(dialog.FileName);
             if (midi.Tracks.Count == 0 || !midi.Tracks.Any(track => track.Notes.Count > 0))
+            {
                 throw new InvalidDataException("The selected MIDI file contains no notes.");
+            }
 
             int pageIndex = 0;
-            while (midi.Tracks[pageIndex].Notes.Count == 0) pageIndex++;
+            while (midi.Tracks[pageIndex].Notes.Count == 0)
+            {
+                pageIndex++;
+            }
+
             syncing = true;
             try
             {
@@ -474,7 +540,10 @@ public sealed partial class VocalSynthDialog : Form
 
     private void ClearMidiFile()
     {
-        if (settings.SingingMidiFile is null) return;
+        if (settings.SingingMidiFile is null)
+        {
+            return;
+        }
 
         StopHear();
         settings.SingingMidiFile = null;
@@ -512,13 +581,21 @@ public sealed partial class VocalSynthDialog : Form
         midiSemitoneOffset.Value = (decimal)settings.SingingMidiSemitoneOffset;
 
         int voiceIndex = voiceCombo.Items.IndexOf("Built-in: " + preset.Name);
-        if (voiceIndex >= 0) voiceCombo.SelectedIndex = voiceIndex;
+        if (voiceIndex >= 0)
+        {
+            voiceCombo.SelectedIndex = voiceIndex;
+        }
+
         speed.Value = (decimal)settings.Speed;
     }
 
     private void MidiTrackNumberChanged()
     {
-        if (syncing || settings.SingingMidiFile is not MidiFileData midi || midi.Tracks.Count == 0) return;
+        if (syncing || settings.SingingMidiFile is not MidiFileData midi || midi.Tracks.Count == 0)
+        {
+            return;
+        }
+
         int pageIndex = Math.Clamp((int)midiTrackNumber.Value - 1, 0, midi.Tracks.Count - 1);
         settings.SingingMidiTrackIndex = midi.Tracks[pageIndex].Index;
         UpdateMidiControls();
@@ -527,7 +604,11 @@ public sealed partial class VocalSynthDialog : Form
 
     private void MidiSemitoneOffsetChanged(object? sender, EventArgs e)
     {
-        if (syncing) return;
+        if (syncing)
+        {
+            return;
+        }
+
         settings.SingingMidiSemitoneOffset = (double)midiSemitoneOffset.Value;
         QueueRender();
     }
@@ -535,7 +616,10 @@ public sealed partial class VocalSynthDialog : Form
     private void EditLoadedMidi()
     {
         MidiFileData? midi = settings.SingingMidiFile as MidiFileData;
-        if (midi is null || midi.Tracks.Count == 0) return;
+        if (midi is null || midi.Tracks.Count == 0)
+        {
+            return;
+        }
 
         int pageNumber = Math.Clamp((int)midiTrackNumber.Value, 1, midi.Tracks.Count);
         StopHear();
@@ -563,13 +647,21 @@ public sealed partial class VocalSynthDialog : Form
 
     private void ToggleSyllablePreview()
     {
-        if (syncing) return;
+        if (syncing)
+        {
+            return;
+        }
+
         QueueSyllablePreview(immediate: true);
     }
 
     private void QueueSyllablePreview(bool immediate = false)
     {
-        if (disposedFlag) return;
+        if (disposedFlag)
+        {
+            return;
+        }
+
         syllablePreviewDebounce.Stop();
         syllablePreviewRevision++;
         syllablePreviewCalculation?.Cancel();
@@ -608,8 +700,16 @@ public sealed partial class VocalSynthDialog : Form
 
             settings.Text = textEditor.Text;
             settings.IgnoreTextPausesForMidiSinging = result.ExistingSyllables <= result.MidiSyllables;
-            if (showSyllablesCheckBox.Checked) QueueSyllablePreview(immediate: true);
-            if (result.AddedSyllables == 0) QueueRender();
+            if (showSyllablesCheckBox.Checked)
+            {
+                QueueSyllablePreview(immediate: true);
+            }
+
+            if (result.AddedSyllables == 0)
+            {
+                QueueRender();
+            }
+
             status.Text = result.AddedSyllables > 0
                 ? $"Added {result.AddedSyllables} syllables to match the selected MIDI track."
                 : result.ExistingSyllables == result.MidiSyllables
@@ -625,7 +725,11 @@ public sealed partial class VocalSynthDialog : Form
 
     private async Task RefreshSyllablePreviewAsync()
     {
-        if (disposedFlag || formattingSyllables) return;
+        if (disposedFlag || formattingSyllables)
+        {
+            return;
+        }
+
         int requestRevision = syllablePreviewRevision;
         string text = textEditor.Text;
         bool showSyllables = showSyllablesCheckBox.Checked;
@@ -652,7 +756,9 @@ public sealed partial class VocalSynthDialog : Form
                         cancellation.Token.ThrowIfCancellationRequested();
                         if ((range.Index & 1) != 0 && range.Start >= 0 && range.Length > 0
                             && range.Start <= text.Length - range.Length)
+                        {
                             underlinedRanges.Add(range);
+                        }
                     }
                 }
 
@@ -665,7 +771,10 @@ public sealed partial class VocalSynthDialog : Form
             if (disposedFlag || requestRevision != syllablePreviewRevision
                 || cancellation.IsCancellationRequested || text != textEditor.Text
                 || showSyllables != showSyllablesCheckBox.Checked)
+            {
                 return;
+            }
+
             ApplySyllablePreview(text, result);
         }
         catch (OperationCanceledException)
@@ -675,12 +784,17 @@ public sealed partial class VocalSynthDialog : Form
             error is ArgumentException or InvalidOperationException or InvalidDataException)
         {
             if (!disposedFlag && requestRevision == syllablePreviewRevision)
+            {
                 status.Text = "Syllable preview failed: " + error.Message;
+            }
         }
         finally
         {
             if (ReferenceEquals(syllablePreviewCalculation, cancellation))
+            {
                 syllablePreviewCalculation = null;
+            }
+
             cancellation.Dispose();
         }
     }
@@ -698,8 +812,16 @@ public sealed partial class VocalSynthDialog : Form
         int sharedLength = Math.Min(previousText.Length, text.Length);
         while (prefix < sharedLength)
         {
-            if ((prefix & 4095) == 0) cancellationToken.ThrowIfCancellationRequested();
-            if (previousText[prefix] != text[prefix]) break;
+            if ((prefix & 4095) == 0)
+            {
+                cancellationToken.ThrowIfCancellationRequested();
+            }
+
+            if (previousText[prefix] != text[prefix])
+            {
+                break;
+            }
+
             prefix++;
         }
 
@@ -707,8 +829,16 @@ public sealed partial class VocalSynthDialog : Form
         int currentSuffix = text.Length;
         while (previousSuffix > prefix && currentSuffix > prefix)
         {
-            if ((previousSuffix & 4095) == 0) cancellationToken.ThrowIfCancellationRequested();
-            if (previousText[previousSuffix - 1] != text[currentSuffix - 1]) break;
+            if ((previousSuffix & 4095) == 0)
+            {
+                cancellationToken.ThrowIfCancellationRequested();
+            }
+
+            if (previousText[previousSuffix - 1] != text[currentSuffix - 1])
+            {
+                break;
+            }
+
             previousSuffix--;
             currentSuffix--;
         }
@@ -719,7 +849,11 @@ public sealed partial class VocalSynthDialog : Form
         bool runUnderline = false;
         for (int index = 0; index < text.Length; index++)
         {
-            if ((index & 4095) == 0) cancellationToken.ThrowIfCancellationRequested();
+            if ((index & 4095) == 0)
+            {
+                cancellationToken.ThrowIfCancellationRequested();
+            }
+
             int previousIndex = index < prefix
                 ? index
                 : index >= currentSuffix ? index - suffixOffset : -1;
@@ -747,7 +881,10 @@ public sealed partial class VocalSynthDialog : Form
         }
 
         if (runStart >= 0)
+        {
             result.Add(new SyllableFormattingRun(runStart, text.Length - runStart, runUnderline));
+        }
+
         return result;
     }
 
@@ -761,10 +898,17 @@ public sealed partial class VocalSynthDialog : Form
         {
             cancellationToken.ThrowIfCancellationRequested();
             if (range.Start < 0 || range.Length <= 0 || range.Start > textLength - range.Length)
+            {
                 continue;
+            }
+
             for (int index = range.Start; index < range.Start + range.Length; index++)
             {
-                if ((index & 4095) == 0) cancellationToken.ThrowIfCancellationRequested();
+                if ((index & 4095) == 0)
+                {
+                    cancellationToken.ThrowIfCancellationRequested();
+                }
+
                 result[index] = true;
             }
         }
@@ -773,7 +917,11 @@ public sealed partial class VocalSynthDialog : Form
 
     private void ApplySyllablePreview(string text, SyllablePreviewResult result)
     {
-        if (disposedFlag || text != textEditor.Text) return;
+        if (disposedFlag || text != textEditor.Text)
+        {
+            return;
+        }
+
         if (result.Runs.Count == 0)
         {
             displayedSyllableText = text;
@@ -786,7 +934,9 @@ public sealed partial class VocalSynthDialog : Form
         bool hasScrollPosition = textEditor.IsHandleCreated;
         NativePoint scrollPosition = default;
         if (hasScrollPosition)
+        {
             SendMessage(textEditor.Handle, EmGetScrollPos, IntPtr.Zero, ref scrollPosition);
+        }
 
         formattingSyllables = true;
         textEditor.SuspendLayout();
@@ -797,7 +947,10 @@ public sealed partial class VocalSynthDialog : Form
             foreach (SyllableFormattingRun run in result.Runs)
             {
                 if (run.Start < 0 || run.Length <= 0 || run.Start > text.Length - run.Length)
+                {
                     continue;
+                }
+
                 textEditor.Select(run.Start, run.Length);
                 textEditor.SelectionFont = run.Underline ? underlinedFont : textEditor.Font;
             }
@@ -810,7 +963,9 @@ public sealed partial class VocalSynthDialog : Form
                 int safeLength = Math.Clamp(selectionLength, 0, textEditor.TextLength - safeStart);
                 textEditor.Select(safeStart, safeLength);
                 if (hasScrollPosition)
+                {
                     SendMessage(textEditor.Handle, EmSetScrollPos, IntPtr.Zero, ref scrollPosition);
+                }
             }
             finally
             {
@@ -832,7 +987,11 @@ public sealed partial class VocalSynthDialog : Form
 
     protected override bool ProcessCmdKey(ref Message msg, Keys keyData)
     {
-        if (textEditor.ProcessHistoryCommand(keyData)) return true;
+        if (textEditor.ProcessHistoryCommand(keyData))
+        {
+            return true;
+        }
+
         if (keyData == (Keys.Shift | Keys.Enter) || keyData == Keys.Enter && ActiveControl != textEditor)
         {
             prehear.PerformClick();
@@ -851,14 +1010,22 @@ public sealed partial class VocalSynthDialog : Form
 
     private void WindowsSpeechCheckedChanged(object? sender, EventArgs e)
     {
-        if (syncing) return;
+        if (syncing)
+        {
+            return;
+        }
+
         UpdateSpeechBackend();
         QueueRender();
     }
 
     private void UnsupportedBeepCheckedChanged(object? sender, EventArgs e)
     {
-        if (syncing) return;
+        if (syncing)
+        {
+            return;
+        }
+
         settings.BeepForUnsupportedSounds = unsupportedBeepCheckBox.Checked;
         QueueRender();
     }
@@ -870,9 +1037,15 @@ public sealed partial class VocalSynthDialog : Form
             ?? "Built-in: " + settings.VoiceName;
         voiceCombo.Items.Clear();
         foreach (var p in VocalVoicePreset.BuiltIn)
+        {
             voiceCombo.Items.Add("Built-in: " + p.Name);
+        }
+
         foreach (var p in profileStore.LoadAll())
+        {
             voiceCombo.Items.Add("Profile: " + p.Name);
+        }
+
         if (voiceCombo.Items.Count > 0)
         {
             int index = voiceCombo.Items.IndexOf(selected);
@@ -882,7 +1055,11 @@ public sealed partial class VocalSynthDialog : Form
 
     private void ApplyVoiceSelection()
     {
-        if (syncing || voiceCombo.SelectedIndex < 0) return;
+        if (syncing || voiceCombo.SelectedIndex < 0)
+        {
+            return;
+        }
+
         var item = voiceCombo.SelectedItem?.ToString() ?? "";
         syncing = true;
         try
@@ -923,7 +1100,11 @@ public sealed partial class VocalSynthDialog : Form
     private void PreserveMidiSingingSettings(VocalSynthSettings replacement)
     {
         replacement.CustomSampleMappings = VocalCustomSampleStore.GetMappings();
-        if (settings.SingingMidiFile is null) return;
+        if (settings.SingingMidiFile is null)
+        {
+            return;
+        }
+
         replacement.Singing = true;
         replacement.SingingMidiFile = settings.SingingMidiFile;
         replacement.SingingMidiTrackIndex = settings.SingingMidiTrackIndex;
@@ -935,7 +1116,11 @@ public sealed partial class VocalSynthDialog : Form
 
     private void QueueRender()
     {
-        if (disposedFlag) return;
+        if (disposedFlag)
+        {
+            return;
+        }
+
         revision++;
         rendering?.Cancel();
         playbackPreparation?.Cancel();
@@ -952,7 +1137,11 @@ public sealed partial class VocalSynthDialog : Form
 
     private async Task RenderAsync()
     {
-        if (disposedFlag) return;
+        if (disposedFlag)
+        {
+            return;
+        }
+
         var cts = new CancellationTokenSource();
         rendering?.Cancel();
         rendering = cts;
@@ -976,10 +1165,18 @@ public sealed partial class VocalSynthDialog : Form
                 + (midiWarning is null ? string.Empty : " · " + midiWarning);
         }
         catch (OperationCanceledException) { }
-        catch (Exception error) { if (!disposedFlag && version == revision) status.Text = error.Message; }
+        catch (Exception error) { if (!disposedFlag && version == revision)
+            {
+                status.Text = error.Message;
+            }
+        }
         finally
         {
-            if (ReferenceEquals(rendering, cts)) rendering = null;
+            if (ReferenceEquals(rendering, cts))
+            {
+                rendering = null;
+            }
+
             cts.Dispose();
         }
     }
@@ -997,16 +1194,27 @@ public sealed partial class VocalSynthDialog : Form
     private async Task ToggleHearAsync(bool startFromCursor = false)
     {
         if (output != null) { StopHear(); return; }
-        if (startingHear) return;
+        if (startingHear)
+        {
+            return;
+        }
+
         startingHear = true;
         CancellationTokenSource? preparation = null;
         int originalSelectionStart = textEditor.SelectionStart;
         int originalSelectionLength = textEditor.SelectionLength;
         try
         {
-            if (!await EnsureRenderedAsync()) return;
+            if (!await EnsureRenderedAsync())
+            {
+                return;
+            }
+
             AudioObj? renderedAudio = audio;
-            if (renderedAudio is null) return;
+            if (renderedAudio is null)
+            {
+                return;
+            }
 
             CheckState followState = followSpokenWordCheckBox.CheckState;
             IReadOnlyList<PlaybackCursorRange> cursorRanges = [];
@@ -1031,7 +1239,10 @@ public sealed partial class VocalSynthDialog : Form
                     tokenSource.Token);
                 if (disposedFlag || tokenSource.IsCancellationRequested
                     || ready != revision || !ReferenceEquals(audio, renderedAudio))
+                {
                     return;
+                }
+
                 if (startFromCursor)
                 {
                     int? selectedStartFrame = GetPlaybackStartFrame(cursorRanges, originalSelectionStart);
@@ -1045,8 +1256,15 @@ public sealed partial class VocalSynthDialog : Form
                 }
             }
 
-            if (disposedFlag) return;
-            if (followSpokenWordCheckBox.CheckState == CheckState.Unchecked) cursorRanges = [];
+            if (disposedFlag)
+            {
+                return;
+            }
+
+            if (followSpokenWordCheckBox.CheckState == CheckState.Unchecked)
+            {
+                cursorRanges = [];
+            }
             else
             {
                 playbackSelectionStart = originalSelectionStart;
@@ -1068,7 +1286,11 @@ public sealed partial class VocalSynthDialog : Form
             {
                 lock (playbackStateLock)
                 {
-                    if (playbackGeneration != generation) return;
+                    if (playbackGeneration != generation)
+                    {
+                        return;
+                    }
+
                     playbackError = args.Exception;
                     playbackStoppedGeneration = generation;
                 }
@@ -1085,7 +1307,10 @@ public sealed partial class VocalSynthDialog : Form
         finally
         {
             if (ReferenceEquals(playbackPreparation, preparation))
+            {
                 playbackPreparation = null;
+            }
+
             preparation?.Dispose();
             startingHear = false;
         }
@@ -1094,7 +1319,9 @@ public sealed partial class VocalSynthDialog : Form
     private void FocusTextEditorForSpokenWordFollowing()
     {
         if (followSpokenWordCheckBox.CheckState != CheckState.Unchecked)
+        {
             textEditor.Focus();
+        }
     }
 
     private void UpdateFollowSpokenWordLabel()
@@ -1144,26 +1371,42 @@ public sealed partial class VocalSynthDialog : Form
         Exception? error;
         lock (playbackStateLock)
         {
-            if (playbackStoppedGeneration != playbackGeneration) return;
+            if (playbackStoppedGeneration != playbackGeneration)
+            {
+                return;
+            }
+
             error = playbackError;
-            if (error is null && provider?.Finished != true) return;
+            if (error is null && provider?.Finished != true)
+            {
+                return;
+            }
         }
         StopHear();
-        if (error is not null) status.Text = error.Message;
+        if (error is not null)
+        {
+            status.Text = error.Message;
+        }
     }
 
     private void UpdatePlaybackCursor()
     {
         if (followSpokenWordCheckBox is null || followSpokenWordCheckBox.CheckState == CheckState.Unchecked
             || provider is null || provider.CursorRanges.Count == 0)
+        {
             return;
+        }
+
         PlaybackCursorRange? activeRange = GetPlaybackCursorRange(
             provider.CursorRanges, provider.PlayedFrames);
         if (activeRange is not PlaybackCursorRange range
             || range.TextStart < 0 || range.TextLength <= 0
             || range.TextStart > textEditor.TextLength - range.TextLength
             || activeRange == lastFollowedRange)
+        {
             return;
+        }
+
         textEditor.Select(range.TextStart, range.TextLength);
         textEditor.ScrollToCaret();
         lastFollowedRange = range;
@@ -1181,13 +1424,24 @@ public sealed partial class VocalSynthDialog : Form
     private static PlaybackCursorRange? GetPlaybackCursorRange(
         IReadOnlyList<PlaybackCursorRange> cursorRanges, int frame)
     {
-        if (cursorRanges.Count == 0) return null;
+        if (cursorRanges.Count == 0)
+        {
+            return null;
+        }
+
         PlaybackCursorRange previous = cursorRanges[0];
         foreach (PlaybackCursorRange range in cursorRanges)
         {
-            if (frame < range.StartFrame) break;
+            if (frame < range.StartFrame)
+            {
+                break;
+            }
+
             previous = range;
-            if (frame < range.EndFrame) return range;
+            if (frame < range.EndFrame)
+            {
+                return range;
+            }
         }
         return previous;
     }
@@ -1196,7 +1450,11 @@ public sealed partial class VocalSynthDialog : Form
         VocalSynthSettings settings, int totalFrames, bool followSyllables,
         CancellationToken cancellationToken)
     {
-        if (totalFrames <= 0 || string.IsNullOrWhiteSpace(settings.Text)) return [];
+        if (totalFrames <= 0 || string.IsNullOrWhiteSpace(settings.Text))
+        {
+            return [];
+        }
+
         IReadOnlyList<VocalSyllableTextRange> syllableRanges =
             VocalSynth.GetSyllableTextRanges(settings, cancellationToken);
         List<PlaybackTextUnit> units = [];
@@ -1210,7 +1468,9 @@ public sealed partial class VocalSynthDialog : Form
                 cancellationToken.ThrowIfCancellationRequested();
                 if (range.Start >= 0 && range.Length > 0
                     && range.Start <= settings.Text.Length - range.Length)
+                {
                     units.Add(new PlaybackTextUnit(range.Start, range.Length, 1));
+                }
             }
         }
         else
@@ -1223,19 +1483,30 @@ public sealed partial class VocalSynthDialog : Form
                 int end = start + length;
                 while (syllableIndex < syllableRanges.Count
                     && syllableRanges[syllableIndex].Start + syllableRanges[syllableIndex].Length <= start)
+                {
                     syllableIndex++;
+                }
+
                 int count = 0;
                 for (int index = syllableIndex; index < syllableRanges.Count
                     && syllableRanges[index].Start < end; index++)
                 {
                     VocalSyllableTextRange range = syllableRanges[index];
-                    if (range.Start + range.Length > start) count++;
+                    if (range.Start + range.Length > start)
+                    {
+                        count++;
+                    }
                 }
-                if (count > 0) units.Add(new PlaybackTextUnit(start, length, count));
+                if (count > 0)
+                {
+                    units.Add(new PlaybackTextUnit(start, length, count));
+                }
             }
 
             if (units.Count == 0)
+            {
                 units.AddRange(spans.Select(span => new PlaybackTextUnit(span.Start, span.Length, 1)));
+            }
         }
 
         if (followSyllables && units.Count == 0)
@@ -1249,10 +1520,15 @@ public sealed partial class VocalSynthDialog : Form
             {
                 if (range.Start >= 0 && range.Length > 0
                     && range.Start <= settings.Text.Length - range.Length)
+                {
                     units.Add(new PlaybackTextUnit(range.Start, range.Length, 1));
+                }
             }
         }
-        if (units.Count == 0) return [];
+        if (units.Count == 0)
+        {
+            return [];
+        }
 
         if (!settings.UseWindowsSpeech || settings.Singing && settings.SingingMidiFile is not null)
         {
@@ -1267,16 +1543,29 @@ public sealed partial class VocalSynthDialog : Form
                 int endFrame = 0;
                 foreach (VocalPlaybackTextRange range in syllableTimeline)
                 {
-                    if (range.TextStart >= unitEnd) break;
-                    if (range.TextStart + range.TextLength <= unit.Start) continue;
+                    if (range.TextStart >= unitEnd)
+                    {
+                        break;
+                    }
+
+                    if (range.TextStart + range.TextLength <= unit.Start)
+                    {
+                        continue;
+                    }
+
                     startFrame = Math.Min(startFrame, range.StartFrame);
                     endFrame = Math.Max(endFrame, range.EndFrame);
                 }
                 if (startFrame < endFrame)
+                {
                     exactRanges.Add(new PlaybackCursorRange(
                         unit.Start, unit.Length, startFrame, endFrame));
+                }
             }
-            if (exactRanges.Count > 0) return exactRanges;
+            if (exactRanges.Count > 0)
+            {
+                return exactRanges;
+            }
         }
 
         double totalWeight = 0;
@@ -1285,12 +1574,17 @@ public sealed partial class VocalSynthDialog : Form
             cancellationToken.ThrowIfCancellationRequested();
             totalWeight += Math.Max(1, units[index].SyllableCount);
             if (index + 1 < units.Count)
+            {
                 totalWeight += GetPunctuationPauseWeight(
                     settings.Text,
                     units[index].Start + units[index].Length,
                     units[index + 1].Start);
+            }
         }
-        if (totalWeight <= 0) return [];
+        if (totalWeight <= 0)
+        {
+            return [];
+        }
 
         double framesPerWeight = totalFrames / totalWeight;
         double elapsedWeight = 0;
@@ -1303,14 +1597,22 @@ public sealed partial class VocalSynthDialog : Form
             elapsedWeight += Math.Max(1, unit.SyllableCount);
             int endFrame = (int)Math.Clamp(Math.Ceiling(elapsedWeight * framesPerWeight), 0, totalFrames);
             if (endFrame <= startFrame && startFrame < totalFrames)
+            {
                 endFrame = startFrame + 1;
+            }
+
             if (endFrame > startFrame)
+            {
                 result.Add(new PlaybackCursorRange(unit.Start, unit.Length, startFrame, endFrame));
+            }
+
             if (index + 1 < units.Count)
+            {
                 elapsedWeight += GetPunctuationPauseWeight(
                     settings.Text,
                     unit.Start + unit.Length,
                     units[index + 1].Start);
+            }
         }
         return result;
     }
@@ -1319,8 +1621,13 @@ public sealed partial class VocalSynthDialog : Form
         IReadOnlyList<PlaybackCursorRange> cursorRanges, int textPosition)
     {
         foreach (PlaybackCursorRange range in cursorRanges)
+        {
             if (textPosition < range.TextStart + range.TextLength)
+            {
                 return range.StartFrame;
+            }
+        }
+
         return null;
     }
 
@@ -1330,14 +1637,22 @@ public sealed partial class VocalSynthDialog : Form
         List<(int Start, int Length)> result = [];
         for (int index = 0; index < text.Length;)
         {
-            if ((index & 4095) == 0) cancellationToken.ThrowIfCancellationRequested();
+            if ((index & 4095) == 0)
+            {
+                cancellationToken.ThrowIfCancellationRequested();
+            }
+
             if (!IsWordCharacter(text[index]))
             {
                 index++;
                 continue;
             }
             int start = index++;
-            while (index < text.Length && IsWordCharacter(text[index])) index++;
+            while (index < text.Length && IsWordCharacter(text[index]))
+            {
+                index++;
+            }
+
             result.Add((start, index - start));
         }
         return result;
@@ -1345,7 +1660,11 @@ public sealed partial class VocalSynthDialog : Form
 
     private static bool IsWordCharacter(char value)
     {
-        if (char.IsLetterOrDigit(value)) return true;
+        if (char.IsLetterOrDigit(value))
+        {
+            return true;
+        }
+
         UnicodeCategory category = char.GetUnicodeCategory(value);
         return category is UnicodeCategory.NonSpacingMark
             or UnicodeCategory.SpacingCombiningMark
@@ -1374,23 +1693,47 @@ public sealed partial class VocalSynthDialog : Form
 
     private async Task CreateAsync()
     {
-        if (creating) return;
+        if (creating)
+        {
+            return;
+        }
+
         creating = true;
         create.Enabled = false;
         try
         {
-            if (!await EnsureRenderedAsync() || audio == null) return;
-            if (collection == null || collection.IsDisposed) collection = new AudioCollectionView([], "VocalSynth");
+            if (!await EnsureRenderedAsync() || audio == null)
+            {
+                return;
+            }
+
+            if (collection == null || collection.IsDisposed)
+            {
+                collection = new AudioCollectionView([], "VocalSynth");
+            }
+
             var created = audio.Clone();
             string basis = audio.Name, name = basis; int index = 2;
-            while (collection.AudioC.Audios.Any(a => a.Name == name)) name = basis + " " + index++;
+            while (collection.AudioC.Audios.Any(a => a.Name == name))
+            {
+                name = basis + " " + index++;
+            }
+
             created.Rename(name);
             collection.AudioC.Audios.Add(created);
             collection.Show();
             status.Text = "Created: " + name;
         }
-        catch (Exception error) { if (!disposedFlag) status.Text = error.Message; }
-        finally { creating = false; if (!disposedFlag) UpdateButtonState(); }
+        catch (Exception error) { if (!disposedFlag)
+            {
+                status.Text = error.Message;
+            }
+        }
+        finally { creating = false; if (!disposedFlag)
+            {
+                UpdateButtonState();
+            }
+        }
     }
 
     private void OpenEmphasisDialog()
@@ -1401,7 +1744,11 @@ public sealed partial class VocalSynthDialog : Form
             emphasisSyntax = dlg.Syntax;
             emphasisStore.Save(emphasisSyntax);
             settings.EmphasisSyntax = emphasisSyntax;
-            if (showSyllablesCheckBox.Checked) QueueSyllablePreview(immediate: true);
+            if (showSyllablesCheckBox.Checked)
+            {
+                QueueSyllablePreview(immediate: true);
+            }
+
             QueueRender();
         }
     }
@@ -1415,18 +1762,27 @@ public sealed partial class VocalSynthDialog : Form
             dialog.MappingsChanged += (_, _) =>
             {
                 settings.CustomSampleMappings = VocalCustomSampleStore.GetMappings();
-                if (showSyllablesCheckBox.Checked) QueueSyllablePreview(immediate: true);
+                if (showSyllablesCheckBox.Checked)
+                {
+                    QueueSyllablePreview(immediate: true);
+                }
+
                 QueueRender();
             };
             customSamplesDialog = dialog;
         }
 
         if (!dialog.Visible)
+        {
             dialog.Show(this);
+        }
         else
         {
             if (dialog.WindowState == FormWindowState.Minimized)
+            {
                 dialog.WindowState = FormWindowState.Normal;
+            }
+
             dialog.Activate();
         }
     }
@@ -1470,16 +1826,25 @@ public sealed partial class VocalSynthDialog : Form
         var name = profileName.Text.Trim();
         var idx = -1;
         for (int i = 0; i < voiceCombo.Items.Count; i++)
+        {
             if (voiceCombo.Items[i]?.ToString() == "Profile: " + name) { idx = i; break; }
+        }
+
         if (idx >= 0) { voiceCombo.SelectedIndex = idx; status.Text = "Profile loaded: " + name; }
-        else status.Text = "Profile not found.";
+        else
+        {
+            status.Text = "Profile not found.";
+        }
     }
 
     private void DeleteProfile()
     {
         var name = profileName.Text.Trim();
         if (profileStore.Delete(name)) { RefreshVoiceCombo(); status.Text = "Profile deleted: " + name; }
-        else status.Text = "Profile not found.";
+        else
+        {
+            status.Text = "Profile not found.";
+        }
     }
 
     private void RenameProfile()
@@ -1495,9 +1860,16 @@ public sealed partial class VocalSynthDialog : Form
         if (dlg.ShowDialog(this) == DialogResult.OK)
         {
             var newName = tb.Text.Trim();
-            if (string.IsNullOrWhiteSpace(newName)) return;
+            if (string.IsNullOrWhiteSpace(newName))
+            {
+                return;
+            }
+
             if (profileStore.Rename(oldName, newName)) { RefreshVoiceCombo(); profileName.Text = newName; status.Text = "Profile renamed."; }
-            else status.Text = "Rename failed.";
+            else
+            {
+                status.Text = "Rename failed.";
+            }
         }
     }
 

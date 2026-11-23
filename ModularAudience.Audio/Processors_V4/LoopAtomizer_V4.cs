@@ -91,7 +91,11 @@ namespace ModularAudience.Audio.Processors_V4
             }
             catch
             {
-                foreach (AudioObj atomic in atomics) atomic.Dispose();
+                foreach (AudioObj atomic in atomics)
+                {
+                    atomic.Dispose();
+                }
+
                 throw;
             }
 

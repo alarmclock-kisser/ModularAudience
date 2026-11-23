@@ -131,7 +131,10 @@ namespace ModularAudience.Audio.Tests
                     Assert.AreEqual(2, audio.Channels);
                     Assert.HasCount(samples.Length, audio.Data);
                     for (int i = 0; i < samples.Length; i++)
+                    {
                         Assert.AreEqual(samples[i] / 32768f, audio.Data[i], 1e-6f, $"Sample {i}");
+                    }
+
                     Assert.IsTrue(File.Exists(path), "Import must not delete a caller-owned temporary WAV.");
                 }
                 Assert.IsTrue(File.Exists(path), "Disposing the audio must not delete the download.");

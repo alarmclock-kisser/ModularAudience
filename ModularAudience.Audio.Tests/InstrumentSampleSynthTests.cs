@@ -20,7 +20,11 @@ public sealed class InstrumentSampleSynthTests
         store = new InstrumentSynthStore(storageDirectory);
     }
     [TestCleanup]
-    public void CleanupStore() { if (Directory.Exists(storageDirectory)) Directory.Delete(storageDirectory, true); }
+    public void CleanupStore() { if (Directory.Exists(storageDirectory))
+        {
+            Directory.Delete(storageDirectory, true);
+        }
+    }
     private static InstrumentSynthSettings Short(SynthFamily family) => new()
     {
         Family = family, SampleRate = 22050, Channels = 1, NoteBeats = 0.25, ReleaseSeconds = 0.08,
@@ -60,8 +64,10 @@ public sealed class InstrumentSampleSynthTests
                 Assert.IsTrue(audio.Data.All(float.IsFinite), s.VoiceName);
                 Assert.IsTrue(audio.Data.Any(v => Math.Abs(v) > 0.003f), s.VoiceName);
                 if (drum == SynthDrum.Kick)
+                {
                     Assert.IsTrue(kicks.Add(Convert.ToHexString(System.Security.Cryptography.SHA256.HashData(
                         System.Runtime.InteropServices.MemoryMarshal.AsBytes(audio.Data.AsSpan())))));
+                }
             }
         }
     }
@@ -483,16 +489,27 @@ public sealed class InstrumentSampleSynthTests
         var s = Short(SynthFamily.SynthBassAndLead); s.VoiceIndex = 0; s.ApplyVoiceDefaults();
         s.MidiNote = 44; s.NoteBeats = 1; s.DurationMultiplier = 1; s.Bpm = 120; s.PitchSemitones = 0;
         using (var straight = InstrumentSampleSynth.Render(s))
+        {
             Assert.AreEqual("Sub Anchor · G#2 · 1/4 [120]", straight.Name);
+        }
+
         s.DurationMultiplier = 1.5; s.Bpm = 137.5;
         using (var dotted = InstrumentSampleSynth.Render(s))
+        {
             Assert.AreEqual("Sub Anchor · G#2 · 1/4 Dotted [137.5]", dotted.Name);
+        }
+
         s.DurationMultiplier = 2d / 3;
         using (var triplet = InstrumentSampleSynth.Render(s))
+        {
             Assert.AreEqual("Sub Anchor · G#2 · 1/4 Triplet [137.5]", triplet.Name);
+        }
+
         s.DurationMultiplier = 1; s.NoteBeats = 4; s.PitchSemitones = 2;
         using (var bar = InstrumentSampleSynth.Render(s))
+        {
             Assert.AreEqual("Sub Anchor · G#2 +2 st · 1 Bar [137.5]", bar.Name);
+        }
     }
 
     [TestMethod]
@@ -581,7 +598,9 @@ public sealed class InstrumentSampleSynthTests
                 0.1f / ModularAudience.Audio.Processing.PlaylistNormalizer.MeasureRms(exactSample.Data));
             Assert.HasCount(directPattern.Data.Length, instrumentPattern!.Data);
             for (int i = 0; i < directPattern.Data.Length; i++)
+            {
                 Assert.AreEqual(directPattern.Data[i] * scale, instrumentPattern.Data[i], 0.000001f, $"Sample {i}");
+            }
         }
     }
 
@@ -730,8 +749,11 @@ public sealed class InstrumentSampleSynthTests
                 var duration = (ComboBox)Field("duration");
                 var keyDurations = InstrumentSynthSettings.KeyDurations;
                 for (int index = 0; index < keyDurations.Count; index++)
+                {
                     Assert.AreEqual(keyDurations[keyDurations.Count - 1 - index].Name, duration.Items[index],
                         $"{family}: Key Duration items must be reversed.");
+                }
+
                 int defaultDurationIndex = family == SynthFamily.OtherSoundFx ? 5 : 4;
                 Assert.AreEqual(keyDurations.Count - 1 - defaultDurationIndex, duration.SelectedIndex,
                     $"{family}: the default duration should remain unchanged.");
@@ -745,8 +767,11 @@ public sealed class InstrumentSampleSynthTests
                     var note = (DomainUpDown)Field("note");
                     string[] noteNames = Enumerable.Range(12, 97).Select(InstrumentSampleSynth.NoteName).ToArray();
                     for (int index = 0; index < noteNames.Length; index++)
+                    {
                         Assert.AreEqual(noteNames[noteNames.Length - 1 - index], note.Items[index],
                             $"{family}: Key Note items must be reversed.");
+                    }
+
                     Assert.AreEqual(InstrumentSampleSynth.NoteName(60), note.SelectedItem,
                         $"{family}: the default note should remain C4.");
                 }
@@ -782,9 +807,13 @@ public sealed class InstrumentSampleSynthTests
             int maximumParameterHeight = parameters.ClientSize.Height + Math.Max(0, availableHeight - dialog.Height) / 2;
             Assert.AreEqual(FormBorderStyle.Sizable, dialog.FormBorderStyle);
             if (preferredHeight <= maximumParameterHeight)
+            {
                 Assert.IsFalse(parameters.VerticalScroll.Visible, $"{family}: all initial parameters must fit without scrolling.");
+            }
             else
+            {
                 Assert.AreEqual(Math.Max(dialog.MinimumSize.Height, availableHeight), dialog.Height);
+            }
 
             dialog.Height = dialog.MinimumSize.Height;
             dialog.PerformLayout();

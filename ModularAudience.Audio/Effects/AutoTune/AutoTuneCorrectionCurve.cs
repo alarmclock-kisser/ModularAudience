@@ -34,7 +34,11 @@ internal static class AutoTuneCurveBuilder
         double[] power = new double[mono.Length + 1];
         for (int i = 0; i < mono.Length; i++)
         {
-            if ((i & 4095) == 0) token.ThrowIfCancellationRequested();
+            if ((i & 4095) == 0)
+            {
+                token.ThrowIfCancellationRequested();
+            }
+
             power[i + 1] = power[i] + (double)mono[i] * mono[i];
         }
         int voiced = 0;
@@ -56,13 +60,20 @@ internal static class AutoTuneCurveBuilder
             }
             voiced++;
             double frequency = AutoTunePitchRefiner.Refine(mono, center, sampleRate, pitches[i].FrequencyHz, token);
-            if (frequency < settings.MinimumFrequencyHz || frequency > settings.MaximumFrequencyHz) frequency = pitches[i].FrequencyHz;
+            if (frequency < settings.MinimumFrequencyHz || frequency > settings.MaximumFrequencyHz)
+            {
+                frequency = pitches[i].FrequencyHz;
+            }
+
             raw[i] = 69 + 12 * Math.Log2(frequency / V(nameof(settings.ReferenceA4Hz), center));
             smooth = double.IsNaN(smooth) ? raw[i] : smooth + noteAlpha * (raw[i] - smooth);
             double fineTune = V(nameof(settings.FineTuneCents), center) / 100;
             double candidate = AutoTunePitchMap.Nearest(smooth - fineTune, settings);
             if (double.IsNaN(currentNote) || Math.Abs(smooth - (currentNote + fineTune)) - Math.Abs(smooth - (candidate + fineTune)) > 2 * V(nameof(settings.HysteresisCents), center) / 100)
+            {
                 currentNote = candidate;
+            }
+
             targets[i] = currentNote + fineTune; targetNotes[i] = currentNote;
         }
 
@@ -71,11 +82,18 @@ internal static class AutoTuneCurveBuilder
             token.ThrowIfCancellationRequested();
             if (double.IsNaN(targets[start])) { start++; continue; }
             int end = start + 1;
-            while (end < targets.Length && targetNotes[end] == targetNotes[start]) end++;
+            while (end < targets.Length && targetNotes[end] == targetNotes[start])
+            {
+                end++;
+            }
+
             double firstSample = Math.Max(0, start * (double)hop - hop / 2d);
             double lastSample = Math.Min(mono.Length, end * (double)hop - hop / 2d);
             if ((lastSample - firstSample) / sampleRate + 1e-9 >= settings.MinimumNoteSeconds)
+            {
                 Array.Fill(eligible, true, start, end - start);
+            }
+
             start = end;
         }
 
@@ -95,12 +113,23 @@ internal static class AutoTuneCurveBuilder
                 vibratoCenter = lastTarget != targetNotes[i] ? raw[i] : vibratoCenter + vibratoAlpha * (raw[i] - vibratoCenter);
                 lastTarget = targetNotes[i];
                 desired = targets[i] - raw[i] + V(nameof(settings.VibratoPreservationPercent), center) / 100 * (raw[i] - vibratoCenter);
-                if (Math.Abs(targets[i] - raw[i]) <= V(nameof(settings.DeadZoneCents), center) / 100) desired = 0;
+                if (Math.Abs(targets[i] - raw[i]) <= V(nameof(settings.DeadZoneCents), center) / 100)
+                {
+                    desired = 0;
+                }
+
                 if (Math.Abs(desired) > V(nameof(settings.MaximumCorrectionSemitones), center)) { desired = 0; active = false; }
                 desired *= V(nameof(settings.IntensityPercent), center) / 100;
-                if (active && Math.Abs(desired) > 1e-7) corrected++;
+                if (active && Math.Abs(desired) > 1e-7)
+                {
+                    corrected++;
+                }
             }
-            else lastTarget = double.NaN;
+            else
+            {
+                lastTarget = double.NaN;
+            }
+
             previousShift += Alpha(V(active ? nameof(settings.RetuneMilliseconds) : nameof(settings.ReleaseMilliseconds), center), hopSeconds) * (desired - previousShift);
             previousWet += Alpha(V(nameof(settings.VoicingFadeMilliseconds), center), hopSeconds) * ((active ? 1 : 0) - previousWet);
             shifts[i] = previousShift;

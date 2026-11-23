@@ -109,7 +109,11 @@ public sealed class MidiControllerService : IDisposable
     /// <summary>Sends a MIDI event to the open output port.</summary>
     public bool Send(MidiEvent midiEvent)
     {
-        if (this._output is null) return false;
+        if (this._output is null)
+        {
+            return false;
+        }
+
         try
         {
             this._output.Send(midiEvent.GetAsShortMessage());
@@ -125,7 +129,11 @@ public sealed class MidiControllerService : IDisposable
     /// <summary>Sends a sysex buffer to the open output port.</summary>
     public bool SendBuffer(byte[] buffer)
     {
-        if (this._output is null) return false;
+        if (this._output is null)
+        {
+            return false;
+        }
+
         try
         {
             this._output.SendBuffer(buffer);
@@ -141,7 +149,11 @@ public sealed class MidiControllerService : IDisposable
     /// <summary>Sends a raw 32-bit MIDI short message to the open output port.</summary>
     public bool SendRaw(uint rawMessage)
     {
-        if (this._output is null) return false;
+        if (this._output is null)
+        {
+            return false;
+        }
+
         try
         {
             var bytes = new byte[]
@@ -164,7 +176,11 @@ public sealed class MidiControllerService : IDisposable
     /// <summary>Stops and closes the input port.</summary>
     public void CloseInput()
     {
-        if (this._input is null) return;
+        if (this._input is null)
+        {
+            return;
+        }
+
         try
         {
             this._input.MessageReceived -= this.OnInputMessageReceived;
@@ -183,7 +199,11 @@ public sealed class MidiControllerService : IDisposable
     /// <summary>Closes the output port.</summary>
     public void CloseOutput()
     {
-        if (this._output is null) return;
+        if (this._output is null)
+        {
+            return;
+        }
+
         try
         {
             this._output.Dispose();
@@ -199,7 +219,11 @@ public sealed class MidiControllerService : IDisposable
     /// <summary>Closes both ports and disposes the service.</summary>
     public void Dispose()
     {
-        if (this._disposed) return;
+        if (this._disposed)
+        {
+            return;
+        }
+
         this._disposed = true;
         this.CloseInput();
         this.CloseOutput();

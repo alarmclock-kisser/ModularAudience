@@ -82,7 +82,10 @@ namespace ModularAudience.Forms.Modules.Dialogs
             this.numeric_pitchRange.ValueChanged += (_, _) =>
             {
                 decimal rounded = Math.Round(this.numeric_pitchRange.Value * 2, MidpointRounding.AwayFromZero) / 2;
-                if (rounded != this.numeric_pitchRange.Value) this.numeric_pitchRange.Value = rounded;
+                if (rounded != this.numeric_pitchRange.Value)
+                {
+                    this.numeric_pitchRange.Value = rounded;
+                }
             };
 
             foreach (AudioObj obj in sourceSamples)
@@ -629,7 +632,11 @@ namespace ModularAudience.Forms.Modules.Dialogs
                 LogManager.Log("Generating Break-Beat via LLM.");
 
                 llmContent = await this.RequestBreakbeatFromLlmAsync(apiUrl, systemPrompt, llmUserPrompt);
-                if (this.IsDisposed || this.Disposing) return;
+                if (this.IsDisposed || this.Disposing)
+                {
+                    return;
+                }
+
                 LogMultiline("LLM raw response", llmContent);
 
                 LlmBreakbeatParseResult parsed;
@@ -637,7 +644,10 @@ namespace ModularAudience.Forms.Modules.Dialogs
                 {
                     parsed = this.ParseLlmBreakbeat(llmContent, drumkit, this.Bars, this.Resolution);
                     if (this.llmSettings.KeepContext && this.pendingLlmTurn is { } turn)
+                    {
                         this.llmContext.Remember(turn.Generation, turn.User, turn.Assistant);
+                    }
+
                     this.pendingLlmTurn = null;
                 }
                 catch (Exception ex)
@@ -660,7 +670,11 @@ namespace ModularAudience.Forms.Modules.Dialogs
             }
             catch (TaskCanceledException ex)
             {
-                if (this.IsDisposed || this.Disposing) return;
+                if (this.IsDisposed || this.Disposing)
+                {
+                    return;
+                }
+
                 string timeoutMessage = "LLM request timed out or was canceled." + Environment.NewLine + Environment.NewLine + ex.Message;
                 LogMultiline("LLM timeout", timeoutMessage);
                 this.ShowCopyableMessageBox("LLM Timeout", timeoutMessage + (string.IsNullOrWhiteSpace(llmContent) ? string.Empty : Environment.NewLine + Environment.NewLine + "Raw response:" + Environment.NewLine + llmContent));
@@ -674,7 +688,10 @@ namespace ModularAudience.Forms.Modules.Dialogs
                     errorMessage += Environment.NewLine + Environment.NewLine + "Raw response:" + Environment.NewLine + llmContent;
                 }
 
-                if (!this.IsDisposed && !this.Disposing) this.ShowCopyableMessageBox("LLM Error", errorMessage);
+                if (!this.IsDisposed && !this.Disposing)
+                {
+                    this.ShowCopyableMessageBox("LLM Error", errorMessage);
+                }
             }
             finally
             {
@@ -888,7 +905,11 @@ namespace ModularAudience.Forms.Modules.Dialogs
 
             using var discoveryCancellationTokenSource = new CancellationTokenSource(LlmDiscoveryTimeout);
             (Uri modelsUri, string model) = await DiscoverWorkingModelAsync(httpClient, apiUrl, discoveryCancellationTokenSource.Token);
-            if (this.IsDisposed || this.Disposing) throw new TaskCanceledException("The generator window was closed.");
+            if (this.IsDisposed || this.Disposing)
+            {
+                throw new TaskCanceledException("The generator window was closed.");
+            }
+
             Uri chatCompletionsUri = ReplaceEndpoint(modelsUri, "chat/completions");
 
             LogManager.Log($"LLM chat endpoint: {chatCompletionsUri}");
@@ -903,7 +924,10 @@ namespace ModularAudience.Forms.Modules.Dialogs
             {
                 if (keepContext && this.llmSettings.KeepContext && contextGeneration == this.llmContext.Generation
                     && !this.IsDisposed && !this.Disposing)
+                {
                     this.pendingLlmTurn = (contextGeneration, userPrompt, reply);
+                }
+
                 return reply;
             }
 
@@ -2478,7 +2502,11 @@ namespace ModularAudience.Forms.Modules.Dialogs
                 audioObj = await BreakbeatGenerator_V2.RenderBreakbeatAsync(breakbeat, snapshot.Samples, snapshot.Bpm, snapshot.Resolution, snapshot.Swing, patternName, interleaved: snapshot.Interleaved,
                     pitchRangeSemitones: snapshot.PitchRange, pitchChancePercent: snapshot.PitchChance, pitchSeed: snapshot.Seed);
             }
-            finally { foreach (var sample in snapshot.Samples) sample.Dispose(); }
+            finally { foreach (var sample in snapshot.Samples)
+                {
+                    sample.Dispose();
+                }
+            }
             if (audioObj == null)
             {
                 throw new InvalidOperationException("Breakbeat bot could not render the generated audio.");

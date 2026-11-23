@@ -44,7 +44,11 @@ public sealed class MixEditorExtensionTests
             await mix.SaveAsync(path); long first = new FileInfo(path).Length;
             lane.Gain = 0.6; await mix.SaveAsync(path); long added = new FileInfo(path).Length - first;
             Assert.IsTrue(added < 10000, $"Metadata-only save rewrote too much: {added}");
-            using (var file = new FileStream(path, FileMode.Append)) file.Write(new byte[] { 1, 200, 200, 200, 200, 0, 0, 0, 0, 7 });
+            using (var file = new FileStream(path, FileMode.Append))
+            {
+                file.Write(new byte[] { 1, 200, 200, 200, 200, 0, 0, 0, 0, 7 });
+            }
+
             using var loaded = await MixArrangement.LoadAsync(path);
             Assert.AreEqual(0.6, loaded.Lanes[0].Gain); Assert.IsTrue(loaded.AutoSave);
             Assert.AreEqual(147, loaded.DisplayLaneHeight); Assert.AreEqual(0d, loaded.Visual.HorizontalScrollSeconds);
@@ -54,7 +58,11 @@ public sealed class MixEditorExtensionTests
             lane.Gain = 0.4; await mix.SaveAsync(path);
             using var recovered = await MixArrangement.LoadAsync(path); Assert.AreEqual(0.4, recovered.Lanes[0].Gain);
         }
-        finally { if (File.Exists(path)) File.Delete(path); }
+        finally { if (File.Exists(path))
+            {
+                File.Delete(path);
+            }
+        }
     }
     [STATestMethod]
     public void WholeClipAdditiveSelectionCopiesMultipleLanesAndPasteIsOneUndoStep()
@@ -289,13 +297,21 @@ public sealed class MixEditorExtensionTests
             using var restored = MixArrangement.LoadAsync(path).GetAwaiter().GetResult();
             Assert.AreEqual("Drum Bus", restored.Lanes[2].Name);
         }
-        finally { if (File.Exists(path)) File.Delete(path); }
+        finally { if (File.Exists(path))
+            {
+                File.Delete(path);
+            }
+        }
     }
     [STATestMethod]
     public void MouseWheelScrollsTimeWhileVerticalNavigationUsesItsScrollbar()
     {
         using var mix = new MixTrackView(); Populate(mix);
-        for (int i = 0; i < 7; i++) mix.Arrangement.Lanes.Add(new MixLane { Name = "Extra " + i });
+        for (int i = 0; i < 7; i++)
+        {
+            mix.Arrangement.Lanes.Add(new MixLane { Name = "Extra " + i });
+        }
+
         Call(mix, "Changed");
         mix.Show(); Application.DoEvents();
         var vertical = (VScrollBar)Field(mix, "vertical");
@@ -343,7 +359,11 @@ public sealed class MixEditorExtensionTests
             Drain((Task)Call(reopened, "LoadFromPathAsync", path, CancellationToken.None)!);
             Assert.AreEqual("Renamed mix", reopened.Text);
         }
-        finally { if (File.Exists(path)) File.Delete(path); }
+        finally { if (File.Exists(path))
+            {
+                File.Delete(path);
+            }
+        }
     }
     [STATestMethod]
     public void AutoSaveEnablesAfterSaveAndPersistsEditsUndoAndView()
@@ -365,6 +385,10 @@ public sealed class MixEditorExtensionTests
             using var reopened = new MixTrackView(); Drain((Task)Call(reopened, "LoadFromPathAsync", path, CancellationToken.None)!);
             Assert.IsTrue(((CheckBox)Field(reopened, "autoSave")).Checked);
         }
-        finally { if (File.Exists(path)) File.Delete(path); }
+        finally { if (File.Exists(path))
+            {
+                File.Delete(path);
+            }
+        }
     }
 }

@@ -28,21 +28,38 @@ public static class AutoTuneProcessor
         settings = settings.Copy();
         execution ??= new AudioEffectExecutionOptions();
         execution.Validate();
-        if (channels is < 1 or > 32 || samples.Length % channels != 0) throw new ArgumentException("Audio must contain complete frames with 1–32 channels.");
+        if (channels is < 1 or > 32 || samples.Length % channels != 0)
+        {
+            throw new ArgumentException("Audio must contain complete frames with 1–32 channels.");
+        }
+
         float[] source = samples.ToArray();
         for (int i = 0; i < source.Length; i++)
         {
-            if ((i & 4095) == 0) cancellationToken.ThrowIfCancellationRequested();
-            if (!float.IsFinite(source[i])) throw new ArgumentException("Auto Tune requires finite audio samples.");
+            if ((i & 4095) == 0)
+            {
+                cancellationToken.ThrowIfCancellationRequested();
+            }
+
+            if (!float.IsFinite(source[i]))
+            {
+                throw new ArgumentException("Auto Tune requires finite audio samples.");
+            }
         }
-        if (source.Length == 0) return new(source, 0, 0, 0, 1);
+        if (source.Length == 0)
+        {
+            return new(source, 0, 0, 0, 1);
+        }
+
         var automation = new EffectAutomationEvaluator(settings.Automation, AutoTuneCurveTargets.All, key => AutoTuneCurveTargets.BaseValue(settings, key),
             source, channels, sampleRate, execution.CurveScope, cancellationToken);
         progress?.Report(0);
         if (settings.IntensityPercent == 0 && !automation.Has(nameof(settings.IntensityPercent)) ||
             settings.WetPercent == 0 && !automation.Has(nameof(settings.WetPercent)) ||
             settings.MaximumCorrectionSemitones == 0 && !automation.Has(nameof(settings.MaximumCorrectionSemitones)))
+        {
             return Finish(source, source, null, sampleRate, channels, settings, automation, progress, cancellationToken);
+        }
 
         float[] mono = AnalysisSignal(source, channels, settings.AnalysisChannel, cancellationToken);
         int hop = Math.Max(1, (int)Math.Round(sampleRate * settings.AnalysisHopMilliseconds / 1000));
@@ -73,7 +90,11 @@ public static class AutoTuneProcessor
         bool usedAmount = false, usedWet = false, usedGain = false;
         for (int frame = 0; frame < frames; frame++)
         {
-            if ((frame & 2047) == 0) token.ThrowIfCancellationRequested();
+            if ((frame & 2047) == 0)
+            {
+                token.ThrowIfCancellationRequested();
+            }
+
             double wet = automation.Value(nameof(settings.WetPercent), frame) / 100 * (curve?.WetAt(frame) ?? 0);
             double gain = Math.Pow(10, automation.Value(nameof(settings.OutputGainDb), frame) / 20);
             double amount = automation.Value(EffectCurveTargets.Amount, frame) / 100;
@@ -83,7 +104,11 @@ public static class AutoTuneProcessor
                 int index = frame * channels + channel;
                 double effected = (source[index] + (shifted[index] - source[index]) * wet) * gain;
                 mixed[index] = (float)(source[index] + (effected - source[index]) * amount);
-                if (!float.IsFinite(mixed[index])) throw new ArithmeticException("Pitch correction produced non-finite output.");
+                if (!float.IsFinite(mixed[index]))
+                {
+                    throw new ArithmeticException("Pitch correction produced non-finite output.");
+                }
+
                 peak = Math.Max(peak, Math.Abs(mixed[index]));
             }
         }
@@ -96,7 +121,11 @@ public static class AutoTuneProcessor
         int fadeFrames = Math.Min(frames / 2, (int)Math.Round(sampleRate * settings.BoundaryFadeMilliseconds / 1000));
         for (int frame = 0; frame < frames; frame++)
         {
-            if ((frame & 2047) == 0) token.ThrowIfCancellationRequested();
+            if ((frame & 2047) == 0)
+            {
+                token.ThrowIfCancellationRequested();
+            }
+
             double fade = fadeFrames <= 0 ? 1 : Math.Clamp(Math.Min(frame, frames - 1 - frame) / (double)fadeFrames, 0, 1);
             for (int channel = 0; channel < channels; channel++)
             {
@@ -116,7 +145,11 @@ public static class AutoTuneProcessor
             double[] energy = new double[channels];
             for (int i = 0; i < source.Length; i++)
             {
-                if ((i & 4095) == 0) token.ThrowIfCancellationRequested();
+                if ((i & 4095) == 0)
+                {
+                    token.ThrowIfCancellationRequested();
+                }
+
                 energy[i % channels] += (double)source[i] * source[i];
             }
             selected = Array.IndexOf(energy, energy.Max());
@@ -124,12 +157,23 @@ public static class AutoTuneProcessor
         float[] mono = new float[source.Length / channels];
         for (int frame = 0; frame < mono.Length; frame++)
         {
-            if ((frame & 2047) == 0) token.ThrowIfCancellationRequested();
-            if (mode != AutoTuneAnalysisChannel.Average) mono[frame] = source[frame * channels + selected];
+            if ((frame & 2047) == 0)
+            {
+                token.ThrowIfCancellationRequested();
+            }
+
+            if (mode != AutoTuneAnalysisChannel.Average)
+            {
+                mono[frame] = source[frame * channels + selected];
+            }
             else
             {
                 double sum = 0;
-                for (int channel = 0; channel < channels; channel++) sum += source[frame * channels + channel];
+                for (int channel = 0; channel < channels; channel++)
+                {
+                    sum += source[frame * channels + channel];
+                }
+
                 mono[frame] = (float)(sum / channels);
             }
         }

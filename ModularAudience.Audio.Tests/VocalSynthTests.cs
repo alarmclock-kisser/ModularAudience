@@ -503,7 +503,10 @@ public class VocalSynthTests
         }
         finally
         {
-            if (File.Exists(filePath)) File.Delete(filePath);
+            if (File.Exists(filePath))
+            {
+                File.Delete(filePath);
+            }
         }
     }
 
@@ -630,7 +633,9 @@ public class VocalSynthTests
         using var probe = new SpeechSynthesizer();
         if (!probe.GetInstalledVoices().Any(voice =>
             voice.Enabled && voice.VoiceInfo.Culture.TwoLetterISOLanguageName == "en"))
+        {
             Assert.Inconclusive("An English Windows speech voice is not installed.");
+        }
 
         MidiFileData midi = CreateMidi(
             new MidiNoteData { NoteNumber = 69, Velocity = 100, StartTick = 0, DurationTicks = 960 });
@@ -843,7 +848,9 @@ public class VocalSynthTests
         await Task.WhenAll(Enumerable.Range(0, 4).Select(_ => Task.Run(() =>
         {
             for (int i = 0; i < samples.Length; i++)
+            {
                 CollectionAssert.AreEqual(expected[i], VocalPhonemizer.Phonemize(samples[i].Item1, samples[i].Item2).ToArray());
+            }
         })));
         using var cancellation = new CancellationTokenSource();
         cancellation.Cancel();
@@ -890,8 +897,11 @@ public class VocalSynthTests
             (VocalLanguage.French, "BONJOUR"), (VocalLanguage.Turkish, "IĞDIR"),
             (VocalLanguage.Russian, "ПРИВЕТ"),
         })
+        {
             Assert.IsTrue(VocalTextParser.Parse(language, text, VocalEmphasisSyntax.Default())
                 .OfType<VocalPhonemeToken>().All(token => token.Capitalized));
+        }
+
         Assert.IsTrue(VocalPhonemizer.Phonemize(VocalLanguage.Turkish, "IĞDIR").Contains("tr-i"));
         foreach (var (language, text) in new[]
         {
@@ -1054,7 +1064,10 @@ public class VocalSynthTests
         int burstEnd = start + (int)(finalStopFrames * 0.66);
         double energy = 0;
         for (int index = burstStart; index < burstEnd; index++)
+        {
             energy += audio.Data[index] * audio.Data[index];
+        }
+
         double rms = Math.Sqrt(energy / (burstEnd - burstStart));
         Assert.IsTrue(rms > 0.05, $"{word} final release was too quiet: RMS {rms}.");
     }
@@ -1452,8 +1465,15 @@ public class VocalSynthTests
         for (int i = 0; i < lengths.Length; i++)
         {
             var segment = audio.Data.Skip(offset).Take(lengths[i]);
-            if (i % 2 == 0) Assert.IsTrue(segment.All(x => x == 0), $"Pause {i / 2} was not silent.");
-            else Assert.IsTrue(segment.Any(x => Math.Abs(x) > 0.001), $"Pop {i / 2} was inaudible.");
+            if (i % 2 == 0)
+            {
+                Assert.IsTrue(segment.All(x => x == 0), $"Pause {i / 2} was not silent.");
+            }
+            else
+            {
+                Assert.IsTrue(segment.Any(x => Math.Abs(x) > 0.001), $"Pop {i / 2} was inaudible.");
+            }
+
             offset += lengths[i];
         }
         Assert.AreEqual(offset, audio.Data.Length);
@@ -1507,7 +1527,9 @@ public class VocalSynthTests
     {
         using var probe = new SpeechSynthesizer();
         if (!probe.GetInstalledVoices().Any(v => v.Enabled && v.VoiceInfo.Culture.TwoLetterISOLanguageName == "en"))
+        {
             Assert.Inconclusive("An English Windows speech voice is not installed.");
+        }
 
         var settings = VocalSynthSettings.FromPreset(VocalVoicePreset.BuiltIn[2], VocalLanguage.English, "Hello world.");
         settings.UseWindowsSpeech = true;
@@ -1517,7 +1539,9 @@ public class VocalSynthTests
         Assert.IsTrue(normal.Data.Any(x => Math.Abs(x) > 0.001));
         Assert.IsTrue(normal.Data.All(float.IsFinite));
         for (int i = 0; i < normal.Data.Length; i += 2)
+        {
             Assert.AreEqual(normal.Data[i], normal.Data[i + 1]);
+        }
 
         settings.Speed = 2;
         using var fast = VocalSynth.Render(settings);
@@ -1539,7 +1563,9 @@ public class VocalSynthTests
     {
         using var probe = new SpeechSynthesizer();
         if (!probe.GetInstalledVoices().Any(v => v.Enabled && v.VoiceInfo.Culture.TwoLetterISOLanguageName == "en"))
+        {
             Assert.Inconclusive("An English Windows speech voice is not installed.");
+        }
 
         var settings = CleanVoice(VocalLanguage.English, string.Concat(Enumerable.Repeat("Hello world. ", 5000)));
         settings.UseWindowsSpeech = true;
@@ -1616,7 +1642,11 @@ public class VocalSynthTests
         for (int start = settings.SampleRate / 10; start + block < settings.SampleRate * 7 / 10; start += block)
         {
             double energy = 0;
-            for (int i = start; i < start + block; i++) energy += audio.Data[i] * audio.Data[i];
+            for (int i = start; i < start + block; i++)
+            {
+                energy += audio.Data[i] * audio.Data[i];
+            }
+
             double level = Math.Sqrt(energy / block);
             double phase = 2 * Math.PI * 22 * (start + block / 2.0) / settings.SampleRate;
             sum += level;
@@ -1650,7 +1680,10 @@ public class VocalSynthTests
         using var probe = new SpeechSynthesizer();
         string code = language == VocalLanguage.German ? "de" : "en";
         if (!probe.GetInstalledVoices().Any(v => v.Enabled && v.VoiceInfo.Culture.TwoLetterISOLanguageName == code))
+        {
             Assert.Inconclusive($"A {code} Windows speech voice is not installed.");
+        }
+
         var settings = CleanVoice(language, normal);
         settings.UseWindowsSpeech = true;
         settings.BasePitchHz = 195;
@@ -1715,7 +1748,10 @@ public class VocalSynthTests
     {
         using var probe = new SpeechSynthesizer();
         if (!probe.GetInstalledVoices().Any(v => v.Enabled && v.VoiceInfo.Culture.TwoLetterISOLanguageName == "en"))
+        {
             Assert.Inconclusive("An English Windows speech voice is not installed.");
+        }
+
         var settings = CleanVoice(VocalLanguage.English, "hello");
         settings.UseWindowsSpeech = true;
         settings.BasePitchHz = 195;
@@ -1826,7 +1862,11 @@ public class VocalSynthTests
         for (int start = settings.SampleRate / 100; start + block <= settings.SampleRate * 14 / 100; start += block)
         {
             double energy = 0;
-            for (int i = start; i < start + block; i++) energy += audio.Data[i] * audio.Data[i];
+            for (int i = start; i < start + block; i++)
+            {
+                energy += audio.Data[i] * audio.Data[i];
+            }
+
             double level = Math.Sqrt(energy / block);
             double phase = 2 * Math.PI * 24 * (start + block / 2.0) / settings.SampleRate;
             sum += level;
@@ -1961,7 +2001,10 @@ public class VocalSynthTests
                         $"{button.Text} is clipped at width {width}.");
                 }
                 for (int i = 1; i < buttons.Length; i++)
+                {
                     Assert.IsTrue(buttons[i].Left >= buttons[i - 1].Right, "Profile buttons overlap or are out of order.");
+                }
+
                 Assert.IsTrue(group.Right <= group.Parent.ClientSize.Width - group.Parent.Padding.Right,
                     $"The profile button row extends beyond the window at width {width}.");
             }
@@ -2110,7 +2153,10 @@ public class VocalSynthTests
         }
         finally
         {
-            if (Directory.Exists(directory)) Directory.Delete(directory, true);
+            if (Directory.Exists(directory))
+            {
+                Directory.Delete(directory, true);
+            }
         }
     }
 
@@ -2191,7 +2237,10 @@ public class VocalSynthTests
         finally
         {
             snapshotField.SetValue(null, previousSnapshot);
-            if (Directory.Exists(directory)) Directory.Delete(directory, true);
+            if (Directory.Exists(directory))
+            {
+                Directory.Delete(directory, true);
+            }
         }
     }
 
@@ -2260,7 +2309,10 @@ public class VocalSynthTests
         }
         finally
         {
-            if (Directory.Exists(directory)) Directory.Delete(directory, true);
+            if (Directory.Exists(directory))
+            {
+                Directory.Delete(directory, true);
+            }
         }
     }
 
@@ -2417,7 +2469,10 @@ public class VocalSynthTests
         }
         finally
         {
-            if (Directory.Exists(directory)) Directory.Delete(directory, true);
+            if (Directory.Exists(directory))
+            {
+                Directory.Delete(directory, true);
+            }
         }
     }
 
@@ -2674,10 +2729,16 @@ public class VocalSynthTests
             .OrderByDescending(v => v.VoiceInfo.Gender == VoiceGender.Female)
             .Select(v => v.VoiceInfo).FirstOrDefault();
         if (selectedVoice is null)
+        {
             Assert.Inconclusive($"A {languageCode} Windows speech voice is not installed.");
+        }
+
         string expectedVoice = language == VocalLanguage.German ? "Microsoft Hedda Desktop" : "Microsoft Zira Desktop";
         if (selectedVoice.Name != expectedVoice)
+        {
             Assert.Inconclusive($"The fixed timing fixture requires {expectedVoice}; the selected voice is {selectedVoice.Name}.");
+        }
+
         var settings = CleanVoice(language, "aaaaaa aaaaaa");
         settings.SampleRate = 16000;
         settings.BasePitchHz = 175;
@@ -2745,7 +2806,11 @@ public class VocalSynthTests
         for (int start = block; start + block <= samples.Length - block; start += block)
         {
             double energy = 0;
-            for (int i = start; i < start + block; i++) energy += samples[i] * samples[i];
+            for (int i = start; i < start + block; i++)
+            {
+                energy += samples[i] * samples[i];
+            }
+
             levels.Add(Math.Sqrt(energy / block));
         }
         double mean = levels.Average();
@@ -2778,8 +2843,16 @@ public class VocalSynthTests
         for (int start = 0; start + size < frames; start += hop)
         {
             double energy = 0;
-            for (int i = 0; i < size; i++) energy += samples[(start + i) * channels] * samples[(start + i) * channels];
-            if (energy / size < 0.00015) continue;
+            for (int i = 0; i < size; i++)
+            {
+                energy += samples[(start + i) * channels] * samples[(start + i) * channels];
+            }
+
+            if (energy / size < 0.00015)
+            {
+                continue;
+            }
+
             double best = 0;
             int bestLag = 0;
             for (int lag = rate / 400; lag <= rate / 70; lag++)
@@ -2795,7 +2868,10 @@ public class VocalSynthTests
                 double correlation = cross / Math.Sqrt(first * second + 1e-20);
                 if (correlation > best) { best = correlation; bestLag = lag; }
             }
-            if (best > 0.65) pitches.Add(rate / (double)bestLag);
+            if (best > 0.65)
+            {
+                pitches.Add(rate / (double)bestLag);
+            }
         }
         Assert.IsTrue(pitches.Count > 0, "No voiced pitch was detected.");
         pitches.Sort();

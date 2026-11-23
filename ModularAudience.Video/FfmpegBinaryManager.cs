@@ -41,18 +41,28 @@ public sealed class FfmpegBinaryManager
 
         // Neben der Entry Assembly
         var local = Path.Combine(AppContext.BaseDirectory, "ffmpeg.exe");
-        if (File.Exists(local)) return local;
+        if (File.Exists(local))
+        {
+            return local;
+        }
 
         // PATH
         var pathEnv = Environment.GetEnvironmentVariable("PATH") ?? string.Empty;
         foreach (var entry in pathEnv.Split(Path.PathSeparator))
         {
             var dir = entry.Trim().Trim('"');
-            if (string.IsNullOrWhiteSpace(dir) || !Path.IsPathFullyQualified(dir)) continue;
+            if (string.IsNullOrWhiteSpace(dir) || !Path.IsPathFullyQualified(dir))
+            {
+                continue;
+            }
+
             try
             {
                 var candidate = Path.Combine(dir, "ffmpeg.exe");
-                if (File.Exists(candidate)) return Path.GetFullPath(candidate);
+                if (File.Exists(candidate))
+                {
+                    return Path.GetFullPath(candidate);
+                }
             }
             catch { /* ignore */ }
         }

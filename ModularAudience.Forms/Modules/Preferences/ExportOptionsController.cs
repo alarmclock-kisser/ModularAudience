@@ -40,7 +40,10 @@ internal sealed class ExportOptionsController : IDisposable
             {
                 this.bits.Items.Clear();
                 if (AudioExporter.AvailableExportFormats.TryGetValue(this.Format, out int[]? options))
+                {
                     this.bits.Items.AddRange(options.Cast<object>().ToArray());
+                }
+
                 this.bits.SelectedItem = this.Bits;
             }
             finally { this.bits.EndUpdate(); }
@@ -50,14 +53,22 @@ internal sealed class ExportOptionsController : IDisposable
 
     private void FormatChanged(object? sender, EventArgs e)
     {
-        if (this.applying || this.formats.SelectedItem is not string format) return;
+        if (this.applying || this.formats.SelectedItem is not string format)
+        {
+            return;
+        }
+
         this.Apply(format, ApplicationPreferences.DefaultBits(format));
         this.Changed?.Invoke(this, EventArgs.Empty);
     }
 
     private void BitsChanged(object? sender, EventArgs e)
     {
-        if (this.applying || this.bits.SelectedItem is not int value || value == this.Bits) return;
+        if (this.applying || this.bits.SelectedItem is not int value || value == this.Bits)
+        {
+            return;
+        }
+
         this.Bits = value;
         this.Changed?.Invoke(this, EventArgs.Empty);
     }

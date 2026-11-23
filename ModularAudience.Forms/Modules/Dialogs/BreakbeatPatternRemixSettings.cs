@@ -167,7 +167,10 @@ namespace ModularAudience.Forms.Modules.Dialogs
         {
             options.TrackLoops ??= new Dictionary<int, int>();
             foreach (int track in options.TrackLoops.Keys.ToArray())
+            {
                 options.TrackLoops[track] = Math.Clamp(options.TrackLoops[track], 1, 100000);
+            }
+
             options.VariationPercent = Math.Clamp(options.VariationPercent, 0, 100);
             options.Seed = Math.Max(0, options.Seed);
 

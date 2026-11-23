@@ -97,7 +97,10 @@ public sealed class AudioStoragePathsTests
         finally
         {
             AudioStoragePaths.SetWorkingDirectory(null);
-            if (Directory.Exists(root)) Directory.Delete(root, recursive: true);
+            if (Directory.Exists(root))
+            {
+                Directory.Delete(root, recursive: true);
+            }
         }
     }
 
@@ -119,7 +122,10 @@ public sealed class AudioStoragePathsTests
         finally
         {
             AudioStoragePaths.SetWorkingDirectory(null);
-            if (Directory.Exists(root)) Directory.Delete(root, recursive: true);
+            if (Directory.Exists(root))
+            {
+                Directory.Delete(root, recursive: true);
+            }
         }
     }
 
@@ -142,6 +148,10 @@ public sealed class AudioStoragePathsTests
             Assert.IsFalse(Directory.Exists(Path.Combine(directory, "_Recordings")));
             Assert.AreEqual("existing recording", File.ReadAllText(recording));
         }
-        finally { if (Directory.Exists(directory)) Directory.Delete(directory, recursive: true); }
+        finally { if (Directory.Exists(directory))
+            {
+                Directory.Delete(directory, recursive: true);
+            }
+        }
     }
 }

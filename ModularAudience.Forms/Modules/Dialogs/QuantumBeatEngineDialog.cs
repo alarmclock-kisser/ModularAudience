@@ -48,7 +48,10 @@ public partial class QuantumBeatEngineDialog : Form
         this.session = session; this.store = store; this.player = player;
         AudioObj[] sources = sourceSamples.ToArray();
         if (sources.Length > 32 || sources.Any(source => source is null) || sources.Sum(source => (long)source.Data.Length) > 67_108_864)
+        {
             throw new ArgumentException("Select at most 32 samples with no more than 256 MiB of combined source PCM.");
+        }
+
         this.InitializeComponent();
         try
         {
@@ -80,40 +83,69 @@ public partial class QuantumBeatEngineDialog : Form
     {
         foreach (var (key, number) in this.numbers)
         {
-            if (key is "RequestTimeout" or "JobTimeout" or "PollInterval" or "ReadRetries") number.ValueChanged += (_, _) => this.ConnectionChanged();
-            else number.ValueChanged += (_, _) => this.EditorChanged();
+            if (key is "RequestTimeout" or "JobTimeout" or "PollInterval" or "ReadRetries")
+            {
+                number.ValueChanged += (_, _) => this.ConnectionChanged();
+            }
+            else
+            {
+                number.ValueChanged += (_, _) => this.EditorChanged();
+            }
         }
         foreach (var (key, check) in this.checks)
         {
-            if (key == "ShowCredential") check.CheckedChanged += (_, _) => this.credentialText.UseSystemPasswordChar = !check.Checked;
-            else if (key == "AllowCloudJobs") check.CheckedChanged += (_, _) => this.UpdateAvailability();
-            else if (key == "AutoSave") check.CheckedChanged += (_, _) =>
+            if (key == "ShowCredential")
             {
-                if (this.loading) return;
+                check.CheckedChanged += (_, _) => this.credentialText.UseSystemPasswordChar = !check.Checked;
+            }
+            else if (key == "AllowCloudJobs")
+            {
+                check.CheckedChanged += (_, _) => this.UpdateAvailability();
+            }
+            else if (key == "AutoSave")
+            {
+                check.CheckedChanged += (_, _) =>
+            {
+                if (this.loading)
+                {
+                    return;
+                }
+
                 this.saveTimer.Stop(); this.workspaceDirty = true;
                 this.TrySaveWorkspace(); // Persist the checkbox itself even when switching auto-save off.
             };
-            else check.CheckedChanged += (_, _) => this.EditorChanged();
+            }
+            else
+            {
+                check.CheckedChanged += (_, _) => this.EditorChanged();
+            }
         }
         this.providerCombo.SelectedIndexChanged += (_, _) => this.EditorChanged();
         this.qasmVersionCombo.SelectedIndexChanged += (_, _) => this.EditorChanged();
         this.presetCombo.SelectedIndexChanged += (_, _) => this.EditorChanged();
         this.arrangementCombo.SelectedIndexChanged += (_, _) => this.EditorChanged();
         this.editorTabs.SelectedIndexChanged += (_, _) => this.ScheduleSave();
-        this.hardwareQasmText.TextChanged += (_, _) => { if (!this.hardwareQasmText.ReadOnly) this.EditorChanged(); };
+        this.hardwareQasmText.TextChanged += (_, _) => { if (!this.hardwareQasmText.ReadOnly) { this.EditorChanged(); } };
         foreach (Control control in new Control[] { this.authCombo, this.credentialText, this.crnText, this.backendCombo, this.endpointCombo, this.apiVersionText, this.pythonText })
+        {
             control.TextChanged += (_, _) => this.ConnectionChanged();
+        }
+
         this.connectionProfileCombo.TextChanged += (_, _) => { if (!this.loading) { this.connectionDirty = true; this.ScheduleSave(); } };
         this.gatesGrid.CellValueChanged += (_, _) => this.EditorChanged();
         this.tracksGrid.CellValueChanged += (_, _) => this.EditorChanged();
-        this.gatesGrid.CurrentCellDirtyStateChanged += (_, _) => { if (this.gatesGrid.IsCurrentCellDirty) this.gatesGrid.CommitEdit(DataGridViewDataErrorContexts.Commit); };
-        this.tracksGrid.CurrentCellDirtyStateChanged += (_, _) => { if (this.tracksGrid.IsCurrentCellDirty) this.tracksGrid.CommitEdit(DataGridViewDataErrorContexts.Commit); };
-        this.gatesGrid.SelectionChanged += (_, _) => { if (!this.loading) this.DrawCircuit(); };
-        foreach (var grid in new[] { this.gatesGrid, this.tracksGrid }) grid.DataError += (_, args) =>
+        this.gatesGrid.CurrentCellDirtyStateChanged += (_, _) => { if (this.gatesGrid.IsCurrentCellDirty) { this.gatesGrid.CommitEdit(DataGridViewDataErrorContexts.Commit); } };
+        this.tracksGrid.CurrentCellDirtyStateChanged += (_, _) => { if (this.tracksGrid.IsCurrentCellDirty) { this.tracksGrid.CommitEdit(DataGridViewDataErrorContexts.Commit); } };
+        this.gatesGrid.SelectionChanged += (_, _) => { if (!this.loading) { this.DrawCircuit(); } };
+        foreach (var grid in new[] { this.gatesGrid, this.tracksGrid })
+        {
+            grid.DataError += (_, args) =>
         { args.ThrowException = false; this.SetStatus("Enter a valid gate, integer qubit index or numeric parameter.", true); };
+        }
+
         this.circuitPicture.MouseClick += (_, args) => this.SelectCircuitPosition(args);
         this.saveTimer.Tick += (_, _) => { this.saveTimer.Stop(); this.TrySaveWorkspace(); };
-        this.elapsedTimer.Tick += (_, _) => { if (this.busy) this.delayLabel.Text = FormattableString.Invariant($"Waiting: {this.operationClock.Elapsed.TotalMilliseconds:0} ms"); };
+        this.elapsedTimer.Tick += (_, _) => { if (this.busy) { this.delayLabel.Text = FormattableString.Invariant($"Waiting: {this.operationClock.Elapsed.TotalMilliseconds:0} ms"); } };
         this.FormClosing += this.ClosingStudio;
         this.ResizeEnd += (_, _) => this.ScheduleSave();
     }
@@ -136,7 +168,11 @@ public partial class QuantumBeatEngineDialog : Form
         }
         var circuit = new QuantumCircuitDefinition(width, Array.AsReadOnly(this.gateRows.Select(row => row.ToOperation()).ToArray()),
             this.qasmVersionCombo.SelectedIndex == 1 ? OpenQasmVersion.Version3 : OpenQasmVersion.Version2);
-        if (validate) _ = QuantumCircuitComposer.Build(circuit);
+        if (validate)
+        {
+            _ = QuantumCircuitComposer.Build(circuit);
+        }
+
         return circuit;
     }
 
@@ -162,13 +198,21 @@ public partial class QuantumBeatEngineDialog : Form
 
     private void EditorChanged()
     {
-        if (this.loading || this.closing) return;
+        if (this.loading || this.closing)
+        {
+            return;
+        }
+
         this.RefreshCircuit(); this.ScheduleSave(); this.UpdateAvailability();
     }
 
     private void RefreshCircuit()
     {
-        if (this.released) return;
+        if (this.released)
+        {
+            return;
+        }
+
         try
         {
             var circuit = this.CaptureCircuit();
@@ -193,7 +237,11 @@ public partial class QuantumBeatEngineDialog : Form
 
     private void AddGate()
     {
-        if (this.busy || this.gateRows.Count >= 512) return;
+        if (this.busy || this.gateRows.Count >= 512)
+        {
+            return;
+        }
+
         this.gateRows.Add(new() { Gate = this.gateCombo.Text, Qubit = (int)this.N("GateQubit"), Target = (int)this.N("GateTarget"), AngleDegrees = (double)this.N("GateAngle") });
         this.EditorChanged();
     }
@@ -203,17 +251,33 @@ public partial class QuantumBeatEngineDialog : Form
     }
     private void MoveGate(int direction)
     {
-        if (this.busy || this.gatesGrid.CurrentCell is not { RowIndex: >= 0 } cell) return;
+        if (this.busy || this.gatesGrid.CurrentCell is not { RowIndex: >= 0 } cell)
+        {
+            return;
+        }
+
         int index = cell.RowIndex, target = index + direction;
-        if (target < 0 || target >= this.gateRows.Count) return;
+        if (target < 0 || target >= this.gateRows.Count)
+        {
+            return;
+        }
+
         var row = this.gateRows[index]; this.gateRows.RemoveAt(index); this.gateRows.Insert(target, row);
         this.gatesGrid.CurrentCell = this.gatesGrid.Rows[target].Cells[1]; this.EditorChanged();
     }
     private void ReplaceGates(IReadOnlyList<QuantumGateOperation> operations)
     {
-        if (this.busy) return;
+        if (this.busy)
+        {
+            return;
+        }
+
         bool previous = this.loading; this.loading = true;
-        this.gateRows.Clear(); foreach (var gate in operations) this.gateRows.Add(QuantumGateEditorRow.From(gate));
+        this.gateRows.Clear(); foreach (var gate in operations)
+        {
+            this.gateRows.Add(QuantumGateEditorRow.From(gate));
+        }
+
         this.loading = previous; this.EditorChanged();
     }
     private void LoadPreset()
@@ -228,12 +292,22 @@ public partial class QuantumBeatEngineDialog : Form
     }
     private void SelectCircuitPosition(MouseEventArgs args)
     {
-        if (this.busy) return;
+        if (this.busy)
+        {
+            return;
+        }
+
         int qubit = (int)Math.Round((args.Y - QuantumDiagramRenderer.CircuitTop) / (double)QuantumDiagramRenderer.WireHeight);
-        if (qubit >= 0 && qubit < (int)this.N("Qubits")) this.SetNumber(args.Button == MouseButtons.Right ? "GateTarget" : "GateQubit", qubit);
+        if (qubit >= 0 && qubit < (int)this.N("Qubits"))
+        {
+            this.SetNumber(args.Button == MouseButtons.Right ? "GateTarget" : "GateQubit", qubit);
+        }
+
         int column = (args.X - QuantumDiagramRenderer.CircuitLeft) / QuantumDiagramRenderer.GateWidth(this.gateRows.Count);
         if (args.X >= QuantumDiagramRenderer.CircuitLeft && column >= 0 && column < this.gateRows.Count)
+        {
             this.gatesGrid.CurrentCell = this.gatesGrid.Rows[column].Cells[1];
+        }
     }
 
     internal Task GenerateAsync() => this.RunWorkAsync(async token =>
@@ -242,10 +316,16 @@ public partial class QuantumBeatEngineDialog : Form
         var options = this.CaptureOptions(); var tracks = this.trackRows.Select(row => row.ToMapping()).ToArray();
         options.Validate(circuit.QubitCount, tracks);
         if (this.samples.Any(sample => sample.Data.Length < sample.Channels || sample.SampleRate <= 0 || sample.Channels < 1))
+        {
             throw new ArgumentException("Select samples containing complete audio frames.");
+        }
+
         bool cloud = this.providerCombo.SelectedIndex == 1;
         if (cloud && (!this.C("AllowCloudJobs") || !this.session.IsConnected))
+        {
             throw new InvalidOperationException("Connect to IBM and explicitly allow cloud jobs before generating.");
+        }
+
         string fingerprint = QuantumCircuitComposer.Build(circuit with { Version = OpenQasmVersion.Version2 });
         var execution = cloud
             ? await this.session.ExecuteIbmAsync(circuit, (int)this.N("Shots"), this.backendCombo.Text.Trim(), this.pythonText.Text.Trim(),
@@ -269,7 +349,10 @@ public partial class QuantumBeatEngineDialog : Form
         var circuit = this.CaptureCircuit();
         if (this.lastExecution is null || circuit.QubitCount != this.measuredQubits ||
             QuantumCircuitComposer.Build(circuit with { Version = OpenQasmVersion.Version2 }) != this.measuredFingerprint)
+        {
             throw new InvalidOperationException("Measure this circuit before remapping its results.");
+        }
+
         await this.MapAndDisplayAsync(circuit, this.CaptureOptions(), this.trackRows.Select(row => row.ToMapping()).ToArray(), token);
         this.SetStatus("Remapped cached measurements. No network request or quantum job was submitted.");
     });
@@ -292,12 +375,20 @@ public partial class QuantumBeatEngineDialog : Form
         }).ToArray();
         this.RefreshSequenceImage();
         this.Stop(); this.rendered?.Dispose(); this.rendered = null;
-        if (this.C("AutoRender")) { await this.RenderCurrentSequenceAsync(token); if (this.C("AutoPlay")) this.PlayRendered(); }
+        if (this.C("AutoRender")) { await this.RenderCurrentSequenceAsync(token); if (this.C("AutoPlay"))
+            {
+                this.PlayRendered();
+            }
+        }
     }
 
     internal Task RenderAsync() => this.RunWorkAsync(async token =>
     {
-        if (this.sequence is null) throw new InvalidOperationException("Generate a sequence before rendering audio.");
+        if (this.sequence is null)
+        {
+            throw new InvalidOperationException("Generate a sequence before rendering audio.");
+        }
+
         await this.RenderCurrentSequenceAsync(token); this.SetStatus("Rendered the current quantum sequence. Use Play or Add to collection.");
     });
 
@@ -311,26 +402,49 @@ public partial class QuantumBeatEngineDialog : Form
 
     private void Play()
     {
-        if (this.busy || this.rendered is null) return;
+        if (this.busy || this.rendered is null)
+        {
+            return;
+        }
+
         try { this.PlayRendered(); this.SetStatus("Playing the rendered quantum breakbeat."); }
         catch (Exception error) { this.ShowError(error); }
     }
-    private void PlayRendered() { if (this.rendered is not null) this.player.Play(this.rendered.Data, this.rendered.SampleRate, this.rendered.Channels, this.C("LoopPlayback")); }
+    private void PlayRendered() { if (this.rendered is not null)
+        {
+            this.player.Play(this.rendered.Data, this.rendered.SampleRate, this.rendered.Channels, this.C("LoopPlayback"));
+        }
+    }
     private void Stop() { this.player.Stop(); }
     private void ExportToCollection()
     {
-        if (this.rendered is null || this.busy) return;
+        if (this.rendered is null || this.busy)
+        {
+            return;
+        }
+
         AudioObj copy = this.rendered.Clone();
-        if (this.outputCollection is null || this.outputCollection.IsDisposed) this.outputCollection = new([copy], "Quantum Breakbeats");
+        if (this.outputCollection is null || this.outputCollection.IsDisposed)
+        {
+            this.outputCollection = new([copy], "Quantum Breakbeats");
+        }
         else { this.outputCollection.AudioC.Audios.Add(copy); this.outputCollection.Show(); }
         this.SetStatus("Added an independent copy to the Quantum Breakbeats collection.");
     }
-    private void OpenWaveform() { if (this.rendered is not null && !this.busy) new TrackView(this.rendered.Clone()).Show(); }
-    private void CopyText(string text) { try { if (!string.IsNullOrEmpty(text)) Clipboard.SetText(text); } catch { this.SetStatus("The clipboard is unavailable. Try copying again.", true); } }
+    private void OpenWaveform() { if (this.rendered is not null && !this.busy)
+        {
+            new TrackView(this.rendered.Clone()).Show();
+        }
+    }
+    private void CopyText(string text) { try { if (!string.IsNullOrEmpty(text)) { Clipboard.SetText(text); } } catch { this.SetStatus("The clipboard is unavailable. Try copying again.", true); } }
 
     private Task RunWorkAsync(Func<CancellationToken, Task> action)
     {
-        if (this.busy || this.closing || this.released) return Task.CompletedTask;
+        if (this.busy || this.closing || this.released)
+        {
+            return Task.CompletedTask;
+        }
+
         this.activeWork = this.PerformWorkAsync(action); return this.activeWork;
     }
     private async Task PerformWorkAsync(Func<CancellationToken, Task> action)
@@ -354,7 +468,11 @@ public partial class QuantumBeatEngineDialog : Form
 
     private void UpdateAvailability()
     {
-        if (this.released) return;
+        if (this.released)
+        {
+            return;
+        }
+
         this.editorTabs.Enabled = !this.busy;
         this.connectionMenu.Enabled = !this.busy; this.editMenu.Enabled = !this.busy; this.circuitMenu.Enabled = !this.busy;
         this.patternMenu.Enabled = !this.busy; this.outputMenu.Enabled = !this.busy;
@@ -375,7 +493,11 @@ public partial class QuantumBeatEngineDialog : Form
 
     private void SetStatus(string text, bool warning = false)
     {
-        if (this.released || this.IsDisposed) return;
+        if (this.released || this.IsDisposed)
+        {
+            return;
+        }
+
         this.statusLabel.Text = text; this.statusLabel.ForeColor = warning ? Color.Firebrick : SystemColors.ControlText;
     }
     private void ShowError(Exception error) => this.SetStatus(EnglishError(error), true);
@@ -395,7 +517,11 @@ public partial class QuantumBeatEngineDialog : Form
 
     private void ClosingStudio(object? sender, FormClosingEventArgs args)
     {
-        if (this.closing) return;
+        if (this.closing)
+        {
+            return;
+        }
+
         if (!this.closeAfterSaveFailure)
         {
             try { this.SaveCurrentWorkspace(); this.SaveConnectionIfChanged(); }
@@ -410,13 +536,29 @@ public partial class QuantumBeatEngineDialog : Form
 
     private void ReleaseResources()
     {
-        if (this.released) return;
+        if (this.released)
+        {
+            return;
+        }
+
         this.released = true; this.saveTimer.Stop(); this.elapsedTimer.Stop(); this.saveTimer.Dispose(); this.elapsedTimer.Dispose();
         this.lifetime.Cancel(); this.workCts?.Cancel(); this.player.Dispose(); this.rendered?.Dispose(); this.rendered = null;
         this.circuitPicture?.Image?.Dispose(); this.sequencePicture?.Image?.Dispose();
-        foreach (var sample in this.samples) sample.Dispose();
+        foreach (var sample in this.samples)
+        {
+            sample.Dispose();
+        }
+
         this.credentialText?.Clear();
-        if (this.activeWork.IsCompleted) this.session.Dispose(); else _ = DisposeSessionAfterAsync(this.activeWork, this.session);
+        if (this.activeWork.IsCompleted)
+        {
+            this.session.Dispose();
+        }
+        else
+        {
+            _ = DisposeSessionAfterAsync(this.activeWork, this.session);
+        }
+
         this.lifetime.Dispose();
     }
     private static async Task DisposeSessionAfterAsync(Task work, IQuantumBeatSession session)

@@ -12,7 +12,10 @@ public static class YtdlpProgressParser
     {
         progress = null;
         if (line is null || line.Length > MaximumLineLength || !line.StartsWith(Prefix, StringComparison.Ordinal))
+        {
             return false;
+        }
+
         try
         {
             using var document = JsonDocument.Parse(line[Prefix.Length..], new JsonDocumentOptions { MaxDepth = 4 });
@@ -35,13 +38,22 @@ public static class YtdlpProgressParser
             !TryReadNumber(root, "speed", out var speed) ||
             !TryReadNumber(root, "eta", out var eta) || !TryReadNumber(root, "elapsed", out var elapsed) ||
             !TryGetDuration(eta, out var etaTime) || !TryGetDuration(elapsed, out var elapsedTime))
+        {
             return false;
+        }
+
         var total = actual is > 0 ? actual : estimate is > 0 ? estimate : null;
         var bytes = downloaded ?? 0;
         if (speed is not > 0 && bytes > 0 && elapsed is > 0)
+        {
             speed = bytes / elapsed.Value;
+        }
+
         if (eta is null && speed is > 0 && total is { } knownTotal)
+        {
             TryGetDuration(Math.Max(0, knownTotal - bytes) / speed.Value, out etaTime);
+        }
+
         progress = new YtdlpDownloadProgress
         {
             Status = status.GetString()!, DownloadedBytes = bytes, TotalBytes = total,
@@ -57,12 +69,21 @@ public static class YtdlpProgressParser
     {
         value = null;
         if (!TryReadNumericText(root, name, out var text))
+        {
             return false;
+        }
+
         if (text is null)
+        {
             return true;
+        }
+
         if (!decimal.TryParse(text, NumberStyles.Float, CultureInfo.InvariantCulture, out var number) ||
             number < 0 || number > long.MaxValue || decimal.Truncate(number) != number)
+        {
             return false;
+        }
+
         value = (long)number;
         return true;
     }
@@ -71,12 +92,21 @@ public static class YtdlpProgressParser
     {
         value = null;
         if (!TryReadNumericText(root, name, out var text))
+        {
             return false;
+        }
+
         if (text is null)
+        {
             return true;
+        }
+
         if (!double.TryParse(text, NumberStyles.Float, CultureInfo.InvariantCulture, out var number) ||
             !double.IsFinite(number) || number < 0)
+        {
             return false;
+        }
+
         value = number;
         return true;
     }
@@ -85,17 +115,27 @@ public static class YtdlpProgressParser
     {
         text = null;
         if (!root.TryGetProperty(name, out var field) || field.ValueKind == JsonValueKind.Null)
+        {
             return true;
+        }
+
         if (field.ValueKind == JsonValueKind.Number)
+        {
             text = field.GetRawText();
+        }
         else if (field.ValueKind == JsonValueKind.String)
         {
             text = field.GetString()?.Trim();
             if (string.Equals(text, "NA", StringComparison.OrdinalIgnoreCase))
+            {
                 text = null;
+            }
         }
         else
+        {
             return false;
+        }
+
         return true;
     }
 
@@ -103,13 +143,22 @@ public static class YtdlpProgressParser
     {
         duration = null;
         if (seconds is null)
+        {
             return true;
+        }
+
         if (!double.IsFinite(seconds.Value) || seconds < 0 ||
             seconds > long.MaxValue / (double)TimeSpan.TicksPerSecond)
+        {
             return false;
+        }
+
         var ticks = (decimal)seconds.Value * TimeSpan.TicksPerSecond;
         if (ticks > long.MaxValue)
+        {
             return false;
+        }
+
         duration = TimeSpan.FromTicks((long)ticks);
         return true;
     }

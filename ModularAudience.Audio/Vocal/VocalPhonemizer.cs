@@ -48,7 +48,10 @@ public static class VocalPhonemizer
         VocalLanguage language, string text, CancellationToken cancellationToken)
     {
         if (language is not (VocalLanguage.English or VocalLanguage.German))
+        {
             throw new ArgumentOutOfRangeException(nameof(language), language, "Unsupported vocal language.");
+        }
+
         var repetitions = new List<int>();
         var phonemes = PhonemizeCore(language, text, repetitions, cancellationToken);
         return (phonemes, repetitions);
@@ -58,10 +61,17 @@ public static class VocalPhonemizer
         VocalLanguage language, string text, List<int>? repetitions, CancellationToken cancellationToken)
     {
         cancellationToken.ThrowIfCancellationRequested();
-        if (string.IsNullOrWhiteSpace(text)) return [];
+        if (string.IsNullOrWhiteSpace(text))
+        {
+            return [];
+        }
+
         if (language is not (VocalLanguage.AnimalCrossing or VocalLanguage.Beatboxing)
             && VocalIpa.TryParseNotation(text, cancellationToken, out var ipaPhones))
+        {
             return ipaPhones.Select(phone => phone.Symbol).ToArray();
+        }
+
         if (language is VocalLanguage.English or VocalLanguage.German
             && VocalMultilingualPhonemizer.NeedsCrossScriptFallback(text))
         {
@@ -70,6 +80,7 @@ public static class VocalPhonemizer
             return bestEffort.Select(phone => phone.Symbol).ToArray();
         }
         if (VocalMultilingualPhonemizer.Supports(language))
+        {
             return VocalTextParser.Parse(language, text, new VocalEmphasisSyntax(), cancellationToken)
                 .SelectMany(token => token switch
                 {
@@ -77,14 +88,25 @@ public static class VocalPhonemizer
                     VocalPauseToken => new[] { "sil" },
                     _ => Array.Empty<string>(),
                 }).ToArray();
+        }
+
         if (language == VocalLanguage.Beatboxing)
+        {
             return VocalTextParser.Parse(language, text, VocalEmphasisSyntax.Default(), cancellationToken)
                 .OfType<VocalPhonemeToken>().Select(token => token.Phoneme).ToArray();
+        }
+
         string normalized = text.Normalize(NormalizationForm.FormC).ToLowerInvariant();
-        if (language == VocalLanguage.AnimalCrossing) return PhonemizeAnimal(normalized, cancellationToken);
+        if (language == VocalLanguage.AnimalCrossing)
+        {
+            return PhonemizeAnimal(normalized, cancellationToken);
+        }
 
         if (!language.IsFullyImplemented())
+        {
             throw new ArgumentOutOfRangeException(nameof(language), language, "Unsupported vocal language.");
+        }
+
         var effective = language;
         var result = new List<string>();
         int i = 0;
@@ -107,7 +129,11 @@ public static class VocalPhonemizer
             int start = i++;
             while (i < normalized.Length && (char.IsLetter(normalized[i]) || normalized[i] is '\'' or '\u2019'))
             {
-                if ((i & 255) == 0) cancellationToken.ThrowIfCancellationRequested();
+                if ((i & 255) == 0)
+                {
+                    cancellationToken.ThrowIfCancellationRequested();
+                }
+
                 i++;
             }
             string word = normalized[start..i].Replace('\u2019', '\'');
@@ -117,7 +143,9 @@ public static class VocalPhonemizer
                 AddRepetitions(repetitions, exception.Length, 0, cancellationToken);
             }
             else
+            {
                 PhonemizeWord(effective, word, result, repetitions, cancellationToken);
+            }
         }
         return result;
     }
@@ -129,7 +157,9 @@ public static class VocalPhonemizer
         {
             cancellationToken.ThrowIfCancellationRequested();
             if (Rune.IsWhiteSpace(rune))
+            {
                 result.Add("sil");
+            }
             else if (Rune.IsLetterOrDigit(rune))
             {
                 int vowel = rune.Value switch
@@ -144,9 +174,13 @@ public static class VocalPhonemizer
                 result.Add(AnimalVowels[vowel]);
             }
             else if (rune.Value == '.')
+            {
                 result.Add("animal-dot");
+            }
             else if (rune.Value == '\u2026')
+            {
                 result.AddRange(["animal-dot", "animal-dot", "animal-dot"]);
+            }
         }
         return result;
     }
@@ -159,7 +193,11 @@ public static class VocalPhonemizer
         bool hasGermanVowel = false;
         while (i < word.Length)
         {
-            if ((i & 255) == 0) cancellationToken.ThrowIfCancellationRequested();
+            if ((i & 255) == 0)
+            {
+                cancellationToken.ThrowIfCancellationRequested();
+            }
+
             if (!char.IsLetter(word[i])) { i++; continue; }
             int sourceRepetition = 1;
             int repeat = 1;
@@ -167,28 +205,49 @@ public static class VocalPhonemizer
             {
                 while (i + repeat < word.Length && word[i + repeat] == word[i])
                 {
-                    if ((repeat & 255) == 0) cancellationToken.ThrowIfCancellationRequested();
+                    if ((repeat & 255) == 0)
+                    {
+                        cancellationToken.ThrowIfCancellationRequested();
+                    }
+
                     repeat++;
                 }
                 sourceRepetition = repeat;
                 if (repetitions is not null)
+                {
                     sourceRepetition = CappedRepetitionLength(word, i);
+                }
+
                 if (repeat >= 3)
                 {
                     int first = result.Count;
-                    if (language == VocalLanguage.German) MapGerman(word, i, result, hasGermanVowel);
-                    else MapEnglish(word, i, result, hasEnglishVowel);
+                    if (language == VocalLanguage.German)
+                    {
+                        MapGerman(word, i, result, hasGermanVowel);
+                    }
+                    else
+                    {
+                        MapEnglish(word, i, result, hasEnglishVowel);
+                    }
+
                     if (result.Count == first + 1)
                     {
                         string phoneme = result[first];
                         for (int extra = 1; extra < repeat; extra++)
                         {
-                            if ((extra & 255) == 0) cancellationToken.ThrowIfCancellationRequested();
+                            if ((extra & 255) == 0)
+                            {
+                                cancellationToken.ThrowIfCancellationRequested();
+                            }
+
                             result.Add(phoneme);
                         }
                         AddRepetitions(repetitions, result.Count - first, sourceRepetition, cancellationToken);
                         if (language == VocalLanguage.German && IsGermanVowel(word[i]))
+                        {
                             hasGermanVowel = true;
+                        }
+
                         i += repeat;
                         continue;
                     }
@@ -210,8 +269,12 @@ public static class VocalPhonemizer
             if (language == VocalLanguage.German)
             {
                 for (int j = i; j < i + consumed; j++)
+                {
                     if (IsGermanVowel(word[j]) && !(word[j] == 'u' && j > 0 && word[j - 1] == 'q'))
+                    {
                         hasGermanVowel = true;
+                    }
+                }
             }
             i += consumed;
         }
@@ -224,17 +287,28 @@ public static class VocalPhonemizer
         bool next = index + 1 < text.Length && text[index + 1] == letter;
         if (previous && next || previous && index > 1 && text[index - 2] == letter
             || next && index + 2 < text.Length && text[index + 2] == letter)
+        {
             return 3;
+        }
+
         return previous || next ? 2 : 1;
     }
 
     private static void AddRepetitions(
         List<int>? repetitions, int count, int sourceRepetition, CancellationToken cancellationToken)
     {
-        if (repetitions is null) return;
+        if (repetitions is null)
+        {
+            return;
+        }
+
         for (int i = 0; i < count; i++)
         {
-            if ((i & 255) == 0) cancellationToken.ThrowIfCancellationRequested();
+            if ((i & 255) == 0)
+            {
+                cancellationToken.ThrowIfCancellationRequested();
+            }
+
             repetitions.Add(sourceRepetition);
         }
     }
@@ -253,27 +327,48 @@ public static class VocalPhonemizer
         ReadOnlySpan<char> remaining = word.AsSpan(index);
         foreach (var (grapheme, phonemes) in EnglishClusters)
         {
-            if (!remaining.StartsWith(grapheme, StringComparison.Ordinal)) continue;
-            if (grapheme == "le" && (index == 0 || index + 2 != word.Length || IsEnglishVowel(word[index - 1])))
+            if (!remaining.StartsWith(grapheme, StringComparison.Ordinal))
+            {
                 continue;
+            }
+
+            if (grapheme == "le" && (index == 0 || index + 2 != word.Length || IsEnglishVowel(word[index - 1])))
+            {
+                continue;
+            }
+
             if (grapheme == "ow" && index + 2 == word.Length)
+            {
                 result.Add("oh");
+            }
             else if (grapheme == "th" && index > 0 && index + 2 < word.Length
                 && IsEnglishVowel(word[index - 1]) && IsEnglishVowel(word[index + 2]))
+            {
                 result.Add("dh");
+            }
             else
+            {
                 result.AddRange(phonemes);
+            }
+
             return grapheme.Length;
         }
 
         char c = word[index];
         char next = index + 1 < word.Length ? word[index + 1] : '\0';
         char prev = index > 0 ? word[index - 1] : '\0';
-        if (index > 0 && c == prev && !IsEnglishVowel(c)) return 1;
+        if (index > 0 && c == prev && !IsEnglishVowel(c))
+        {
+            return 1;
+        }
+
         if (IsEnglishVowel(c))
         {
             if (c == 'e' && index == word.Length - 1 && index >= 3 && !IsEnglishVowel(prev))
+            {
                 return 1;
+            }
+
             string? longVowel = c == prev || c == next ? null : MagicE(word, index, c);
             result.Add(longVowel ?? c switch
             {
@@ -293,8 +388,15 @@ public static class VocalPhonemizer
             'y' => index == 0 ? "y" : hasEnglishVowel ? "ee" : "eye",
             'z' => "z", _ => null,
         };
-        if (c == 'x') result.AddRange(["k", "s"]);
-        else if (phoneme is not null) result.Add(phoneme);
+        if (c == 'x')
+        {
+            result.AddRange(["k", "s"]);
+        }
+        else if (phoneme is not null)
+        {
+            result.Add(phoneme);
+        }
+
         return 1;
     }
 
@@ -314,10 +416,18 @@ public static class VocalPhonemizer
     private static string? MagicE(string word, int index, char vowel)
     {
         int consonant = index + 1;
-        if (consonant >= word.Length || IsEnglishVowel(word[consonant])) return null;
+        if (consonant >= word.Length || IsEnglishVowel(word[consonant]))
+        {
+            return null;
+        }
+
         bool endsWithE = consonant + 2 == word.Length && word[consonant + 1] == 'e';
         bool endsWithLe = consonant + 3 == word.Length && word[(consonant + 1)..] == "le";
-        if (!endsWithE && !endsWithLe) return null;
+        if (!endsWithE && !endsWithLe)
+        {
+            return null;
+        }
+
         return vowel switch
         {
             'a' => "ay", 'e' => "ee", 'i' => "eye", 'o' => "oh", 'u' => "oo", _ => null,
@@ -331,10 +441,22 @@ public static class VocalPhonemizer
         ReadOnlySpan<char> remaining = word.AsSpan(index);
         foreach (var (grapheme, phonemes) in GermanClusters)
         {
-            if (!remaining.StartsWith(grapheme, StringComparison.Ordinal)) continue;
+            if (!remaining.StartsWith(grapheme, StringComparison.Ordinal))
+            {
+                continue;
+            }
+
             if (grapheme is "sp" or "st" && index != 0
-                && !(index >= 3 && word.AsSpan(index - 3, 3).SequenceEqual("ver"))) continue;
-            if (grapheme == "er" && index + 2 != word.Length) continue;
+                && !(index >= 3 && word.AsSpan(index - 3, 3).SequenceEqual("ver")))
+            {
+                continue;
+            }
+
+            if (grapheme == "er" && index + 2 != word.Length)
+            {
+                continue;
+            }
+
             if (grapheme == "er")
             {
                 if (!hasPreviousVowel)
@@ -342,14 +464,21 @@ public static class VocalPhonemizer
                     result.Add("de-e-long");
                     result.Add("de-r-glide");
                 }
-                else result.Add("de-er");
+                else
+                {
+                    result.Add("de-er");
+                }
             }
             else if (grapheme == "ch")
             {
                 char previous = index > 0 ? word[index - 1] : '\0';
                 result.Add(previous is 'a' or 'o' or 'u' ? "ch" : "ich");
             }
-            else result.AddRange(phonemes);
+            else
+            {
+                result.AddRange(phonemes);
+            }
+
             return grapheme.Length;
         }
 
@@ -361,8 +490,16 @@ public static class VocalPhonemizer
             result.Add("de-final-t");
             return word.Length - index;
         }
-        if (index > 0 && c == prev && !IsGermanVowel(c)) return 1;
-        if (c == 'h' && IsGermanVowel(prev)) return 1;
+        if (index > 0 && c == prev && !IsGermanVowel(c))
+        {
+            return 1;
+        }
+
+        if (c == 'h' && IsGermanVowel(prev))
+        {
+            return 1;
+        }
+
         string? shortVowel = IsGermanVowel(c) && c != prev && c != next && HasShortVowelSpelling(word, index)
             ? GermanShortVowel(c) : null;
         string? phoneme = shortVowel ?? (c switch
@@ -384,15 +521,28 @@ public static class VocalPhonemizer
             '\u00df' => "s", 't' => IsGermanFinalT(word, index) ? "de-final-t" : "t",
             'v' => "f", 'w' => "v", 'z' => "ts", _ => null,
         });
-        if (c == 'x') result.AddRange(["k", "s"]);
-        else if (phoneme is not null) result.Add(phoneme);
+        if (c == 'x')
+        {
+            result.AddRange(["k", "s"]);
+        }
+        else if (phoneme is not null)
+        {
+            result.Add(phoneme);
+        }
+
         return 1;
     }
 
     private static bool IsGermanFinalT(string word, int index)
     {
         for (int position = index; position < word.Length; position++)
-            if (word[position] != 't') return false;
+        {
+            if (word[position] != 't')
+            {
+                return false;
+            }
+        }
+
         return true;
     }
 
@@ -408,21 +558,43 @@ public static class VocalPhonemizer
     private static string GermanE(string word, int index, bool hasPreviousVowel)
     {
         if (index == word.Length - 1)
+        {
             return word.Length == 1 ? "de-e-long" : "de-schwa";
+        }
         // Common -egel roots have a long first E and a reduced -el.
         if (word.AsSpan(index).StartsWith("egel", StringComparison.Ordinal)
-            && (index == 0 || !IsGermanVowel(word[index - 1]))) return "de-e-long";
+            && (index == 0 || !IsGermanVowel(word[index - 1])))
+        {
+            return "de-e-long";
+        }
+
         if (index >= 2 && word.AsSpan(index - 2).StartsWith("egel", StringComparison.Ordinal))
+        {
             return "de-schwa";
+        }
+
         if (index == 1 && word[0] == 'b' && word.AsSpan(2).StartsWith("sch", StringComparison.Ordinal))
+        {
             return "de-schwa";
+        }
+
         char next = word[index + 1];
-        if (next == 'h') return "de-e-long";
+        if (next == 'h')
+        {
+            return "de-e-long";
+        }
+
         if (index + 2 == word.Length && (next is 'n' or 'm'))
+        {
             return !hasPreviousVowel || GermanFullFinalE.Contains(word) ? "de-e-long" : "de-schwa";
+        }
+
         if (next == 'n' && hasPreviousVowel && index + 2 < word.Length
             && !IsGermanVowel(word[index + 2]))
+        {
             return "de-schwa";
+        }
+
         return "e";
     }
 
@@ -432,7 +604,11 @@ public static class VocalPhonemizer
 
     private static bool HasShortVowelSpelling(string word, int index)
     {
-        if (index + 2 >= word.Length) return false;
+        if (index + 2 >= word.Length)
+        {
+            return false;
+        }
+
         char first = word[index + 1], second = word[index + 2];
         return first == second && char.IsLetter(first) && !IsGermanVowel(first)
             || first == 'c' && second == 'k'
@@ -453,8 +629,16 @@ public static class VocalPhonemizer
     private static string GermanR(string word, int index)
     {
         char next = index + 1 < word.Length ? word[index + 1] : '\0';
-        if (next == 'r') return "de-r-trill";
-        if (IsGermanVocalicR(word, index)) return "de-r-glide";
+        if (next == 'r')
+        {
+            return "de-r-trill";
+        }
+
+        if (IsGermanVocalicR(word, index))
+        {
+            return "de-r-glide";
+        }
+
         char previous = index > 0 ? word[index - 1] : '\0';
         return previous == '\0' || IsGermanVowel(previous) ? "de-r-tap" : "de-r";
     }
@@ -463,7 +647,11 @@ public static class VocalPhonemizer
     {
         char previous = index > 0 ? word[index - 1] : '\0';
         char next = index + 1 < word.Length ? word[index + 1] : '\0';
-        if (next == 'r' || IsGermanVowel(next)) return false;
+        if (next == 'r' || IsGermanVowel(next))
+        {
+            return false;
+        }
+
         return IsGermanVowel(previous)
             || previous == 'h' && index > 1 && IsGermanVowel(word[index - 2]);
     }

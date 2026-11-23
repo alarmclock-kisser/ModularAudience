@@ -84,7 +84,9 @@ public sealed class VideoObj : IDisposable
     {
         ArgumentException.ThrowIfNullOrWhiteSpace(filePath);
         if (!File.Exists(filePath))
+        {
             throw new FileNotFoundException("Video file not found.", filePath);
+        }
 
         _filePath = Path.GetFullPath(filePath);
         _ffmpegPath = ffmpegPath ?? ResolveFfmpegPath();
@@ -92,26 +94,49 @@ public sealed class VideoObj : IDisposable
 
     private void EnsureProbed()
     {
-        if (_probeDone) return;
+        if (_probeDone)
+        {
+            return;
+        }
+
         ProbeAsync().GetAwaiter().GetResult();
     }
 
     public async Task ProbeAsync(CancellationToken cancellationToken = default)
     {
-        if (_probeDone) return;
+        if (_probeDone)
+        {
+            return;
+        }
+
         await _probeGate.WaitAsync(cancellationToken).ConfigureAwait(false);
         try
         {
-            if (_probeDone) return;
+            if (_probeDone)
+            {
+                return;
+            }
+
             string? ffprobePath = FindFfprobe();
             if (ffprobePath != null)
+            {
                 await ProbeWithFfprobeAsync(ffprobePath, cancellationToken).ConfigureAwait(false);
+            }
             else
+            {
                 await ProbeWithFfmpegAsync(cancellationToken).ConfigureAwait(false);
+            }
 
             if (_width <= 0 || _height <= 0 || _duration <= TimeSpan.Zero)
+            {
                 throw new InvalidDataException("FFmpeg could not determine the video's dimensions and duration.");
-            if (_frameRate <= 0) _frameRate = 30;
+            }
+
+            if (_frameRate <= 0)
+            {
+                _frameRate = 30;
+            }
+
             _probeDone = true;
         }
         finally { _probeGate.Release(); }
@@ -139,7 +164,11 @@ public sealed class VideoObj : IDisposable
             await process.WaitForExitAsync(timeout.Token).ConfigureAwait(false);
             string output = await outputTask.ConfigureAwait(false);
             string error = await errorTask.ConfigureAwait(false);
-            if (process.ExitCode != 0) throw new InvalidDataException($"ffprobe failed: {error.Trim()}");
+            if (process.ExitCode != 0)
+            {
+                throw new InvalidDataException($"ffprobe failed: {error.Trim()}");
+            }
+
             using JsonDocument document = JsonDocument.Parse(output);
             JsonElement root = document.RootElement;
             if (root.TryGetProperty("format", out JsonElement format)
@@ -147,19 +176,43 @@ public sealed class VideoObj : IDisposable
                 && double.TryParse(duration.GetString(), System.Globalization.NumberStyles.Float,
                     System.Globalization.CultureInfo.InvariantCulture, out double seconds)
                 && double.IsFinite(seconds) && seconds > 0)
+            {
                 _duration = TimeSpan.FromSeconds(seconds);
+            }
 
-            if (!root.TryGetProperty("streams", out JsonElement streams)) return;
+            if (!root.TryGetProperty("streams", out JsonElement streams))
+            {
+                return;
+            }
+
             foreach (JsonElement stream in streams.EnumerateArray())
             {
                 string? type = stream.TryGetProperty("codec_type", out JsonElement codecType) ? codecType.GetString() : null;
-                if (type == "audio") _hasAudio = true;
-                if (type != "video" || _width > 0) continue;
-                if (stream.TryGetProperty("width", out JsonElement width)) _width = width.GetInt32();
-                if (stream.TryGetProperty("height", out JsonElement height)) _height = height.GetInt32();
+                if (type == "audio")
+                {
+                    _hasAudio = true;
+                }
+
+                if (type != "video" || _width > 0)
+                {
+                    continue;
+                }
+
+                if (stream.TryGetProperty("width", out JsonElement width))
+                {
+                    _width = width.GetInt32();
+                }
+
+                if (stream.TryGetProperty("height", out JsonElement height))
+                {
+                    _height = height.GetInt32();
+                }
+
                 string rate = stream.TryGetProperty("avg_frame_rate", out JsonElement avg) ? avg.GetString() ?? "0/0" : "0/0";
                 if (!TryParseFrameRate(rate, out _frameRate) && stream.TryGetProperty("r_frame_rate", out JsonElement real))
+                {
                     TryParseFrameRate(real.GetString() ?? "0/0", out _frameRate);
+                }
             }
         }
         catch (OperationCanceledException) when (!cancellationToken.IsCancellationRequested)
@@ -204,8 +257,12 @@ public sealed class VideoObj : IDisposable
                 _height = int.Parse(dimensions.Groups[2].Value, System.Globalization.CultureInfo.InvariantCulture);
             }
             Match rate = Regex.Match(output, @"(?<rate>\d+(?:\.\d+)?)\s*fps\b");
-            if (rate.Success) double.TryParse(rate.Groups["rate"].Value, System.Globalization.NumberStyles.Float,
+            if (rate.Success)
+            {
+                double.TryParse(rate.Groups["rate"].Value, System.Globalization.NumberStyles.Float,
                 System.Globalization.CultureInfo.InvariantCulture, out _frameRate);
+            }
+
             _hasAudio = Regex.IsMatch(output, @"\bAudio:\s", RegexOptions.CultureInvariant);
         }
         catch (OperationCanceledException) when (!cancellationToken.IsCancellationRequested)
@@ -223,13 +280,25 @@ public sealed class VideoObj : IDisposable
     public async Task<Bitmap?> ExtractFrameAsync(double seconds, int maxWidth = 160, CancellationToken cancellationToken = default)
     {
         await ProbeAsync(cancellationToken).ConfigureAwait(false);
-        if (_disposed) return null;
-        if (maxWidth is < 16 or > 4096) throw new ArgumentOutOfRangeException(nameof(maxWidth));
+        if (_disposed)
+        {
+            return null;
+        }
+
+        if (maxWidth is < 16 or > 4096)
+        {
+            throw new ArgumentOutOfRangeException(nameof(maxWidth));
+        }
+
         seconds = Math.Clamp(seconds, 0, Duration.TotalSeconds);
 
         lock (_disposeLock)
         {
-            if (_disposed) return null;
+            if (_disposed)
+            {
+                return null;
+            }
+
             if (_frameCache.TryGetValue(seconds, out var cached))
             {
                 _frameCacheOrder.Remove(seconds);
@@ -241,10 +310,18 @@ public sealed class VideoObj : IDisposable
         await _decodeGate.WaitAsync(cancellationToken).ConfigureAwait(false);
         try
         {
-            if (_disposed) return null;
+            if (_disposed)
+            {
+                return null;
+            }
+
             lock (_disposeLock)
             {
-                if (_disposed) return null;
+                if (_disposed)
+                {
+                    return null;
+                }
+
                 if (_frameCache.TryGetValue(seconds, out var cached2))
                 {
                     _frameCacheOrder.Remove(seconds);
@@ -276,7 +353,10 @@ public sealed class VideoObj : IDisposable
             }
             catch { TryKill(process); throw; }
             await errorTask.ConfigureAwait(false);
-            if (process.ExitCode != 0 || ms.Length == 0) return null;
+            if (process.ExitCode != 0 || ms.Length == 0)
+            {
+                return null;
+            }
 
             ms.Position = 0;
             using var decoded = new Bitmap(ms);
@@ -289,7 +369,11 @@ public sealed class VideoObj : IDisposable
                 {
                     double oldest = _frameCacheOrder[0];
                     _frameCacheOrder.RemoveAt(0);
-                    if (_frameCache.TryGetValue(oldest, out var oldBmp)) oldBmp.Dispose();
+                    if (_frameCache.TryGetValue(oldest, out var oldBmp))
+                    {
+                        oldBmp.Dispose();
+                    }
+
                     _frameCache.Remove(oldest);
                 }
                 _frameCache[seconds] = bitmap;
@@ -309,7 +393,10 @@ public sealed class VideoObj : IDisposable
     public async Task<string?> ExtractAudioToTempWavAsync(IProgress<double>? progress, CancellationToken cancellationToken = default)
     {
         await ProbeAsync(cancellationToken).ConfigureAwait(false);
-        if (_disposed || !_hasAudio) return null;
+        if (_disposed || !_hasAudio)
+        {
+            return null;
+        }
 
         string tempPath = Path.Combine(Path.GetTempPath(), $"ModularAudienceVideoAudio_{Guid.NewGuid():N}.wav");
         var startInfo = new ProcessStartInfo
@@ -336,7 +423,9 @@ public sealed class VideoObj : IDisposable
                     if (line.StartsWith("out_time_ms=", StringComparison.Ordinal)
                         && long.TryParse(line.AsSpan("out_time_ms=".Length), out long microseconds)
                         && _duration.TotalSeconds > 0)
+                    {
                         progress?.Report(Math.Clamp(microseconds / 1_000_000d / _duration.TotalSeconds, 0, 1));
+                    }
                 }
                 await process.WaitForExitAsync(cancellationToken).ConfigureAwait(false);
             }
@@ -344,15 +433,25 @@ public sealed class VideoObj : IDisposable
 
             string error = await errorTask.ConfigureAwait(false);
             if (process.ExitCode != 0)
+            {
                 throw new InvalidOperationException($"FFmpeg audio extraction failed (exit code {process.ExitCode}): {error.Trim()}");
+            }
+
             if (!File.Exists(tempPath) || new FileInfo(tempPath).Length == 0)
+            {
                 throw new InvalidDataException("FFmpeg completed without producing an audio file.");
+            }
+
             progress?.Report(1);
             return tempPath;
         }
         catch
         {
-            try { if (File.Exists(tempPath)) File.Delete(tempPath); }
+            try { if (File.Exists(tempPath))
+                {
+                    File.Delete(tempPath);
+                }
+            }
             catch (IOException) { }
             catch (UnauthorizedAccessException) { }
             throw;
@@ -365,7 +464,10 @@ public sealed class VideoObj : IDisposable
         if (!string.IsNullOrEmpty(directory))
         {
             string candidate = Path.Combine(directory, "ffprobe.exe");
-            if (File.Exists(candidate)) return candidate;
+            if (File.Exists(candidate))
+            {
+                return candidate;
+            }
         }
         return null;
     }
@@ -388,12 +490,19 @@ public sealed class VideoObj : IDisposable
 
     private static void AddArguments(ProcessStartInfo startInfo, params string[] arguments)
     {
-        foreach (string argument in arguments) startInfo.ArgumentList.Add(argument);
+        foreach (string argument in arguments)
+        {
+            startInfo.ArgumentList.Add(argument);
+        }
     }
 
     private static void TryKill(Process process)
     {
-        try { if (!process.HasExited) process.Kill(entireProcessTree: true); }
+        try { if (!process.HasExited)
+            {
+                process.Kill(entireProcessTree: true);
+            }
+        }
         catch (InvalidOperationException) { }
     }
 
@@ -410,7 +519,10 @@ public sealed class VideoObj : IDisposable
                 foreach (var dir in Directory.EnumerateDirectories(ytdlpRoot, "ffmpeg-*", SearchOption.TopDirectoryOnly))
                 {
                     var candidate = Path.Combine(dir, "ffmpeg.exe");
-                    if (File.Exists(candidate)) return candidate;
+                    if (File.Exists(candidate))
+                    {
+                        return candidate;
+                    }
                 }
             }
         }
@@ -418,18 +530,28 @@ public sealed class VideoObj : IDisposable
 
         // 2. Beside entry assembly
         var local = Path.Combine(AppContext.BaseDirectory, "ffmpeg.exe");
-        if (File.Exists(local)) return local;
+        if (File.Exists(local))
+        {
+            return local;
+        }
 
         // 3. PATH
         var pathEnv = Environment.GetEnvironmentVariable("PATH") ?? string.Empty;
         foreach (var entry in pathEnv.Split(Path.PathSeparator))
         {
             var dir = entry.Trim().Trim('"');
-            if (string.IsNullOrWhiteSpace(dir) || !Path.IsPathFullyQualified(dir)) continue;
+            if (string.IsNullOrWhiteSpace(dir) || !Path.IsPathFullyQualified(dir))
+            {
+                continue;
+            }
+
             try
             {
                 var candidate = Path.Combine(dir, "ffmpeg.exe");
-                if (File.Exists(candidate)) return Path.GetFullPath(candidate);
+                if (File.Exists(candidate))
+                {
+                    return Path.GetFullPath(candidate);
+                }
             }
             catch { }
         }
@@ -443,7 +565,11 @@ public sealed class VideoObj : IDisposable
     {
         lock (_disposeLock)
         {
-            if (_disposed) return;
+            if (_disposed)
+            {
+                return;
+            }
+
             _disposed = true;
         }
 
@@ -451,7 +577,11 @@ public sealed class VideoObj : IDisposable
         {
             lock (_disposeLock)
             {
-                foreach (var kvp in _frameCache) kvp.Value.Dispose();
+                foreach (var kvp in _frameCache)
+                {
+                    kvp.Value.Dispose();
+                }
+
                 _frameCache.Clear();
                 _frameCacheOrder.Clear();
             }

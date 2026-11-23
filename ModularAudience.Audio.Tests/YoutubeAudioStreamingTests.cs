@@ -145,7 +145,10 @@ public sealed class YoutubeAudioStreamingTests
         {
             this.RequestUris.Add(request.RequestUri!);
             if (this.responseIndex >= responses.Length)
+            {
                 throw new InvalidOperationException("The redirect test handler ran out of responses.");
+            }
+
             return Task.FromResult(responses[this.responseIndex++]);
         }
     }

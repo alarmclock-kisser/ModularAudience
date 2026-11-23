@@ -2035,7 +2035,10 @@ namespace ModularAudience.Forms.Modules.Dialogs
 
             HashSet<MidiNoteData> toRemove = new(originals);
             if (this.selectionMoveMovedNotes is List<MidiNoteData> moved)
+            {
                 toRemove.UnionWith(moved);
+            }
+
             this.Track.Notes.RemoveAll(note => toRemove.Contains(note));
 
             List<MidiNoteData> replacements = [];

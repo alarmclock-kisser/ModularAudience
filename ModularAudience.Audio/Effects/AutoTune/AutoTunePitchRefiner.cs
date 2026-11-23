@@ -7,10 +7,18 @@ internal static class AutoTunePitchRefiner
     {
         double period = sampleRate / decodedHz;
         int lag = (int)Math.Round(period);
-        if (lag < 4) return decodedHz;
+        if (lag < 4)
+        {
+            return decodedHz;
+        }
+
         int pairs = Math.Max(32, (int)Math.Ceiling(3 * period));
         int needed = pairs + lag + 4;
-        if (mono.Length < needed) return decodedHz;
+        if (mono.Length < needed)
+        {
+            return decodedHz;
+        }
+
         int start = Math.Clamp(center - needed / 2, 0, mono.Length - needed);
         int best = lag;
         double minimum = double.PositiveInfinity;
@@ -33,7 +41,11 @@ internal static class AutoTunePitchRefiner
         double sum = 0;
         for (int i = 0; i < count; i++)
         {
-            if ((i & 1023) == 0) token.ThrowIfCancellationRequested();
+            if ((i & 1023) == 0)
+            {
+                token.ThrowIfCancellationRequested();
+            }
+
             double delta = (double)data[start + i] - data[start + i + lag];
             sum += delta * delta;
         }

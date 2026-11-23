@@ -11,7 +11,10 @@ public sealed class VocalEmphasisSyntaxStore
     {
         FilePath = filePath;
         var dir = Path.GetDirectoryName(filePath);
-        if (!string.IsNullOrEmpty(dir)) Directory.CreateDirectory(dir);
+        if (!string.IsNullOrEmpty(dir))
+        {
+            Directory.CreateDirectory(dir);
+        }
     }
 
     public static VocalEmphasisSyntaxStore Default() =>
@@ -21,7 +24,11 @@ public sealed class VocalEmphasisSyntaxStore
     {
         try
         {
-            if (!File.Exists(FilePath)) return VocalEmphasisSyntax.Default();
+            if (!File.Exists(FilePath))
+            {
+                return VocalEmphasisSyntax.Default();
+            }
+
             var json = File.ReadAllText(FilePath);
             return JsonSerializer.Deserialize<VocalEmphasisSyntax>(json) ?? VocalEmphasisSyntax.Default();
         }
@@ -34,7 +41,11 @@ public sealed class VocalEmphasisSyntaxStore
     public void Save(VocalEmphasisSyntax syntax)
     {
         var dir = Path.GetDirectoryName(FilePath);
-        if (!string.IsNullOrEmpty(dir)) Directory.CreateDirectory(dir);
+        if (!string.IsNullOrEmpty(dir))
+        {
+            Directory.CreateDirectory(dir);
+        }
+
         var json = JsonSerializer.Serialize(syntax, new JsonSerializerOptions { WriteIndented = true });
         File.WriteAllText(FilePath, json);
     }

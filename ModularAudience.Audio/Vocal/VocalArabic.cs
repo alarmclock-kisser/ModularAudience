@@ -27,10 +27,20 @@ internal static class VocalArabic
             cancellationToken.ThrowIfCancellationRequested();
             int start = i;
             bool arabic = IsArabic(word[i]);
-            while (i < word.Length && IsArabic(word[i]) == arabic) i++;
+            while (i < word.Length && IsArabic(word[i]) == arabic)
+            {
+                i++;
+            }
+
             string part = word[start..i];
-            if (arabic) AppendArabic(result, part, cancellationToken);
-            else AppendRoman(result, part, cancellationToken);
+            if (arabic)
+            {
+                AppendArabic(result, part, cancellationToken);
+            }
+            else
+            {
+                AppendRoman(result, part, cancellationToken);
+            }
         }
         StressPenultimateVowel(result);
         return result;
@@ -47,14 +57,22 @@ internal static class VocalArabic
         {
             result.Add(new("de-a-short"));
             assimilateArticle = IsSunLetter(word[2]);
-            if (!assimilateArticle) result.Add(new("l"));
+            if (!assimilateArticle)
+            {
+                result.Add(new("l"));
+            }
+
             i = 2;
         }
         while (i < word.Length)
         {
             cancellationToken.ThrowIfCancellationRequested();
             char letter = word[i++];
-            if (letter == 'ـ') continue;
+            if (letter == 'ـ')
+            {
+                continue;
+            }
+
             string? sound = letter switch
             {
                 'ا' or 'آ' or 'أ' or 'إ' or 'ٱ' or 'ى' => "a",
@@ -74,10 +92,22 @@ internal static class VocalArabic
             while (i < word.Length && word[i] is >= '\u064b' and <= '\u065f')
             {
                 char mark = word[i++];
-                if (mark == 'ّ') shadda = true;
-                else if (mark == 'ْ') sukun = true;
-                else if (mark is 'َ' or 'ُ' or 'ِ' or 'ً' or 'ٌ' or 'ٍ') vowelMark = mark;
-                else throw VocalMultilingualPhonemizer.Unsupported(mark.ToString(), VocalLanguage.Arabic);
+                if (mark == 'ّ')
+                {
+                    shadda = true;
+                }
+                else if (mark == 'ْ')
+                {
+                    sukun = true;
+                }
+                else if (mark is 'َ' or 'ُ' or 'ِ' or 'ً' or 'ٌ' or 'ٍ')
+                {
+                    vowelMark = mark;
+                }
+                else
+                {
+                    throw VocalMultilingualPhonemizer.Unsupported(mark.ToString(), VocalLanguage.Arabic);
+                }
             }
 
             if (letter is 'و' or 'ي')
@@ -88,9 +118,17 @@ internal static class VocalArabic
                 sound = letter == 'و' ? glide ? "w" : "oo" : glide ? "y" : "ee";
             }
             result.Add(new(sound!));
-            if (shadda || assimilateArticle) result.Add(new(sound!));
+            if (shadda || assimilateArticle)
+            {
+                result.Add(new(sound!));
+            }
+
             assimilateArticle = false;
-            if (letter == 'آ') result.Add(new(sound!));
+            if (letter == 'آ')
+            {
+                result.Add(new(sound!));
+            }
+
             if (vowelMark != '\0')
             {
                 result.Add(new(vowelMark switch
@@ -99,12 +137,21 @@ internal static class VocalArabic
                     'ُ' or 'ٌ' => "de-u-short",
                     _ => "de-i-short",
                 }));
-                if (vowelMark is 'ً' or 'ٌ' or 'ٍ') result.Add(new("n"));
-                if (vowelMark == 'ً' && i < word.Length && word[i] == 'ا') i++;
+                if (vowelMark is 'ً' or 'ٌ' or 'ٍ')
+                {
+                    result.Add(new("n"));
+                }
+
+                if (vowelMark == 'ً' && i < word.Length && word[i] == 'ا')
+                {
+                    i++;
+                }
             }
             else if (!sukun && !VocalPhonemeInventory.Get(sound!).IsVowel
                 && i < word.Length && IsArabicConsonant(word[i]))
+            {
                 result.Add(new("de-schwa"));
+            }
         }
     }
 
@@ -124,7 +171,11 @@ internal static class VocalArabic
             cancellationToken.ThrowIfCancellationRequested();
             char c = word[i];
             char next = i + 1 < word.Length ? word[i + 1] : '\0';
-            if (c == '\'') continue;
+            if (c == '\'')
+            {
+                continue;
+            }
+
             string? cluster = (c, next) switch
             {
                 ('s', 'h') => "sh", ('k', 'h') => "ch", ('g', 'h') => "de-r",
@@ -145,7 +196,10 @@ internal static class VocalArabic
                 _ => throw VocalMultilingualPhonemizer.Unsupported(c.ToString(), VocalLanguage.Arabic),
             };
             result.Add(new(sound));
-            if (c is 'ā' or 'ī' or 'ū') result.Add(new(sound));
+            if (c is 'ā' or 'ī' or 'ū')
+            {
+                result.Add(new(sound));
+            }
         }
     }
 
@@ -153,10 +207,17 @@ internal static class VocalArabic
     {
         var vowels = new List<int>();
         for (int i = 0; i < phones.Count; i++)
+        {
             if (VocalPhonemeInventory.Get(phones[i].Symbol).IsVowel
                 && (i == 0 || phones[i - 1].Symbol != phones[i].Symbol))
+            {
                 vowels.Add(i);
+            }
+        }
+
         if (vowels.Count > 0)
+        {
             VocalMultilingualPhonemizer.SetStress(phones, vowels.Count > 1 ? vowels[^2] : vowels[0]);
+        }
     }
 }

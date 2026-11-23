@@ -44,21 +44,38 @@ public static class MixProjectFile
                 if (file.Length == 0) { file.Write(Magic); Indices.TryRemove(path, out _); }
                 Index index;
                 if (!Indices.TryGetValue(path, out index!) || file.Length != index.Length)
+                {
                     index = Scan(file, token);
+                }
+
                 var previous = index.State is null ? null : JsonSerializer.Deserialize<Snapshot>(index.State);
-                if (previous?.Arrangement == state && previous.Sources.Order().SequenceEqual(sources.Select(source => source.Id).Order())) return;
+                if (previous?.Arrangement == state && previous.Sources.Order().SequenceEqual(sources.Select(source => source.Id).Order()))
+                {
+                    return;
+                }
                 // Discard any interrupted record before appending the next complete transaction.
                 file.SetLength(index.Length); file.Position = index.Length;
                 using var writer = new BinaryWriter(file, Encoding.UTF8, true);
                 foreach (var source in sources)
                 {
                     token.ThrowIfCancellationRequested();
-                    if (index.Assets.ContainsKey(source.Id)) continue;
+                    if (index.Assets.ContainsKey(source.Id))
+                    {
+                        continue;
+                    }
+
                     if (source.SampleRate is < 1000 or > 768000 || source.Channels is < 1 or > 64
                         || source.Data.Length % source.Channels != 0 || source.Data.Any(v => !float.IsFinite(v)))
+                    {
                         throw new InvalidDataException("Invalid source audio.");
+                    }
+
                     byte[] metadata = JsonSerializer.SerializeToUtf8Bytes(source);
-                    if (metadata.Length > 16 * 1024 * 1024) throw new InvalidDataException("Project asset metadata exceeds 16 MiB.");
+                    if (metadata.Length > 16 * 1024 * 1024)
+                    {
+                        throw new InvalidDataException("Project asset metadata exceeds 16 MiB.");
+                    }
+
                     long length = 4L + metadata.Length + source.Data.LongLength * 4;
                     writer.Write((byte)1); writer.Write(length); writer.Write(metadata.Length); writer.Write(metadata);
                     long offset = file.Position;
@@ -88,31 +105,59 @@ public static class MixProjectFile
     private static Index Scan(FileStream file, CancellationToken token)
     {
         file.Position = 0; byte[] header = new byte[Magic.Length]; file.ReadExactly(header);
-        if (!header.SequenceEqual(Magic)) throw new InvalidDataException("Unsupported mix project format. Save using the current journal format.");
+        if (!header.SequenceEqual(Magic))
+        {
+            throw new InvalidDataException("Unsupported mix project format. Save using the current journal format.");
+        }
+
         var index = new Index(); using var reader = new BinaryReader(file, Encoding.UTF8, true);
         while (file.Position + 9 <= file.Length)
         {
             token.ThrowIfCancellationRequested();
             byte type = reader.ReadByte(); long length = reader.ReadInt64(), start = file.Position;
-            if (length < 0 || length > file.Length - start - 8) break;
+            if (length < 0 || length > file.Length - start - 8)
+            {
+                break;
+            }
+
             file.Position = start + length;
-            if (reader.ReadInt64() != Footer) break;
+            if (reader.ReadInt64() != Footer)
+            {
+                break;
+            }
+
             long end = file.Position; file.Position = start;
             if (type == 1)
             {
                 int size = reader.ReadInt32();
-                if (size <= 0 || size > length - 4 || size > 16 * 1024 * 1024) throw new InvalidDataException("Invalid project asset metadata.");
+                if (size <= 0 || size > length - 4 || size > 16 * 1024 * 1024)
+                {
+                    throw new InvalidDataException("Invalid project asset metadata.");
+                }
+
                 var source = JsonSerializer.Deserialize<MixSource>(reader.ReadBytes(size)) ?? throw new InvalidDataException("Invalid source.");
                 long count = (length - 4 - size) / 4;
-                if ((length - 4 - size) % 4 != 0 || count > int.MaxValue) throw new InvalidDataException("Invalid project audio size.");
+                if ((length - 4 - size) % 4 != 0 || count > int.MaxValue)
+                {
+                    throw new InvalidDataException("Invalid project audio size.");
+                }
+
                 index.Assets[source.Id] = (source, file.Position, (int)count);
             }
             else if (type == 2)
             {
-                if (length > int.MaxValue) throw new InvalidDataException("Project metadata is too large.");
+                if (length > int.MaxValue)
+                {
+                    throw new InvalidDataException("Project metadata is too large.");
+                }
+
                 index.State = Encoding.UTF8.GetString(reader.ReadBytes((int)length));
             }
-            else throw new InvalidDataException("Unknown mix project record.");
+            else
+            {
+                throw new InvalidDataException("Unknown mix project record.");
+            }
+
             file.Position = end; index.Length = end;
         }
         return index;
@@ -131,7 +176,11 @@ public static class MixProjectFile
                 foreach (var id in snapshot.Sources)
                 {
                     token.ThrowIfCancellationRequested();
-                    if (!index.Assets.TryGetValue(id, out var asset)) throw new InvalidDataException("Missing project audio.");
+                    if (!index.Assets.TryGetValue(id, out var asset))
+                    {
+                        throw new InvalidDataException("Missing project audio.");
+                    }
+
                     var source = JsonSerializer.Deserialize<MixSource>(JsonSerializer.Serialize(asset.Source))!;
                     source.Data = new float[asset.Count]; file.Position = asset.Offset;
                     byte[] buffer = new byte[65536 * 4];

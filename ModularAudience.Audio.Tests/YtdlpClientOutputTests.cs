@@ -28,7 +28,10 @@ public sealed class YtdlpClientOutputTests
                 {
                     Assert.AreEqual(expected, args.FullPath);
                     using (var exclusive = new FileStream(args.FullPath, FileMode.Open, FileAccess.ReadWrite, FileShare.None))
+                    {
                         Assert.AreEqual(new FileInfo(source).Length, exclusive.Length, "The entire file must be present before Created.");
+                    }
+
                     Assert.IsTrue(AudioObj.WriteBpmTagToFile(args.FullPath, 128));
                     tagged.TrySetResult();
                 }

@@ -30,43 +30,84 @@ public sealed class VocalSynthSettings
 
     public void Validate()
     {
-        if (SampleRate < 8000 || SampleRate > 192000) throw new ArgumentOutOfRangeException(nameof(SampleRate));
-        if (Channels < 1 || Channels > 2) throw new ArgumentOutOfRangeException(nameof(Channels));
-        if (!double.IsFinite(Speed) || Speed <= 0 || Speed > 4) throw new ArgumentOutOfRangeException(nameof(Speed));
+        if (SampleRate < 8000 || SampleRate > 192000)
+        {
+            throw new ArgumentOutOfRangeException(nameof(SampleRate));
+        }
+
+        if (Channels < 1 || Channels > 2)
+        {
+            throw new ArgumentOutOfRangeException(nameof(Channels));
+        }
+
+        if (!double.IsFinite(Speed) || Speed <= 0 || Speed > 4)
+        {
+            throw new ArgumentOutOfRangeException(nameof(Speed));
+        }
+
         if (!double.IsFinite(BasePitchHz) || BasePitchHz < 20 || BasePitchHz >= SampleRate * 0.2)
+        {
             throw new ArgumentOutOfRangeException(nameof(BasePitchHz));
+        }
+
         if (!double.IsFinite(FormantScale) || FormantScale <= 0 || FormantScale > 3)
+        {
             throw new ArgumentOutOfRangeException(nameof(FormantScale));
+        }
+
         ValidateUnitRange(Breathiness, nameof(Breathiness));
         ValidateUnitRange(Roughness, nameof(Roughness));
         ValidateUnitRange(Voicing, nameof(Voicing));
         ValidateUnitRange(Noise, nameof(Noise));
         if (!double.IsFinite(VibratoCents) || VibratoCents < 0 || VibratoCents > 200)
+        {
             throw new ArgumentOutOfRangeException(nameof(VibratoCents));
+        }
+
         if (!double.IsFinite(VibratoHz) || VibratoHz < 0 || VibratoHz > 40)
+        {
             throw new ArgumentOutOfRangeException(nameof(VibratoHz));
-        if (string.IsNullOrWhiteSpace(Text)) throw new ArgumentException("Text must not be empty.", nameof(Text));
+        }
+
+        if (string.IsNullOrWhiteSpace(Text))
+        {
+            throw new ArgumentException("Text must not be empty.", nameof(Text));
+        }
+
         if (UseWindowsSpeech && Language is not (VocalLanguage.English or VocalLanguage.German))
+        {
             throw new ArgumentException("Windows speech is available for English and German only.", nameof(Language));
+        }
+
         if (UseWindowsSpeech && Speed < 0.5)
+        {
             throw new ArgumentOutOfRangeException(nameof(Speed), "Windows speech speed must be at least 0.5.");
+        }
+
         if (!double.IsFinite(SingingMidiSemitoneOffset)
             || SingingMidiSemitoneOffset < -16
             || SingingMidiSemitoneOffset > 16)
+        {
             throw new ArgumentOutOfRangeException(nameof(SingingMidiSemitoneOffset));
+        }
+
         VocalCustomSampleMapper.ValidateMappings(CustomSampleMappings);
         if (Singing && SingingMidiFile is not null)
         {
             if (SingingMidiTrackIndex is null
                 || !SingingMidiFile.Tracks.Any(track => track.Index == SingingMidiTrackIndex.Value))
+            {
                 throw new ArgumentException("Select an existing MIDI track for singing.", nameof(SingingMidiTrackIndex));
+            }
         }
     }
 
     private static void ValidateUnitRange(double value, string name)
     {
         if (!double.IsFinite(value) || value < 0 || value > 1)
+        {
             throw new ArgumentOutOfRangeException(name);
+        }
     }
 
     public VocalSynthSettings Clone() => new()

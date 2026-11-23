@@ -41,11 +41,17 @@ internal static class YtdlpProcess
             WorkingDirectory = workingDirectory
         };
         foreach (var argument in arguments)
+        {
             start.ArgumentList.Add(argument);
+        }
+
         using var sessionScratch = new YtdlpSessionScratch(start, workingDirectory, progress, cookieContents);
         using var process = new Process { StartInfo = start };
         if (!process.Start())
+        {
             throw new InvalidOperationException("Unable to start yt-dlp.");
+        }
+
         using var cancellation = token.Register(() => Kill(process));
         var stdout = outputLine is null
             ? ReadAsync(process.StandardOutput, false, reportOutput ? progress : null, process, token)
@@ -63,7 +69,11 @@ internal static class YtdlpProcess
                 catch (OperationCanceledException) when (token.IsCancellationRequested) { throw; }
                 catch (Exception diagnosticError) { diagnosis = "Network diagnosis could not complete: " + diagnosticError.Message; }
                 token.ThrowIfCancellationRequested();
-                if (diagnosis.Length > 0) progress?.Report("Warning: " + diagnosis);
+                if (diagnosis.Length > 0)
+                {
+                    progress?.Report("Warning: " + diagnosis);
+                }
+
                 throw new YtdlpProcessException(process.ExitCode, error, diagnosis);
             }
             return await stdout;
@@ -95,18 +105,29 @@ internal static class YtdlpProcess
                     char character = buffer[index];
                     if (character is '\r' or '\n')
                     {
-                        if (line.Length > 0) await outputLine(line.ToString(), token);
+                        if (line.Length > 0)
+                        {
+                            await outputLine(line.ToString(), token);
+                        }
+
                         line.Clear();
                     }
                     else
                     {
                         if (line.Length >= maximumLineCharacters)
+                        {
                             throw new InvalidDataException("A yt-dlp metadata entry exceeded the allowed size.");
+                        }
+
                         line.Append(character);
                     }
                 }
             }
-            if (line.Length > 0) await outputLine(line.ToString(), token);
+            if (line.Length > 0)
+            {
+                await outputLine(line.ToString(), token);
+            }
+
             return string.Empty;
         }
         catch { Kill(process); throw; }
@@ -128,12 +149,20 @@ internal static class YtdlpProcess
                 {
                     capture.Append(buffer, 0, count);
                     if (capture.Length > MaximumOutputCharacters)
+                    {
                         throw new InvalidDataException("yt-dlp output exceeded the allowed limit.");
+                    }
                 }
-                if (lines is not null) ReportLines(buffer, count, line, lines);
+                if (lines is not null)
+                {
+                    ReportLines(buffer, count, line, lines);
+                }
             }
             if (line.Length > 0)
+            {
                 lines?.Report(YtdlpDiagnosticRedactor.Redact(line.ToString()));
+            }
+
             return capture.ToString();
         }
         catch
@@ -151,11 +180,16 @@ internal static class YtdlpProcess
             if (character is '\r' or '\n')
             {
                 if (line.Length > 0)
+                {
                     progress.Report(YtdlpDiagnosticRedactor.Redact(line.ToString()));
+                }
+
                 line.Clear();
             }
             if (!char.IsControl(character) && line.Length < 1024)
+            {
                 line.Append(character);
+            }
         }
     }
 
@@ -165,7 +199,11 @@ internal static class YtdlpProcess
         {
             string safe = YtdlpDiagnosticRedactor.Redact(value);
             capture.AppendLine(safe);
-            if (capture.Length > MaximumErrorCharacters) capture.Remove(0, capture.Length - MaximumErrorCharacters);
+            if (capture.Length > MaximumErrorCharacters)
+            {
+                capture.Remove(0, capture.Length - MaximumErrorCharacters);
+            }
+
             progress?.Report(safe);
         }
     }
@@ -175,7 +213,9 @@ internal static class YtdlpProcess
         try
         {
             if (!process.HasExited)
+            {
                 process.Kill(entireProcessTree: true);
+            }
         }
         catch (InvalidOperationException) { }
         catch (System.ComponentModel.Win32Exception) { }

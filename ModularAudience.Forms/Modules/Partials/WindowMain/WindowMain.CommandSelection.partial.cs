@@ -40,7 +40,9 @@ public partial class WindowMain
     internal static void RefreshCommandSelection()
     {
         if (Instance is { IsDisposed: false, Disposing: false, scanControls: not null } main)
+        {
             WindowMainStaticHelpers.InvokeIfRequired(main, main.UpdateTrackDependentUI);
+        }
     }
 
     internal static AudioObj? ResolveSelectedAudioForCommands() => CommandSelection.Resolve(

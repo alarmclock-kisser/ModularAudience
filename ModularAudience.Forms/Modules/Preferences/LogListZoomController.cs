@@ -23,7 +23,11 @@ internal sealed class LogListZoomController : IDisposable
     {
         size = float.IsFinite(size) ? Math.Clamp(size, ApplicationPreferences.MinimumLogFontSize, ApplicationPreferences.MaximumLogFontSize)
             : ApplicationPreferences.DefaultLogFontSize;
-        if (this.ownedFont is not null && Math.Abs(this.Size - size) < 0.01f) return;
+        if (this.ownedFont is not null && Math.Abs(this.Size - size) < 0.01f)
+        {
+            return;
+        }
+
         bool integral = this.list.IntegralHeight;
         Rectangle bounds = this.list.Bounds;
         Font? previous = this.ownedFont;
@@ -42,20 +46,34 @@ internal sealed class LogListZoomController : IDisposable
     {
         float previous = this.Size;
         this.Apply(previous + Math.Sign(delta));
-        if (Math.Abs(previous - this.Size) >= 0.01f) this.Changed?.Invoke(this, EventArgs.Empty);
+        if (Math.Abs(previous - this.Size) >= 0.01f)
+        {
+            this.Changed?.Invoke(this, EventArgs.Empty);
+        }
     }
 
     private void MouseWheel(object? sender, MouseEventArgs e)
     {
-        if ((Control.ModifierKeys & Keys.Control) == 0) return;
+        if ((Control.ModifierKeys & Keys.Control) == 0)
+        {
+            return;
+        }
+
         this.Zoom(e.Delta);
-        if (e is HandledMouseEventArgs handled) handled.Handled = true;
+        if (e is HandledMouseEventArgs handled)
+        {
+            handled.Handled = true;
+        }
     }
 
     public void Dispose()
     {
         this.list.MouseWheel -= this.MouseWheel;
-        if (!this.list.IsDisposed && !this.list.Disposing) this.list.Font = this.originalFont;
+        if (!this.list.IsDisposed && !this.list.Disposing)
+        {
+            this.list.Font = this.originalFont;
+        }
+
         this.ownedFont?.Dispose();
         this.ownedFont = null;
     }

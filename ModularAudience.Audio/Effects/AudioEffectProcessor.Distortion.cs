@@ -25,13 +25,29 @@ public static partial class AudioEffectProcessor
             double levels = Math.Pow(2, context.Automation.Value("Bits", frame) - 1), drive = DbToGain(context.Automation.Value("DriveDb", frame));
             int channel = i % context.Channels;
             double value = Math.Clamp(source[i] * drive, -1, 1);
-            if (mode == 2) value = Math.CopySign(Math.Log(1 + 255 * Math.Abs(value)) / Math.Log(256), value);
-            if (mode == 3) value += errors[channel] * 0.85;
-            if (settings.Flag("Dither")) value += (Noise() - Noise()) / levels;
+            if (mode == 2)
+            {
+                value = Math.CopySign(Math.Log(1 + 255 * Math.Abs(value)) / Math.Log(256), value);
+            }
+
+            if (mode == 3)
+            {
+                value += errors[channel] * 0.85;
+            }
+
+            if (settings.Flag("Dither"))
+            {
+                value += (Noise() - Noise()) / levels;
+            }
+
             double quantized = (mode == 1 ? Math.Truncate(value * levels) : Math.Round(value * levels)) / levels;
             quantized = Math.Clamp(quantized, -1, 1 - 1 / levels);
             errors[channel] = Math.Clamp(value - quantized, -1 / levels, 1 / levels);
-            if (mode == 2) quantized = Math.CopySign((Math.Pow(256, Math.Abs(quantized)) - 1) / 255, quantized);
+            if (mode == 2)
+            {
+                quantized = Math.CopySign((Math.Pow(256, Math.Abs(quantized)) - 1) / 255, quantized);
+            }
+
             output[i] = (float)MixSample(source[i], quantized, context, frame);
         }
         return new(output, context.Channels);
@@ -42,7 +58,11 @@ public static partial class AudioEffectProcessor
         int channels = context.Channels, frames = source.Length / channels;
         double rate = Math.Min(context.Rate, settings["RateHz"]);
         bool automatedRate = context.Automation.Has("RateHz");
-        if (rate == context.Rate && !automatedRate) return new(source, channels);
+        if (rate == context.Rate && !automatedRate)
+        {
+            return new(source, channels);
+        }
+
         float[] filtered = source;
         if (settings.Flag("AntiAlias"))
         {
@@ -69,11 +89,14 @@ public static partial class AudioEffectProcessor
         {
             context.Check(frame, frames);
             if (automatedRate)
+            {
                 while (next <= frame)
                 {
                     previous = next;
                     next += context.Rate / Math.Min(context.Rate, context.Automation.Value("RateHz", previous));
                 }
+            }
+
             double position = automatedRate ? previous : Math.Floor(frame / step) * step;
             int before = Math.Clamp((int)Math.Floor(position), 0, frames - 1);
             int after = Math.Clamp((int)Math.Floor(automatedRate ? next : position + step), before, frames - 1);
@@ -102,10 +125,17 @@ public static partial class AudioEffectProcessor
         double Shape(double value)
         {
             double x = value * drive;
-            if (tape) return (Math.Tanh(x + bias) - Math.Tanh(bias)) / Math.Max(0.1, Math.Tanh(drive));
+            if (tape)
+            {
+                return (Math.Tanh(x + bias) - Math.Tanh(bias)) / Math.Max(0.1, Math.Tanh(drive));
+            }
+
             int mode = settings.Choice("Mode");
             if (settings.Effect == AudioEffectKind.Overdrive)
+            {
                 return mode switch { 1 => Math.Clamp(x, -1, 1), 2 => 1 - Math.Abs(((x + 1) % 4 + 4) % 4 - 2), _ => x / (1 + Math.Abs(x)) * 1.5 };
+            }
+
             return mode switch
             {
                 1 => Math.Atan(x) / Math.Atan(drive),
@@ -121,11 +151,18 @@ public static partial class AudioEffectProcessor
             if (context.Automation.Has("ToneHz"))
             {
                 Biquad coefficients = Biquad.LowPass(context.Automation.Value("ToneHz", frame), context.Rate);
-                for (int channel = 0; channel < channels; channel++) tone[channel].Reconfigure(coefficients);
+                for (int channel = 0; channel < channels; channel++)
+                {
+                    tone[channel].Reconfigure(coefficients);
+                }
             }
             double wowDepth = tape ? context.Automation.Value("WowDepthMs", frame) * context.Rate / 1000 : 0;
             double phase = tape && context.Automation.Has("WowRateHz") ? wowPhase : tape ? frame * 2 * Math.PI * settings["WowRateHz"] / context.Rate : 0;
-            if (tape && context.Automation.Has("WowRateHz")) wowPhase = (wowPhase + 2 * Math.PI * context.Automation.Value("WowRateHz", frame) / context.Rate) % (2 * Math.PI);
+            if (tape && context.Automation.Has("WowRateHz"))
+            {
+                wowPhase = (wowPhase + 2 * Math.PI * context.Automation.Value("WowRateHz", frame) / context.Rate) % (2 * Math.PI);
+            }
+
             for (int channel = 0; channel < channels; channel++)
             {
                 int index = frame * channels + channel;
@@ -138,7 +175,10 @@ public static partial class AudioEffectProcessor
                 }
                 double shaped = 0;
                 for (int step = 1; step <= 4; step++)
+                {
                     shaped = antiAlias[channel].Process(Shape(previous[channel] + (input - previous[channel]) * step / 4));
+                }
+
                 previous[channel] = input;
                 shaped = tone[channel].Process(shaped);
                 if (tape)
@@ -147,7 +187,10 @@ public static partial class AudioEffectProcessor
                     if (maximumWowDepth > 0)
                     {
                         double modulation = (1 + Math.Sin(phase)) * wowDepth;
-                        wow[channel].Write(shaped); if (wowDepth > 0) shaped = wow[channel].Read(1 + modulation);
+                        wow[channel].Write(shaped); if (wowDepth > 0)
+                        {
+                            shaped = wow[channel].Read(1 + modulation);
+                        }
                     }
                 }
                 output[index] = (float)MixSample(source[index], shaped, context, frame);

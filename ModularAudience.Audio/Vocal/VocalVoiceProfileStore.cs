@@ -19,14 +19,21 @@ public sealed class VocalVoiceProfileStore
     public IReadOnlyList<VocalVoiceProfile> LoadAll()
     {
         var result = new List<VocalVoiceProfile>();
-        if (!Directory.Exists(DirectoryPath)) return result;
+        if (!Directory.Exists(DirectoryPath))
+        {
+            return result;
+        }
+
         foreach (var file in Directory.EnumerateFiles(DirectoryPath, "*.json"))
         {
             try
             {
                 var json = File.ReadAllText(file);
                 var profile = JsonSerializer.Deserialize<VocalVoiceProfile>(json);
-                if (profile is not null) result.Add(profile);
+                if (profile is not null)
+                {
+                    result.Add(profile);
+                }
             }
             catch { /* skip corrupt */ }
         }
@@ -47,7 +54,11 @@ public sealed class VocalVoiceProfileStore
     public bool Delete(string name)
     {
         var path = FilePathFor(name);
-        if (!File.Exists(path)) return false;
+        if (!File.Exists(path))
+        {
+            return false;
+        }
+
         File.Delete(path);
         return true;
     }
@@ -55,9 +66,17 @@ public sealed class VocalVoiceProfileStore
     public bool Rename(string oldName, string newName)
     {
         var oldPath = FilePathFor(oldName);
-        if (!File.Exists(oldPath)) return false;
+        if (!File.Exists(oldPath))
+        {
+            return false;
+        }
+
         var profile = JsonSerializer.Deserialize<VocalVoiceProfile>(File.ReadAllText(oldPath));
-        if (profile is null) return false;
+        if (profile is null)
+        {
+            return false;
+        }
+
         profile.Name = newName;
         Save(profile);
         if (!string.Equals(oldPath, FilePathFor(newName), StringComparison.OrdinalIgnoreCase))
@@ -71,7 +90,11 @@ public sealed class VocalVoiceProfileStore
     {
         var invalid = Path.GetInvalidFileNameChars();
         var cleaned = new string(name.Select(c => invalid.Contains(c) ? '_' : c).ToArray()).Trim();
-        if (string.IsNullOrWhiteSpace(cleaned)) cleaned = "profile";
+        if (string.IsNullOrWhiteSpace(cleaned))
+        {
+            cleaned = "profile";
+        }
+
         return cleaned;
     }
 }

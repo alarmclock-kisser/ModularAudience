@@ -20,7 +20,10 @@ internal static class AutoTunePhaseVocoder
             for (int i = 0; i < size; i++)
             {
                 long frame = center - size / 2 + i;
-                if (frame >= 0 && frame < frames) weights[(int)frame] += (float)(window[i] * window[i]);
+                if (frame >= 0 && frame < frames)
+                {
+                    weights[(int)frame] += (float)(window[i] * window[i]);
+                }
             }
         }
         long totalWindows = channels * ((long)lastCenter / hop + 1), finished = 0;
@@ -62,7 +65,11 @@ internal static class AutoTunePhaseVocoder
                 for (int bin = 0; bin < bins; bin++)
                 {
                     int target = (int)Math.Round(bin * ratio);
-                    if (target >= bins) continue; // Discard above-Nyquist content instead of folding it.
+                    if (target >= bins)
+                    {
+                        continue; // Discard above-Nyquist content instead of folding it.
+                    }
+
                     double amplitude = magnitude[bin];
                     if (formants > 0)
                     {
@@ -85,7 +92,10 @@ internal static class AutoTunePhaseVocoder
                             : Wrap(synthPhase[bin] + mappedFrequency[bin] / mappedMagnitude[bin] * hop);
                         Complex value = Complex.FromPolarCoordinates(mappedMagnitude[bin], synthPhase[bin]);
                         spectrum[bin] = bin is 0 || bin == bins - 1 ? new Complex(value.Real, 0) : value;
-                        if (bin > 0 && bin < bins - 1) spectrum[size - bin] = Complex.Conjugate(value);
+                        if (bin > 0 && bin < bins - 1)
+                        {
+                            spectrum[size - bin] = Complex.Conjugate(value);
+                        }
                     }
                     wasPresent[bin] = present;
                 }
@@ -94,16 +104,25 @@ internal static class AutoTunePhaseVocoder
                 for (int i = 0; i < size; i++)
                 {
                     long frame = center - size / 2 + i;
-                    if (frame >= 0 && frame < frames) output[(int)frame * channels + channel] += (float)(spectrum[i].Real * window[i]);
+                    if (frame >= 0 && frame < frames)
+                    {
+                        output[(int)frame * channels + channel] += (float)(spectrum[i].Real * window[i]);
+                    }
                 }
                 first = false;
                 long completed = Interlocked.Increment(ref finished);
-                if ((completed & 15) == 0) progress?.Report(0.55 + 0.35 * completed / totalWindows);
+                if ((completed & 15) == 0)
+                {
+                    progress?.Report(0.55 + 0.35 * completed / totalWindows);
+                }
             }
         }
         if (channels == 1 || maximumThreads == 1)
         {
-            for (int channel = 0; channel < channels; channel++) RenderChannel(channel);
+            for (int channel = 0; channel < channels; channel++)
+            {
+                RenderChannel(channel);
+            }
         }
         else
         {
@@ -115,9 +134,16 @@ internal static class AutoTunePhaseVocoder
         }
         for (int frame = 0; frame < frames; frame++)
         {
-            if ((frame & 2047) == 0) token.ThrowIfCancellationRequested();
+            if ((frame & 2047) == 0)
+            {
+                token.ThrowIfCancellationRequested();
+            }
+
             double weight = Math.Max(1e-12, weights[frame]);
-            for (int channel = 0; channel < channels; channel++) output[frame * channels + channel] /= (float)weight;
+            for (int channel = 0; channel < channels; channel++)
+            {
+                output[frame * channels + channel] /= (float)weight;
+            }
         }
         return output;
     }

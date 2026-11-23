@@ -25,12 +25,36 @@ public sealed class EffectCurveProcessorTests
     {
         AudioEffectSettings settings = Defaults(effect); EffectCurveTarget target = EffectCurveTargets.ForEffect(effect).Single(target => target.Key == key);
         double value = target.Minimum + (target.Maximum - target.Minimum) * 0.3;
-        if (target.Integral) value = Math.Round(value);
-        if (key == "RateHz" && effect == AudioEffectKind.SampleRateReducer) value = 4000;
-        if (key == "MinimumHz") settings = settings.With(("MaximumHz", 16000));
-        if (key == "MaximumHz") settings = settings.With(("MinimumHz", 20));
-        if (effect == AudioEffectKind.HumRemoval && key == "FrequencyHz") settings = settings.With(("Mains", 2));
-        if (effect == AudioEffectKind.NoiseReduction && key == "NoiseFloorDb") settings = settings.With(("Profile", 2));
+        if (target.Integral)
+        {
+            value = Math.Round(value);
+        }
+
+        if (key == "RateHz" && effect == AudioEffectKind.SampleRateReducer)
+        {
+            value = 4000;
+        }
+
+        if (key == "MinimumHz")
+        {
+            settings = settings.With(("MaximumHz", 16000));
+        }
+
+        if (key == "MaximumHz")
+        {
+            settings = settings.With(("MinimumHz", 20));
+        }
+
+        if (effect == AudioEffectKind.HumRemoval && key == "FrequencyHz")
+        {
+            settings = settings.With(("Mains", 2));
+        }
+
+        if (effect == AudioEffectKind.NoiseReduction && key == "NoiseFloorDb")
+        {
+            settings = settings.With(("Profile", 2));
+        }
+
         float[] input = Signal(8000, 0.35); float[] before = (float[])input.Clone();
         AudioEffectResult expected = await AudioEffectProcessor.ProcessAsync(input, 8000, 2, settings.With((key, value)));
         AudioEffectSettings curved = WithCurve(settings, key, new() { StartValue = value, Curve = new() { Equation = "0" } });
@@ -46,10 +70,26 @@ public sealed class EffectCurveProcessorTests
     public async Task EverySupportedEffect_AcceptsSimultaneousPeriodicParameterCurvesWithoutChangingInput(AudioEffectKind effect)
     {
         AudioEffectSettings settings = Defaults(effect);
-        if (effect == AudioEffectKind.PitchShift) settings = settings.With(("Semitones", 12));
-        if (effect == AudioEffectKind.TimeStretch) settings = settings.With(("Factor", 0.5));
-        if (effect == AudioEffectKind.HumRemoval) settings = settings.With(("Mains", 2));
-        if (effect == AudioEffectKind.NoiseReduction) settings = settings.With(("Profile", 2));
+        if (effect == AudioEffectKind.PitchShift)
+        {
+            settings = settings.With(("Semitones", 12));
+        }
+
+        if (effect == AudioEffectKind.TimeStretch)
+        {
+            settings = settings.With(("Factor", 0.5));
+        }
+
+        if (effect == AudioEffectKind.HumRemoval)
+        {
+            settings = settings.With(("Mains", 2));
+        }
+
+        if (effect == AudioEffectKind.NoiseReduction)
+        {
+            settings = settings.With(("Profile", 2));
+        }
+
         var curves = EffectCurveTargets.ForEffect(effect).ToDictionary(target => target.Key, target => new EffectParameterCurve
         {
             StartValue = target.NeutralValue, Curve = new() { Equation = "0.5+0.5*sin(2*pi*(f*x+p))", Cycles = 2 }
@@ -59,7 +99,10 @@ public sealed class EffectCurveProcessorTests
         AudioEffectResult result = await AudioEffectProcessor.ProcessAsync(input, 8000, 2, settings);
         Assert.IsGreaterThan(0, result.Samples.Length, effect.ToString()); Assert.AreEqual(0, result.Samples.Length % 2);
         Assert.IsTrue(result.Samples.All(float.IsFinite), effect.ToString()); CollectionAssert.AreEqual(before, input);
-        if (effect is not (AudioEffectKind.PitchShift or AudioEffectKind.TimeStretch or AudioEffectKind.VarispeedShift)) Assert.AreEqual(input.Length + (int)(settings.Parameters.GetValueOrDefault("TailSeconds") * 8000) * 2, result.Samples.Length);
+        if (effect is not (AudioEffectKind.PitchShift or AudioEffectKind.TimeStretch or AudioEffectKind.VarispeedShift))
+        {
+            Assert.AreEqual(input.Length + (int)(settings.Parameters.GetValueOrDefault("TailSeconds") * 8000) * 2, result.Samples.Length);
+        }
     }
 
     [TestMethod]
@@ -67,8 +110,16 @@ public sealed class EffectCurveProcessorTests
     public async Task DisabledCurves_AreBitExactWithLegacyRendering_AndPreCancelledCurvesDoNotRun(AudioEffectKind effect)
     {
         AudioEffectSettings settings = Defaults(effect); EffectCurveTarget target = EffectCurveTargets.ForEffect(effect).First();
-        if (effect == AudioEffectKind.PitchShift) settings = settings.With(("Semitones", 7));
-        if (effect == AudioEffectKind.Gain) settings = settings.With(("GainDb", 6));
+        if (effect == AudioEffectKind.PitchShift)
+        {
+            settings = settings.With(("Semitones", 7));
+        }
+
+        if (effect == AudioEffectKind.Gain)
+        {
+            settings = settings.With(("GainDb", 6));
+        }
+
         var disabled = WithCurve(settings, target.Key, new() { Enabled = false, StartValue = target.NeutralValue, Curve = new() { Equation = "1-x" } });
         float[] input = Signal(8000, 0.1);
         input[0] = BitConverter.Int32BitsToSingle(int.MinValue);
@@ -83,7 +134,11 @@ public sealed class EffectCurveProcessorTests
     [DynamicData(nameof(AmountEffects))]
     public async Task EffectAmount_ZeroIsDryAndFullAmountMatchesTheEffect(AudioEffectKind effect)
     {
-        AudioEffectSettings settings = Defaults(effect); if (effect == AudioEffectKind.Gain) settings = settings.With(("GainDb", 6));
+        AudioEffectSettings settings = Defaults(effect); if (effect == AudioEffectKind.Gain)
+        {
+            settings = settings.With(("GainDb", 6));
+        }
+
         float[] input = Signal(8000, 0.2);
         AudioEffectResult reference = await AudioEffectProcessor.ProcessAsync(input, 8000, 2, settings);
         AudioEffectResult dry = await AudioEffectProcessor.ProcessAsync(input, 8000, 2, WithCurve(settings, EffectCurveTargets.Amount,
@@ -136,7 +191,10 @@ public sealed class EffectCurveProcessorTests
         var settings = WithCurve(Defaults(effect).With(("LengthPercent", 10)), EffectCurveTargets.FadeEnvelope,
             new() { StartValue = from, EndValue = to, Curve = new() { Equation = "x^2" } });
         var result = await AudioEffectProcessor.ProcessAsync(input, 8000, 1, settings);
-        for (int i = 0; i <= 100; i++) Assert.AreEqual(from + (to - from) * Math.Pow(i / 100d, 2), result.Samples[i], 1e-7);
+        for (int i = 0; i <= 100; i++)
+        {
+            Assert.AreEqual(from + (to - from) * Math.Pow(i / 100d, 2), result.Samples[i], 1e-7);
+        }
     }
 
     [TestMethod]
@@ -149,12 +207,22 @@ public sealed class EffectCurveProcessorTests
         var settings = WithCurve(Defaults(AudioEffectKind.PitchShift).With(("Semitones", 12), ("Method", method)), "Semitones", new() { StartValue = 0 });
         var result = await AudioEffectProcessor.ProcessAsync(input, rate, 2, settings);
         Assert.AreEqual(2, result.Channels); Assert.IsNull(result.TempoMultiplier);
-        if (method == 0) Assert.AreEqual(input.Length, result.Samples.Length);
-        else Assert.IsTrue(result.Samples.Length < input.Length && result.Samples.Length > input.Length / 2);
+        if (method == 0)
+        {
+            Assert.AreEqual(input.Length, result.Samples.Length);
+        }
+        else
+        {
+            Assert.IsTrue(result.Samples.Length < input.Length && result.Samples.Length > input.Length / 2);
+        }
+
         double early = Frequency(result.Samples, rate, 0.25, 0.15), late = Frequency(result.Samples, rate, result.Samples.Length / 2d / rate - 0.35, 0.15);
         Assert.IsTrue(early > 215 && early < 280, $"Start frequency: {early}"); Assert.IsTrue(late > 350 && late < 460, $"End frequency: {late}");
         Assert.IsGreaterThan(early * 1.3, late);
-        for (int i = 0; i < result.Samples.Length; i += 2) Assert.AreEqual(-0.5f * result.Samples[i], result.Samples[i + 1], 0.00001f);
+        for (int i = 0; i < result.Samples.Length; i += 2)
+        {
+            Assert.AreEqual(-0.5f * result.Samples[i], result.Samples[i + 1], 0.00001f);
+        }
     }
 
     [TestMethod]
@@ -170,7 +238,11 @@ public sealed class EffectCurveProcessorTests
         double expected = frames * Math.Log(targetSpeed) / (targetSpeed - 1);
         Assert.AreEqual(Math.Round(expected), result.Samples.Length / 2d, 1);
         Assert.IsNull(result.TempoMultiplier); Assert.AreEqual(330, Frequency(result.Samples, rate, 0.15, 0.2), 8);
-        for (int i = 0; i < result.Samples.Length; i += 2) Assert.AreEqual(-0.5f * result.Samples[i], result.Samples[i + 1], 0.00001f);
+        for (int i = 0; i < result.Samples.Length; i += 2)
+        {
+            Assert.AreEqual(-0.5f * result.Samples[i], result.Samples[i + 1], 0.00001f);
+        }
+
         Assert.IsTrue(result.Samples.All(float.IsFinite));
     }
 
@@ -184,8 +256,15 @@ public sealed class EffectCurveProcessorTests
         var result = await AudioEffectProcessor.ProcessAsync(input, rate, 2, Defaults(AudioEffectKind.VarispeedShift).With(("Speed", speed)));
         Assert.AreEqual((int)Math.Round(input.Length / 2d / speed) * 2, result.Samples.Length); Assert.AreEqual(speed, result.TempoMultiplier);
         Assert.AreEqual(330 * speed, Frequency(result.Samples, rate, 0.05, 0.2), 3);
-        for (int i = 0; i < result.Samples.Length; i += 2) Assert.AreEqual(-0.5f * result.Samples[i], result.Samples[i + 1], 0.000001f);
-        if (speed == 1) CollectionAssert.AreEqual(input, result.Samples);
+        for (int i = 0; i < result.Samples.Length; i += 2)
+        {
+            Assert.AreEqual(-0.5f * result.Samples[i], result.Samples[i + 1], 0.000001f);
+        }
+
+        if (speed == 1)
+        {
+            CollectionAssert.AreEqual(input, result.Samples);
+        }
     }
 
     [TestMethod]
@@ -197,7 +276,10 @@ public sealed class EffectCurveProcessorTests
         Assert.AreEqual(Math.Round(rate * 2 * Math.Log(2)) * 2, result.Samples.Length, 2); Assert.IsNull(result.TempoMultiplier);
         double early = Frequency(result.Samples, rate, 0.15, 0.15), late = Frequency(result.Samples, rate, 1.1, 0.15);
         Assert.IsTrue(early is > 220 and < 280); Assert.IsTrue(late is > 360 and < 440);
-        for (int i = 0; i < result.Samples.Length; i += 2) Assert.AreEqual(-0.5f * result.Samples[i], result.Samples[i + 1], 0.000001f);
+        for (int i = 0; i < result.Samples.Length; i += 2)
+        {
+            Assert.AreEqual(-0.5f * result.Samples[i], result.Samples[i + 1], 0.000001f);
+        }
     }
 
     [TestMethod]
@@ -237,7 +319,12 @@ public sealed class EffectCurveProcessorTests
             AudioEffectResult result = await AudioEffectProcessor.ProcessAsync(input, 8000, channels, settings);
             Assert.AreEqual(channels, result.Channels, effect.ToString()); Assert.AreEqual(0, result.Samples.Length % channels); Assert.IsTrue(result.Samples.All(float.IsFinite));
             if (effect == AudioEffectKind.StereoWidth && channels % 2 != 0)
-                for (int frame = 0; frame < frames; frame++) Assert.AreEqual(input[frame * channels + channels - 1], result.Samples[frame * channels + channels - 1], 1e-7f);
+            {
+                for (int frame = 0; frame < frames; frame++)
+                {
+                    Assert.AreEqual(input[frame * channels + channels - 1], result.Samples[frame * channels + channels - 1], 1e-7f);
+                }
+            }
         }
     }
 
@@ -270,7 +357,7 @@ public sealed class EffectCurveProcessorTests
         using var cts = new CancellationTokenSource();
         var settings = WithCurve(Defaults(AudioEffectKind.Gain).With(("GainDb", 12)), "GainDb", new() { StartValue = 0 });
         await Assert.ThrowsAsync<OperationCanceledException>(() => AudioEffectProcessor.ProcessAsync(Signal(8000, 4), 8000, 2, settings,
-            new CallbackProgress(value => { if (value > 0) cts.Cancel(); }), cts.Token));
+            new CallbackProgress(value => { if (value > 0) { cts.Cancel(); } }), cts.Token));
         settings = WithCurve(Defaults(AudioEffectKind.Phaser), "MinimumHz", new() { StartValue = 6000 });
         await Assert.ThrowsExactlyAsync<ArgumentException>(() => AudioEffectProcessor.ProcessAsync(Signal(8000, 0.1), 8000, 2, settings));
     }
@@ -323,7 +410,11 @@ public sealed class EffectCurveProcessorTests
             OutputGainDb = 12, Automation = new() { Parameters = new() { [nameof(AutoTuneSettings.OutputGainDb)] = new() { StartValue = 0 } } } };
         AutoTuneResult result = await AutoTuneProcessor.ProcessAsync(input, 8000, 2, settings);
         Assert.AreEqual(input.Length, result.Samples.Length);
-        for (int frame = 0; frame < input.Length / 2; frame++) Assert.AreEqual(input[frame * 2] * Math.Pow(10, 12 * frame / (double)(input.Length / 2 - 1) / 20), result.Samples[frame * 2], 1e-6);
+        for (int frame = 0; frame < input.Length / 2; frame++)
+        {
+            Assert.AreEqual(input[frame * 2] * Math.Pow(10, 12 * frame / (double)(input.Length / 2 - 1) / 20), result.Samples[frame * 2], 1e-6);
+        }
+
         settings = settings with { Automation = new() { Parameters = new() { [EffectCurveTargets.Amount] = new() { StartValue = 0, Curve = new() { Equation = "0" } } } } };
         result = await AutoTuneProcessor.ProcessAsync(input, 8000, 2, settings); CollectionAssert.AreEqual(input, result.Samples);
         Assert.AreEqual(BitConverter.SingleToInt32Bits(input[1]), BitConverter.SingleToInt32Bits(result.Samples[1]), "An all-dry curve preserves signed zero without redundant history.");
@@ -355,7 +446,10 @@ public sealed class EffectCurveProcessorTests
         for (int frame = first; frame < last; frame++)
         {
             double previous = samples[(frame - 1) * 2], next = samples[frame * 2];
-            if (previous <= 0 && next > 0) crossings.Add(frame - 1 - previous / (next - previous));
+            if (previous <= 0 && next > 0)
+            {
+                crossings.Add(frame - 1 - previous / (next - previous));
+            }
         }
         return crossings.Count < 2 ? 0 : (crossings.Count - 1) * rate / (crossings[^1] - crossings[0]);
     }

@@ -18,7 +18,11 @@ internal sealed class QiskitCircuitTranspiler : IQuantumCircuitTranspiler
         string pythonExecutable, int optimizationLevel, int seed, CancellationToken cancellationToken)
     {
         ArgumentException.ThrowIfNullOrWhiteSpace(pythonExecutable);
-        if (optimizationLevel is < 0 or > 3) throw new ArgumentOutOfRangeException(nameof(optimizationLevel));
+        if (optimizationLevel is < 0 or > 3)
+        {
+            throw new ArgumentOutOfRangeException(nameof(optimizationLevel));
+        }
+
         using var resource = typeof(QiskitCircuitTranspiler).Assembly.GetManifestResourceStream("ModularAudience.Quantum.TranspileCircuit.py")
             ?? throw new InvalidOperationException("The embedded Qiskit transpiler is unavailable.");
         using var reader = new StreamReader(resource);
@@ -36,7 +40,11 @@ internal sealed class QiskitCircuitTranspiler : IQuantumCircuitTranspiler
         try
         {
             using var process = new Process { StartInfo = startInfo };
-            if (!process.Start()) throw new InvalidOperationException("The configured Python executable could not be started.");
+            if (!process.Start())
+            {
+                throw new InvalidOperationException("The configured Python executable could not be started.");
+            }
+
             try
             {
                 Task<string> output = ReadBoundedAsync(process.StandardOutput, 1_048_576, linked.Token);
@@ -46,15 +54,25 @@ internal sealed class QiskitCircuitTranspiler : IQuantumCircuitTranspiler
                 await process.WaitForExitAsync(linked.Token);
                 string json = await output;
                 _ = await errors; // Drained, but never displayed or logged verbatim.
-                if (process.ExitCode != 0) throw new InvalidOperationException("Qiskit transpilation failed. Check the Python environment, circuit and backend target.");
+                if (process.ExitCode != 0)
+                {
+                    throw new InvalidOperationException("Qiskit transpilation failed. Check the Python environment, circuit and backend target.");
+                }
+
                 using var result = JsonDocument.Parse(json);
                 if (result.RootElement.TryGetProperty("error", out var error))
+                {
                     throw new InvalidOperationException(error.GetString() == "qiskit_missing"
                         ? "Qiskit is not installed in the selected Python environment. Open Help > IBM hardware setup."
                         : "Qiskit could not transpile the circuit for this backend. Check the gate set and target connectivity.");
+                }
+
                 string qasm = result.RootElement.GetProperty("qasm").GetString() ?? "";
                 if (!qasm.StartsWith("OPENQASM 3.0;", StringComparison.Ordinal) || qasm.Length > 1_048_576)
+                {
                     throw new InvalidOperationException("Qiskit returned an invalid hardware circuit.");
+                }
+
                 return qasm;
             }
             finally
@@ -74,7 +92,11 @@ internal sealed class QiskitCircuitTranspiler : IQuantumCircuitTranspiler
         int count;
         while ((count = await reader.ReadAsync(buffer.AsMemory(), token)) > 0)
         {
-            if (output.Length + count > maximum) throw new InvalidOperationException("The local transpiler output exceeded its safety limit.");
+            if (output.Length + count > maximum)
+            {
+                throw new InvalidOperationException("The local transpiler output exceeded its safety limit.");
+            }
+
             output.Append(buffer, 0, count);
         }
         return output.ToString();

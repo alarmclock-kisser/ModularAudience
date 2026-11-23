@@ -96,13 +96,24 @@ namespace ModularAudience.Audio.Processors_V4
             Require(!this.InstrumentProfiles.IsDefault && this.InstrumentProfiles.All(Enum.IsDefined)
                 && this.InstrumentProfiles.Distinct().Count() == this.InstrumentProfiles.Length, nameof(this.InstrumentProfiles));
             if (this.EnsembleMode != InstrumentEnsembleMode.Automatic && this.InstrumentProfiles.IsEmpty)
+            {
                 throw new ArgumentException("Select at least one instrument profile for a guided ensemble.");
+            }
+
             if (this.UseIlrma && this.UseCqtSynthesis)
+            {
                 throw new ArgumentException("Stereo ILRMA uses STFT demixing. Disable CQT synthesis or ILRMA; CQT analysis remains available.");
+            }
+
             if (this.UseIlrma && this.EnsembleMode != InstrumentEnsembleMode.Automatic && this.InstrumentProfiles.Length > 2)
+            {
                 throw new ArgumentException("Stereo ILRMA supports at most two spatial sources and two instrument profiles.");
+            }
+
             if (!this.UseIlrma && this.EnsembleMode != InstrumentEnsembleMode.Automatic && this.InstrumentProfiles.Length > this.MaxComponents)
+            {
                 throw new ArgumentException("Max components must be at least the number of selected instrument profiles.");
+            }
         }
 
         private static void Require(bool valid, string parameter)

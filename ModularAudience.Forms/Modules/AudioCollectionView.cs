@@ -1027,7 +1027,11 @@ namespace ModularAudience.Forms
 
         private void listBox_audios_SelectedIndexChanged(object? sender, EventArgs e)
         {
-            if (this.IsDisposed || this.Disposing) return;
+            if (this.IsDisposed || this.Disposing)
+            {
+                return;
+            }
+
             if (this.InvokeRequired)
             {
                 try { this.BeginInvoke((Action)(() => this.listBox_audios_SelectedIndexChanged(sender, e))); }
@@ -1059,9 +1063,13 @@ namespace ModularAudience.Forms
             try
             {
                 if (this.ContainsFocus || ReferenceEquals(Form.ActiveForm, this))
+                {
                     WindowMain.FocusCollectionCommands(this);
+                }
                 else
+                {
                     WindowMain.RefreshCommandSelection();
+                }
             }
             catch (Exception ex)
             {

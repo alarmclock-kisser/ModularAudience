@@ -16,7 +16,11 @@ internal static class ApplicationUpdater
             var settingsStore = new ReleaseUpdateSettingsStore();
             ReleaseUpdateSettings settings = settingsStore.LoadAndRecordRunningRelease(current);
             UpdateInstaller.CleanupOldWorkspaces();
-            if (!settings.AskToUpdate) return;
+            if (!settings.AskToUpdate)
+            {
+                return;
+            }
+
             if (current is null || !string.IsNullOrEmpty(typeof(ApplicationRelease).Assembly.Location))
             {
                 LogManager.LogInfo("Application update checks are available only for numbered single-file releases.");
@@ -37,21 +41,33 @@ internal static class ApplicationUpdater
             // Re-read after the network await: another window or process may
             // have disabled checks or skipped this release in the meantime.
             settings = settingsStore.LoadAndRecordRunningRelease(null);
-            if (!settings.AskToUpdate) return;
+            if (!settings.AskToUpdate)
+            {
+                return;
+            }
+
             ApplicationRelease? release = ApplicationRelease.NewerThan(latest, current.Value, settings.SkipReleaseNumber);
-            if (release is null || closed.IsCancellationRequested) return;
+            if (release is null || closed.IsCancellationRequested)
+            {
+                return;
+            }
 
             initialFile.EnsureUnchanged(targetPath);
             string originalHash = await GitHubReleaseSource.HashAsync(targetPath, closed.Token);
             initialFile.EnsureUnchanged(targetPath);
             if (closed.IsCancellationRequested || owner.IsDisposed ||
-                !settingsStore.LoadAndRecordRunningRelease(null).ShouldOfferRelease(release.Number)) return;
+                !settingsStore.LoadAndRecordRunningRelease(null).ShouldOfferRelease(release.Number))
+            {
+                return;
+            }
 
             var historySource = new GitHubReleaseHistorySource();
             using var dialog = new ReleaseUpdateDialog(current.Value, release, targetPath, originalHash, settingsStore,
                 token => historySource.GetAsync(current.Value, release.Number, token));
             if (dialog.ShowDialog(owner) == DialogResult.OK && !owner.IsDisposed)
+            {
                 owner.Close();
+            }
         }
         catch (OperationCanceledException) when (closed.IsCancellationRequested)
         {
@@ -59,9 +75,13 @@ internal static class ApplicationUpdater
         catch (Exception error) when (UpdateDiagnostics.IsExpected(error))
         {
             if (!owner.IsDisposed)
+            {
                 UpdateDiagnostics.ShowError(owner, "Application update", "The update check could not be completed.", error);
+            }
             else
+            {
                 LogManager.LogError($"The update check could not be completed: {error}");
+            }
         }
         finally
         {
@@ -78,7 +98,11 @@ internal static class ApplicationUpdater
         internal ExecutableSnapshot(string path)
         {
             var file = new FileInfo(path);
-            if (!file.Exists) throw new FileNotFoundException("The running executable was not found.", path);
+            if (!file.Exists)
+            {
+                throw new FileNotFoundException("The running executable was not found.", path);
+            }
+
             length = file.Length;
             lastWriteTime = file.LastWriteTimeUtc;
             creationTime = file.CreationTimeUtc;
@@ -88,7 +112,9 @@ internal static class ApplicationUpdater
         {
             var current = new ExecutableSnapshot(path);
             if (current.length != length || current.lastWriteTime != lastWriteTime || current.creationTime != creationTime)
+            {
                 throw new IOException("The executable changed while checking for updates. Start the installed version again.");
+            }
         }
     }
 }

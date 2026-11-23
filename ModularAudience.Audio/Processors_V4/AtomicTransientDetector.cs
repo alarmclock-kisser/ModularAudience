@@ -92,12 +92,19 @@ namespace ModularAudience.Audio.Processors_V4
             int lastPeak = -minimumDistance;
             for (int i = 0; i < band.Length; i += hop)
             {
-                if (i - lastPeak < minimumDistance) continue;
+                if (i - lastPeak < minimumDistance)
+                {
+                    continue;
+                }
+
                 double before = Mean(band, i - (6 * hop), i - (2 * hop));
                 double after = Mean(band, i, i + (2 * hop));
                 double fullBand = Mean(envelope, i, i + (2 * hop));
                 double floor = Math.Max(silenceThreshold * 0.5, fullBand * 0.12);
-                if (after <= Math.Max(floor, before * 1.65)) continue;
+                if (after <= Math.Max(floor, before * 1.65))
+                {
+                    continue;
+                }
 
                 onsets.Add(FindBandAttackStart(band, i, sampleRate, Math.Max(silenceThreshold * 0.25, before * 1.1)));
                 lastPeak = i;

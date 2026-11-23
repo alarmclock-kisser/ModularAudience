@@ -25,10 +25,16 @@ public sealed partial class MixTrackView
 
     private void AddVideoTrack()
     {
-        if (busy || PlaybackLocksEdits) return;
+        if (busy || PlaybackLocksEdits)
+        {
+            return;
+        }
+
         string initialDir = _lastVideoFolder ?? string.Empty;
         if (string.IsNullOrWhiteSpace(initialDir) || !Directory.Exists(initialDir))
+        {
             initialDir = Environment.GetFolderPath(Environment.SpecialFolder.MyVideos);
+        }
 
         using var dialog = new OpenFileDialog
         {
@@ -39,7 +45,10 @@ public sealed partial class MixTrackView
             RestoreDirectory = true
         };
 
-        if (dialog.ShowDialog(this) != DialogResult.OK) return;
+        if (dialog.ShowDialog(this) != DialogResult.OK)
+        {
+            return;
+        }
 
         try { _lastVideoFolder = Path.GetDirectoryName(dialog.FileName) ?? _lastVideoFolder; } catch { }
 
@@ -49,7 +58,11 @@ public sealed partial class MixTrackView
 
     private void AddVideoTrackFromPath(string videoPath)
     {
-        if (busy || PlaybackLocksEdits) return;
+        if (busy || PlaybackLocksEdits)
+        {
+            return;
+        }
+
         if (!File.Exists(videoPath))
         {
             _ = ErrorAsync(new FileNotFoundException("The selected video file no longer exists.", videoPath));
@@ -59,13 +72,18 @@ public sealed partial class MixTrackView
         _ = RunAsync(async token =>
         {
             string? ffmpegPath = await EnsureFfmpegAvailableAsync(token);
-            if (ffmpegPath == null) return;
+            if (ffmpegPath == null)
+            {
+                return;
+            }
 
             status.Text = $"Probing video: {Path.GetFileName(videoPath)}...";
             using var video = new VideoObj(videoPath, ffmpegPath);
             await video.ProbeAsync(token);
             if (!video.HasVideo)
+            {
                 throw new InvalidDataException("The selected file does not contain a usable video stream.");
+            }
 
             string before = CaptureVideoUndoState();
             MixLane videoLane = _videoLane ?? new MixLane { Name = "Video #1", IsVideo = true, Gain = 1 };
@@ -108,19 +126,27 @@ public sealed partial class MixTrackView
     {
         double sampleCount = durationSeconds * 44100 * 2;
         if (!double.IsFinite(sampleCount) || sampleCount > Array.MaxLength)
+        {
             throw new InvalidOperationException("The video's extracted audio is too large to load as one in-memory AudioObj.");
+        }
     }
 
     private async Task<string?> EnsureFfmpegAvailableAsync(CancellationToken cancellationToken)
     {
         var manager = new FfmpegBinaryManager();
         string? existing = manager.FindInstalledFfmpeg();
-        if (existing != null) return existing;
+        if (existing != null)
+        {
+            return existing;
+        }
 
         DialogResult answer = await this.windowGroup.AskAsync(
             "FFmpeg is required to import and render video. Download FFmpeg now? This downloads FFmpeg only; it does not install or update yt-dlp.",
             "FFmpeg is missing", MessageBoxButtons.YesNo);
-        if (answer != DialogResult.Yes) return null;
+        if (answer != DialogResult.Yes)
+        {
+            return null;
+        }
 
         using var installCancellation = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken);
         using var progressDialog = new ProgressDialog("Downloading FFmpeg...", windowCloseDelay: 0,
@@ -136,7 +162,9 @@ public sealed partial class MixTrackView
                 {
                     if (double.TryParse(match.Groups["percent"].Value,
                         System.Globalization.NumberStyles.Float, System.Globalization.CultureInfo.InvariantCulture, out double percent))
+                    {
                         progressDialog.Report(percent / 100);
+                    }
                 }
             });
             string ffmpegPath = await manager.InstallFfmpegAsync(installProgress, installCancellation.Token);
@@ -161,7 +189,9 @@ public sealed partial class MixTrackView
         HashSet<Guid> activeClips = Arrangement.Lanes.Where(lane => lane.IsVideo)
             .SelectMany(lane => lane.Clips).Select(clip => clip.Id).ToHashSet();
         foreach (Guid clipId in _videoThumbSampleFractions.Keys.Where(id => !activeClips.Contains(id)).ToArray())
+        {
             _videoThumbSampleFractions.Remove(clipId);
+        }
     }
 
     private async Task<string?> ExtractAudioWithProgressAsync(VideoObj video, CancellationToken cancellationToken)
@@ -187,14 +217,20 @@ public sealed partial class MixTrackView
     private double FindVideoDropStart(MixLane lane, double desiredStart, double duration, Guid? movingClipId = null)
     {
         MixClip[] obstacles = lane.Clips.Where(clip => clip.Id != movingClipId).OrderBy(clip => clip.Start).ToArray();
-        if (obstacles.Length == 0) return desiredStart;
+        if (obstacles.Length == 0)
+        {
+            return desiredStart;
+        }
 
         var candidates = new List<double> { obstacles[0].Start - duration, obstacles[^1].Start + Arrangement.ClipDuration(obstacles[^1]) };
         for (int index = 1; index < obstacles.Length; index++)
         {
             double gapStart = obstacles[index - 1].Start + Arrangement.ClipDuration(obstacles[index - 1]);
             double gapEnd = obstacles[index].Start - duration;
-            if (gapStart <= gapEnd) candidates.Add(Math.Clamp(desiredStart, gapStart, gapEnd));
+            if (gapStart <= gapEnd)
+            {
+                candidates.Add(Math.Clamp(desiredStart, gapStart, gapEnd));
+            }
         }
         return candidates.MinBy(candidate => Math.Abs(candidate - desiredStart));
     }
@@ -202,9 +238,17 @@ public sealed partial class MixTrackView
     private void SyncLinkedVideoAudio(MixClip videoClip, double originalVideoOffset, double originalVideoDuration,
         double originalVideoStart, double originalAudioOffset, double originalAudioDuration, double originalAudioStart)
     {
-        if (videoClip.LinkedClipId is not Guid audioId || originalVideoDuration <= 0) return;
+        if (videoClip.LinkedClipId is not Guid audioId || originalVideoDuration <= 0)
+        {
+            return;
+        }
+
         MixClip? audioClip = Arrangement.Lanes.SelectMany(lane => lane.Clips).FirstOrDefault(clip => clip.Id == audioId);
-        if (audioClip == null || !Arrangement.Sources.TryGetValue(audioClip.SourceId, out MixSource? audioSource)) return;
+        if (audioClip == null || !Arrangement.Sources.TryGetValue(audioClip.SourceId, out MixSource? audioSource))
+        {
+            return;
+        }
+
         double sourceRatio = originalAudioDuration / originalVideoDuration;
         audioClip.Start = originalAudioStart + videoClip.Start - originalVideoStart;
         audioClip.SourceOffset = Math.Clamp(originalAudioOffset
@@ -219,7 +263,10 @@ public sealed partial class MixTrackView
 
     private void DrawVideoClip(Graphics g, int row, MixClip clip, Rectangle rect, bool selected)
     {
-        if (!Arrangement.Sources.TryGetValue(clip.SourceId, out var source) || !source.IsVideo) return;
+        if (!Arrangement.Sources.TryGetValue(clip.SourceId, out var source) || !source.IsVideo)
+        {
+            return;
+        }
 
         // Fill background with video clip color.
         Color clipColor = ClipColor(selected ? Arrangement.Visual.SelectedClip : Arrangement.Visual.Clip, row);
@@ -228,7 +275,10 @@ public sealed partial class MixTrackView
 
         // Draw frame thumbnails across the clip (lazy async extraction).
         double duration = Arrangement.ClipDuration(clip);
-        if (duration <= 0) return;
+        if (duration <= 0)
+        {
+            return;
+        }
 
         double aspect = source.VideoWidth / (double)source.VideoHeight;
         int availableHeight = Math.Min(150, Math.Max(1, rect.Height - 6));
@@ -248,7 +298,11 @@ public sealed partial class MixTrackView
                 foreach (double fraction in visibleSamples)
                 {
                     int x = rect.X + 2 + (int)Math.Round(fraction * (rect.Width - 4)) - thumbWidth / 2;
-                    if (x + thumbWidth < Header || x >= canvas.Width) continue;
+                    if (x + thumbWidth < Header || x >= canvas.Width)
+                    {
+                        continue;
+                    }
+
                     double time = fraction * duration;
                     double sourceTime = clip.SourceOffset + time * Arrangement.Rate(clip);
                     var thumbKey = VideoThumbKey(source.Id, sourceTime);
@@ -266,7 +320,10 @@ public sealed partial class MixTrackView
                             g.DrawImage(thumbBmp!, thumbRect);
                         }
                     }
-                    if (frameCached) continue;
+                    if (frameCached)
+                    {
+                        continue;
+                    }
 
                     using var filmBrush = new SolidBrush(Color.FromArgb(60, 40, 40));
                     g.FillRectangle(filmBrush, thumbRect);
@@ -299,11 +356,16 @@ public sealed partial class MixTrackView
     private double[] GetVideoThumbnailSampleFractions(Guid clipId, int desiredCount)
     {
         if (!_videoThumbSampleFractions.TryGetValue(clipId, out List<double>? samples))
+        {
             _videoThumbSampleFractions.Add(clipId, samples = []);
+        }
+
         if (samples.Count == 0)
         {
             for (int index = 0; index < desiredCount; index++)
+            {
                 samples.Add((index + 0.5) / desiredCount);
+            }
         }
         while (samples.Count < desiredCount)
         {
@@ -321,8 +383,16 @@ public sealed partial class MixTrackView
 
     private static double[] SelectVideoThumbnailSamples(IReadOnlyList<double> samples, int desiredCount)
     {
-        if (samples.Count <= desiredCount) return samples.ToArray();
-        if (desiredCount == 1) return [samples[samples.Count / 2]];
+        if (samples.Count <= desiredCount)
+        {
+            return samples.ToArray();
+        }
+
+        if (desiredCount == 1)
+        {
+            return [samples[samples.Count / 2]];
+        }
+
         return Enumerable.Range(0, desiredCount)
             .Select(index => samples[(int)Math.Round(index * (samples.Count - 1d) / (desiredCount - 1))])
             .Distinct().ToArray();
@@ -330,7 +400,11 @@ public sealed partial class MixTrackView
 
     private void DrawVideoHoverPreview(Graphics g, MixClip clip, double timeWithinClip)
     {
-        if (!Arrangement.Sources.TryGetValue(clip.SourceId, out MixSource? source) || !source.IsVideo) return;
+        if (!Arrangement.Sources.TryGetValue(clip.SourceId, out MixSource? source) || !source.IsVideo)
+        {
+            return;
+        }
+
         var previewRect = GetVideoHoverPreviewRect(_videoHoverPoint, source);
         using var bgBrush = new SolidBrush(Color.FromArgb(230, 20, 20, 20));
         g.FillRectangle(bgBrush, previewRect);
@@ -363,10 +437,18 @@ public sealed partial class MixTrackView
         int width = Math.Max(1, (int)Math.Round(source.VideoWidth * scale));
         int height = Math.Max(1, (int)Math.Round(source.VideoHeight * scale));
         int x = pointer.X + 16;
-        if (x + width > canvas.Width - 4) x = pointer.X - width - 16;
+        if (x + width > canvas.Width - 4)
+        {
+            x = pointer.X - width - 16;
+        }
+
         x = Math.Clamp(x, Header + 2, Math.Max(Header + 2, canvas.Width - width - 2));
         int y = pointer.Y - height - 16;
-        if (y < Ruler + 2) y = pointer.Y + 18;
+        if (y < Ruler + 2)
+        {
+            y = pointer.Y + 18;
+        }
+
         y = Math.Clamp(y, Ruler + 2, Math.Max(Ruler + 2, canvas.Height - height - 2));
         return new Rectangle(x, y, width, height);
     }
@@ -383,9 +465,17 @@ public sealed partial class MixTrackView
                 previous.SourceOffset + _hoveredVideoTime * Arrangement.Rate(previous));
         }
 
-        if (!Arrangement.Sources.TryGetValue(clip.SourceId, out MixSource? source) || !source.IsVideo) return;
+        if (!Arrangement.Sources.TryGetValue(clip.SourceId, out MixSource? source) || !source.IsVideo)
+        {
+            return;
+        }
+
         int row = Arrangement.Lanes.FindIndex(lane => lane.Clips.Contains(clip));
-        if (row < 0) return;
+        if (row < 0)
+        {
+            return;
+        }
+
         Rectangle clipBounds = ClipRect(row, clip);
         Rectangle currentBounds = GetVideoHoverPreviewRect(pointer, source);
         double duration = Arrangement.ClipDuration(clip);
@@ -412,13 +502,18 @@ public sealed partial class MixTrackView
         Rectangle previousBounds = Rectangle.Empty;
         if (_hoveredVideoClip is { } previous
             && Arrangement.Sources.TryGetValue(previous.SourceId, out MixSource? source))
+        {
             previousBounds = GetVideoHoverPreviewRect(_videoHoverPoint, source);
+        }
 
         _hoveredVideoClip = null;
         _videoHoverCancellation?.Cancel();
         _videoHoverCancellation?.Dispose();
         _videoHoverCancellation = null;
-        if (!previousBounds.IsEmpty) canvas.Invalidate(previousBounds);
+        if (!previousBounds.IsEmpty)
+        {
+            canvas.Invalidate(previousBounds);
+        }
     }
 
     // ------------------------------------------------------------------
@@ -433,12 +528,19 @@ public sealed partial class MixTrackView
 
     private async Task ExtractAndCacheVideoThumbAsync(Guid sourceId, string videoPath, double sourceTime, CancellationToken token)
     {
-        if (string.IsNullOrWhiteSpace(videoPath) || !File.Exists(videoPath)) return;
+        if (string.IsNullOrWhiteSpace(videoPath) || !File.Exists(videoPath))
+        {
+            return;
+        }
+
         var thumbKey = VideoThumbKey(sourceId, sourceTime);
         lock (_videoThumbCache)
         {
             if (_videoThumbCache.ContainsKey(thumbKey) || _videoThumbPending.Count >= 128
-                || !_videoThumbPending.Add(thumbKey)) return;
+                || !_videoThumbPending.Add(thumbKey))
+            {
+                return;
+            }
         }
 
         bool gateAcquired = false;
@@ -449,7 +551,11 @@ public sealed partial class MixTrackView
             double decodeTime = thumbKey.FrameBucket * VideoThumbFrameStep;
             Bitmap? bitmap = await GetVideoDecoder(sourceId, videoPath)
                 .ExtractFrameAsync(decodeTime, maxWidth: VideoThumbDecodeWidth, token).ConfigureAwait(false);
-            if (bitmap == null) return;
+            if (bitmap == null)
+            {
+                return;
+            }
+
             if (token.IsCancellationRequested)
             {
                 bitmap.Dispose();
@@ -467,7 +573,10 @@ public sealed partial class MixTrackView
                 {
                     var oldest = _videoThumbCacheOrder[0];
                     _videoThumbCacheOrder.RemoveAt(0);
-                    if (_videoThumbCache.Remove(oldest, out var oldBitmap)) oldBitmap.Dispose();
+                    if (_videoThumbCache.Remove(oldest, out var oldBitmap))
+                    {
+                        oldBitmap.Dispose();
+                    }
                 }
                 _videoThumbCache[thumbKey] = bitmap;
                 _videoThumbCacheOrder.Add(thumbKey);
@@ -483,8 +592,16 @@ public sealed partial class MixTrackView
         catch (Exception error) { LogManager.Log("Video thumbnail extraction failed.", error); }
         finally
         {
-            lock (_videoThumbCache) _videoThumbPending.Remove(thumbKey);
-            if (gateAcquired) _videoThumbGate.Release();
+            lock (_videoThumbCache)
+            {
+                _videoThumbPending.Remove(thumbKey);
+            }
+
+            if (gateAcquired)
+            {
+                _videoThumbGate.Release();
+            }
+
             if (token.IsCancellationRequested && !_videoWorkCancellation.IsCancellationRequested
                 && !IsDisposed && !Disposing && IsHandleCreated)
             {
@@ -496,7 +613,10 @@ public sealed partial class MixTrackView
                             || _videoHoverCancellation is not { } hoverCancellation || hoverCancellation.IsCancellationRequested
                             || !Arrangement.Sources.TryGetValue(sourceId, out MixSource? currentSource)
                             || VideoThumbKey(sourceId, hover.SourceOffset + _hoveredVideoTime * Arrangement.Rate(hover)) != thumbKey)
+                        {
                             return;
+                        }
+
                         double currentTime = hover.SourceOffset + _hoveredVideoTime * Arrangement.Rate(hover);
                         _ = ExtractAndCacheVideoThumbAsync(sourceId, currentSource.VideoFilePath ?? string.Empty,
                             currentTime, hoverCancellation.Token);
@@ -513,7 +633,11 @@ public sealed partial class MixTrackView
         lock (_videoDecoderLock)
         {
             if (_videoDecoders.TryGetValue(sourceId, out VideoObj? decoder)
-                && string.Equals(decoder.FilePath, fullPath, StringComparison.OrdinalIgnoreCase)) return decoder;
+                && string.Equals(decoder.FilePath, fullPath, StringComparison.OrdinalIgnoreCase))
+            {
+                return decoder;
+            }
+
             decoder?.Dispose();
             decoder = new VideoObj(fullPath);
             _videoDecoders[sourceId] = decoder;
@@ -531,13 +655,18 @@ public sealed partial class MixTrackView
             {
                 Rectangle bounds = Rectangle.Intersect(ClipRect(row, clip), new Rectangle(Header, Ruler,
                     Math.Max(0, canvas.Width - Header), Math.Max(0, canvas.Height - Ruler)));
-                if (!bounds.IsEmpty) canvas.Invalidate(bounds);
+                if (!bounds.IsEmpty)
+                {
+                    canvas.Invalidate(bounds);
+                }
             }
         }
 
         if (_hoveredVideoClip is { } hover && Arrangement.Sources.TryGetValue(hover.SourceId, out MixSource? source)
             && VideoThumbKey(source.Id, hover.SourceOffset + _hoveredVideoTime * Arrangement.Rate(hover)) == thumbKey)
+        {
             canvas.Invalidate(GetVideoHoverPreviewRect(_videoHoverPoint, source));
+        }
     }
 
     private void DisposeVideoResources()
@@ -549,7 +678,11 @@ public sealed partial class MixTrackView
         ClearVideoThumbnailCache();
         lock (_videoDecoderLock)
         {
-            foreach (VideoObj decoder in _videoDecoders.Values) decoder.Dispose();
+            foreach (VideoObj decoder in _videoDecoders.Values)
+            {
+                decoder.Dispose();
+            }
+
             _videoDecoders.Clear();
         }
         _videoWorkCancellation.Dispose();
@@ -559,7 +692,11 @@ public sealed partial class MixTrackView
     {
         lock (_videoThumbCache)
         {
-            foreach (Bitmap bitmap in _videoThumbCache.Values) bitmap.Dispose();
+            foreach (Bitmap bitmap in _videoThumbCache.Values)
+            {
+                bitmap.Dispose();
+            }
+
             _videoThumbCache.Clear();
             _videoThumbCacheOrder.Clear();
             _videoThumbSampleFractions.Clear();
@@ -611,7 +748,11 @@ public sealed partial class MixTrackView
     private void CommitVideoEdit(string beforeState)
     {
         string afterState = CaptureVideoUndoState();
-        if (beforeState == afterState) return;
+        if (beforeState == afterState)
+        {
+            return;
+        }
+
         PushVideoUndo(beforeState, afterState);
     }
 
@@ -624,16 +765,30 @@ public sealed partial class MixTrackView
 
     private static void TrimVideoHistory(Stack<string> history)
     {
-        if (history.Count <= MaxVideoUndo) return;
+        if (history.Count <= MaxVideoUndo)
+        {
+            return;
+        }
+
         string[] newestFirst = history.Take(MaxVideoUndo).ToArray();
         history.Clear();
-        for (int index = newestFirst.Length - 1; index >= 0; index--) history.Push(newestFirst[index]);
+        for (int index = newestFirst.Length - 1; index >= 0; index--)
+        {
+            history.Push(newestFirst[index]);
+        }
     }
 
     private void UndoVideo()
     {
-        if (busy || PlaybackLocksEdits) return;
-        if (_videoUndo.Count == 0) return;
+        if (busy || PlaybackLocksEdits)
+        {
+            return;
+        }
+
+        if (_videoUndo.Count == 0)
+        {
+            return;
+        }
 
         string entry = _videoUndo.Pop();
         var data = JsonSerializer.Deserialize<VideoUndoEntry>(entry)
@@ -647,8 +802,15 @@ public sealed partial class MixTrackView
 
     private void RedoVideo()
     {
-        if (busy || PlaybackLocksEdits) return;
-        if (_videoRedo.Count == 0) return;
+        if (busy || PlaybackLocksEdits)
+        {
+            return;
+        }
+
+        if (_videoRedo.Count == 0)
+        {
+            return;
+        }
 
         string entry = _videoRedo.Pop();
         var data = JsonSerializer.Deserialize<VideoUndoEntry>(entry)
@@ -671,7 +833,11 @@ public sealed partial class MixTrackView
         HashSet<Guid> linkedAudioLaneIds = Arrangement.Lanes.Where(lane => lane.Clips.Any(clip => linkedAudioIds.Contains(clip.Id)))
             .Select(lane => lane.Id).ToHashSet();
 
-        foreach (MixLane lane in Arrangement.Lanes) lane.Clips.RemoveAll(clip => linkedAudioIds.Contains(clip.Id));
+        foreach (MixLane lane in Arrangement.Lanes)
+        {
+            lane.Clips.RemoveAll(clip => linkedAudioIds.Contains(clip.Id));
+        }
+
         Arrangement.Lanes.RemoveAll(lane => lane.IsVideo);
         Arrangement.Lanes.RemoveAll(lane => linkedAudioLaneIds.Contains(lane.Id) && lane.Clips.Count == 0);
         _videoLane = null;
@@ -709,8 +875,12 @@ public sealed partial class MixTrackView
                 Arrangement.Lanes.Insert(Math.Clamp(laneData.Index, 0, Arrangement.Lanes.Count), lane);
             }
             foreach (VideoUndoState.ClipDto clipData in laneData.Clips)
+            {
                 if (!Arrangement.Lanes.SelectMany(existing => existing.Clips).Any(existing => existing.Id == clipData.Id))
+                {
                     lane.Clips.Add(CloneClipDto(clipData));
+                }
+            }
         }
     }
 
@@ -792,7 +962,11 @@ public sealed partial class MixTrackView
         void Item(string text, Action action, bool enabled = true, string? toolTip = null)
         {
             var item = new ToolStripMenuItem(text) { Enabled = enabled };
-            if (toolTip != null) item.ToolTipText = toolTip;
+            if (toolTip != null)
+            {
+                item.ToolTipText = toolTip;
+            }
+
             item.Click += (_, _) => action();
             menu.Items.Add(item);
         }
@@ -813,18 +987,31 @@ public sealed partial class MixTrackView
 
         menu.Closed += (_, _) =>
         {
-            if (!IsDisposed && !Disposing && IsHandleCreated) BeginInvoke((Action)menu.Dispose);
-            else menu.Dispose();
+            if (!IsDisposed && !Disposing && IsHandleCreated)
+            {
+                BeginInvoke((Action)menu.Dispose);
+            }
+            else
+            {
+                menu.Dispose();
+            }
         };
         menu.Show(canvas, point);
     }
 
     private void SplitVideoClipAt(MixClip clip, MixLane lane, double split)
     {
-        if (busy || PlaybackLocksEdits) return;
+        if (busy || PlaybackLocksEdits)
+        {
+            return;
+        }
+
         double originalVideoDuration = clip.SourceDuration;
         double left = (split - clip.Start) * Arrangement.Rate(clip);
-        if (left <= 0.001 || left >= clip.SourceDuration - 0.001) return;
+        if (left <= 0.001 || left >= clip.SourceDuration - 0.001)
+        {
+            return;
+        }
 
         string before = CaptureVideoUndoState();
 
@@ -872,10 +1059,18 @@ public sealed partial class MixTrackView
 
     private void ToggleVideoAudioMute(MixClip clip)
     {
-        if (clip.LinkedClipId == null) return;
+        if (clip.LinkedClipId == null)
+        {
+            return;
+        }
+
         var lane = Arrangement.Lanes.FirstOrDefault(l => l.Clips.Any(c => c.Id == clip.LinkedClipId));
         var audioClip = lane?.Clips.FirstOrDefault(c => c.Id == clip.LinkedClipId);
-        if (audioClip == null) return;
+        if (audioClip == null)
+        {
+            return;
+        }
+
         string before = CaptureVideoUndoState();
         audioClip.Gain = audioClip.Gain > 0 ? 0 : 1;
         CommitVideoEdit(before);
@@ -885,9 +1080,17 @@ public sealed partial class MixTrackView
 
     private void RemoveVideoAudio(MixClip clip)
     {
-        if (clip.LinkedClipId == null) return;
+        if (clip.LinkedClipId == null)
+        {
+            return;
+        }
+
         var lane = Arrangement.Lanes.FirstOrDefault(l => l.Clips.Any(c => c.Id == clip.LinkedClipId));
-        if (lane == null) return;
+        if (lane == null)
+        {
+            return;
+        }
+
         string before = CaptureVideoUndoState();
         lane.Clips.RemoveAll(c => c.Id == clip.LinkedClipId);
         clip.LinkedClipId = null;
@@ -898,16 +1101,31 @@ public sealed partial class MixTrackView
 
     private void ExtractVideoAudioToTrack(MixClip clip)
     {
-        if (busy || PlaybackLocksEdits || clip == null) return;
-        if (!Arrangement.Sources.TryGetValue(clip.SourceId, out var source) || !source.IsVideo) return;
+        if (busy || PlaybackLocksEdits || clip == null)
+        {
+            return;
+        }
+
+        if (!Arrangement.Sources.TryGetValue(clip.SourceId, out var source) || !source.IsVideo)
+        {
+            return;
+        }
+
         string? videoPath = source.VideoFilePath;
-        if (string.IsNullOrEmpty(videoPath) || !File.Exists(videoPath)) return;
+        if (string.IsNullOrEmpty(videoPath) || !File.Exists(videoPath))
+        {
+            return;
+        }
 
         _ = RunAsync(async token =>
         {
             status.Text = "Extracting audio from video...";
             string? ffmpegPath = await EnsureFfmpegAvailableAsync(token);
-            if (ffmpegPath == null) return;
+            if (ffmpegPath == null)
+            {
+                return;
+            }
+
             using var video = new VideoObj(videoPath, ffmpegPath);
             await video.ProbeAsync(token);
             if (!video.HasAudio)
@@ -927,9 +1145,15 @@ public sealed partial class MixTrackView
             {
                 using var audioObj = new AudioObj(tempWav, load: true);
                 if (audioObj.IsDisposed || audioObj.Data.Length == 0)
+                {
                     throw new InvalidDataException("The video's audio track could not be loaded.");
+                }
 
-                if (!Arrangement.Lanes.SelectMany(value => value.Clips).Any(value => value.Id == clip.Id)) return;
+                if (!Arrangement.Lanes.SelectMany(value => value.Clips).Any(value => value.Id == clip.Id))
+                {
+                    return;
+                }
+
                 string before = CaptureVideoUndoState();
 
                 var audioSource = new MixSource
@@ -944,7 +1168,10 @@ public sealed partial class MixTrackView
                 double audioOffset = Math.Clamp(clip.SourceOffset * sourceRatio, 0, audioSource.Duration);
                 double audioDuration = Math.Clamp(clip.SourceDuration * sourceRatio, 0, audioSource.Duration - audioOffset);
                 if (audioDuration <= 0.001)
+                {
                     throw new InvalidDataException("The selected video segment does not overlap its audio track.");
+                }
+
                 Arrangement.Sources.Add(audioSource.Id, audioSource);
 
                 var audioLane = new MixLane { Name = $"{video.Name} Audio", Gain = 1 };
@@ -963,14 +1190,21 @@ public sealed partial class MixTrackView
             }
             finally
             {
-                if (File.Exists(tempWav)) File.Delete(tempWav);
+                if (File.Exists(tempWav))
+                {
+                    File.Delete(tempWav);
+                }
             }
         });
     }
 
     private void DeleteVideoClip(MixClip clip)
     {
-        if (clip == null) return;
+        if (clip == null)
+        {
+            return;
+        }
+
         DeleteVideoClips([clip]);
         status.Text = "Video segment deleted.";
     }
@@ -979,18 +1213,28 @@ public sealed partial class MixTrackView
     {
         MixClip[] victims = clips.DistinctBy(clip => clip.Id)
             .Where(clip => _videoLane?.Clips.Contains(clip) == true).ToArray();
-        if (victims.Length == 0) return;
+        if (victims.Length == 0)
+        {
+            return;
+        }
+
         string before = CaptureVideoUndoState();
         HashSet<Guid> audioClipIds = victims.Where(clip => clip.LinkedClipId.HasValue)
             .Select(clip => clip.LinkedClipId!.Value).ToHashSet();
         foreach (MixLane lane in Arrangement.Lanes)
+        {
             lane.Clips.RemoveAll(clip => audioClipIds.Contains(clip.Id));
+        }
+
         foreach (MixClip victim in victims)
         {
             _videoLane!.Clips.Remove(victim);
             selectedClips.Remove(victim.Id);
             fullSelectedClips.Remove(victim.Id);
-            if (selectedClip == victim.Id) selectedClip = null;
+            if (selectedClip == victim.Id)
+            {
+                selectedClip = null;
+            }
         }
         CommitVideoEdit(before);
         ChangedVideo();
@@ -1002,7 +1246,11 @@ public sealed partial class MixTrackView
 
     private void CopyVideoClip()
     {
-        if (Clip is not { } clip || !clip.IsVideo) return;
+        if (Clip is not { } clip || !clip.IsVideo)
+        {
+            return;
+        }
+
         var source = Arrangement.Sources[clip.SourceId];
         var data = new
         {
@@ -1032,17 +1280,26 @@ public sealed partial class MixTrackView
 
     private void PasteVideoClip()
     {
-        if (busy || PlaybackLocksEdits) return;
+        if (busy || PlaybackLocksEdits)
+        {
+            return;
+        }
+
         string json;
         try { json = Clipboard.GetText(); } catch { return; }
-        if (string.IsNullOrWhiteSpace(json)) return;
+        if (string.IsNullOrWhiteSpace(json))
+        {
+            return;
+        }
 
         try
         {
             var data = JsonSerializer.Deserialize<VideoClipboardData>(json)
                 ?? throw new InvalidDataException("The clipboard does not contain a video segment.");
             if (!data.IsVideo || string.IsNullOrWhiteSpace(data.VideoFilePath) || !File.Exists(data.VideoFilePath))
+            {
                 throw new InvalidDataException("The copied video file is no longer available.");
+            }
 
             string before = CaptureVideoUndoState();
             MixLane lane = _videoLane ?? new MixLane { Name = "Video #1", IsVideo = true, Gain = 1 };
@@ -1124,7 +1381,7 @@ public sealed partial class MixTrackView
     private void ShowRenderMenuWithVideo(Control button, Point point)
     {
         var menu = new ContextMenuStrip { ShowItemToolTips = true };
-        menu.Closing += (_, e) => { if (e.CloseReason == ToolStripDropDownCloseReason.ItemClicked) e.Cancel = true; };
+        menu.Closing += (_, e) => { if (e.CloseReason == ToolStripDropDownCloseReason.ItemClicked) { e.Cancel = true; } };
         var mixItem = new ToolStripMenuItem("Mix (one track)");
         mixItem.Click += async (_, _) => { menu.Close(); await ExportAsync(); };
         menu.Items.Add(mixItem);
@@ -1136,7 +1393,10 @@ public sealed partial class MixTrackView
         double maximumFrameRate = videoClips.Select(clip => Arrangement.Sources.TryGetValue(clip.SourceId, out MixSource? source)
                 ? source.VideoFrameRate : 0)
             .Where(rate => double.IsFinite(rate) && rate > 0).DefaultIfEmpty(30).Max();
-        if (!_renderFramerateCustomized) _renderFramerate = Math.Clamp(maximumFrameRate, 1, 120);
+        if (!_renderFramerateCustomized)
+        {
+            _renderFramerate = Math.Clamp(maximumFrameRate, 1, 120);
+        }
 
         var resolutionItem = new ToolStripMenuItem("Resolution");
         var resolutionCombo = new ToolStripComboBox { DropDownStyle = ComboBoxStyle.DropDownList, Width = 200 };
@@ -1151,7 +1411,10 @@ public sealed partial class MixTrackView
         resolutionCombo.SelectedItem = _renderResolution;
         resolutionCombo.SelectedIndexChanged += (_, _) =>
         {
-            if (resolutionCombo.SelectedItem is string sel) _renderResolution = sel;
+            if (resolutionCombo.SelectedItem is string sel)
+            {
+                _renderResolution = sel;
+            }
         };
         resolutionItem.DropDownItems.Add(resolutionCombo);
         menu.Items.Add(resolutionItem);
@@ -1176,7 +1439,10 @@ public sealed partial class MixTrackView
         formatCombo.SelectedItem = _renderFormat;
         formatCombo.SelectedIndexChanged += (_, _) =>
         {
-            if (formatCombo.SelectedItem is string sel) _renderFormat = sel;
+            if (formatCombo.SelectedItem is string sel)
+            {
+                _renderFormat = sel;
+            }
         };
         formatItem.DropDownItems.Add(formatCombo);
         menu.Items.Add(formatItem);
@@ -1193,8 +1459,14 @@ public sealed partial class MixTrackView
         menu.Items.Add(renderVideoItem);
         menu.Closed += (_, _) =>
         {
-            if (!IsDisposed && !Disposing && IsHandleCreated) BeginInvoke((Action)menu.Dispose);
-            else menu.Dispose();
+            if (!IsDisposed && !Disposing && IsHandleCreated)
+            {
+                BeginInvoke((Action)menu.Dispose);
+            }
+            else
+            {
+                menu.Dispose();
+            }
         };
 
         menu.Show(button, point);
@@ -1202,7 +1474,10 @@ public sealed partial class MixTrackView
 
     private async Task RenderVideoAsync()
     {
-        if (busy || _videoLane == null || _videoLane.Clips.Count == 0) return;
+        if (busy || _videoLane == null || _videoLane.Clips.Count == 0)
+        {
+            return;
+        }
 
         _ = RunAsync(async token =>
         {
@@ -1212,7 +1487,9 @@ public sealed partial class MixTrackView
             double renderEnd = clips.Max(clip => clip.Start + Arrangement.ClipDuration(clip));
             double renderDuration = renderEnd - renderStart;
             if (!double.IsFinite(renderDuration) || renderDuration <= 0)
+            {
                 throw new InvalidDataException("The video track has no renderable duration.");
+            }
 
             string extension = _renderFormat == "avi" ? ".avi" : ".mp4";
             string baseName = string.Concat(Arrangement.Name.Select(character => Path.GetInvalidFileNameChars().Contains(character) ? '_' : character));
@@ -1224,10 +1501,17 @@ public sealed partial class MixTrackView
                 InitialDirectory = Environment.GetFolderPath(Environment.SpecialFolder.MyVideos),
                 AddExtension = true
             };
-            if (await this.ShowMixFileDialogAsync(saveDialog, "Save rendered video") != DialogResult.OK) return;
+            if (await this.ShowMixFileDialogAsync(saveDialog, "Save rendered video") != DialogResult.OK)
+            {
+                return;
+            }
+
             string outputPath = saveDialog.FileName;
             string? ffmpegPath = await EnsureFfmpegAvailableAsync(token);
-            if (ffmpegPath == null) return;
+            if (ffmpegPath == null)
+            {
+                return;
+            }
 
             int width, height;
             if (_renderResolution == "keep original")
@@ -1241,12 +1525,17 @@ public sealed partial class MixTrackView
                 Match resolution = Regex.Match(_renderResolution ?? "", @"^(\d+)x(\d+)");
                 if (!resolution.Success || !int.TryParse(resolution.Groups[1].Value, out width)
                     || !int.TryParse(resolution.Groups[2].Value, out height))
+                {
                     throw new InvalidOperationException("Select a valid output resolution.");
+                }
             }
             width &= ~1;
             height &= ~1;
             if (width < 2 || height < 2 || width > 7680 || height > 4320)
+            {
                 throw new InvalidDataException("The selected video resolution is outside the supported render limits.");
+            }
+
             double frameRate = Math.Clamp(_renderFramerate, 1, 120);
             string frameRateText = frameRate.ToString("0.###", System.Globalization.CultureInfo.InvariantCulture);
             string durationText = renderDuration.ToString("0.######", System.Globalization.CultureInfo.InvariantCulture);
@@ -1264,7 +1553,10 @@ public sealed partial class MixTrackView
             {
                 string? audioError = await RenderArrangementAudioForVideoAsync(renderStart, renderEnd,
                     path => audioPath = path, fraction => progressDialog.Report(fraction * 0.15), token);
-                if (audioError != null) throw new InvalidOperationException(audioError);
+                if (audioError != null)
+                {
+                    throw new InvalidOperationException(audioError);
+                }
 
                 var startInfo = new ProcessStartInfo
                 {
@@ -1286,12 +1578,21 @@ public sealed partial class MixTrackView
                 }
                 AddVideoArguments(startInfo, "-filter_complex_threads", Math.Max(1, Environment.ProcessorCount - 2).ToString(System.Globalization.CultureInfo.InvariantCulture),
                     "-filter_complex", filterComplex, "-map", "[vout]");
-                if (audioInputIndex >= 0) AddVideoArguments(startInfo, "-map", "[aout]");
+                if (audioInputIndex >= 0)
+                {
+                    AddVideoArguments(startInfo, "-map", "[aout]");
+                }
+
                 AddVideoArguments(startInfo, "-r", frameRateText, "-t", durationText);
                 if (_renderFormat == "avi")
+                {
                     AddVideoArguments(startInfo, "-c:v", "mpeg4", "-q:v", "3", "-c:a", "mp3", "-b:a", "192k");
+                }
                 else
+                {
                     AddVideoArguments(startInfo, "-c:v", "libx264", "-preset", "fast", "-crf", "23", "-pix_fmt", "yuv420p", "-c:a", "aac", "-b:a", "192k");
+                }
+
                 AddVideoArguments(startInfo, "-threads", Math.Max(1, Environment.ProcessorCount - 2).ToString(System.Globalization.CultureInfo.InvariantCulture),
                     "-progress", "pipe:1", "-nostats", "-y", partialPath);
 
@@ -1305,7 +1606,11 @@ public sealed partial class MixTrackView
                     while ((line = await process.StandardOutput.ReadLineAsync(renderCancellation.Token).ConfigureAwait(false)) != null)
                     {
                         if (!line.StartsWith("out_time_ms=", StringComparison.Ordinal)
-                            || !long.TryParse(line.AsSpan("out_time_ms=".Length), out long microseconds)) continue;
+                            || !long.TryParse(line.AsSpan("out_time_ms=".Length), out long microseconds))
+                        {
+                            continue;
+                        }
+
                         double fraction = Math.Clamp(microseconds / 1_000_000d / renderDuration, 0, 1);
                         progressDialog.Report(0.15 + fraction * 0.85);
                     }
@@ -1315,9 +1620,14 @@ public sealed partial class MixTrackView
 
                 string diagnostics = await errorTask.ConfigureAwait(false);
                 if (process.ExitCode != 0)
+                {
                     throw new InvalidOperationException($"FFmpeg video rendering failed (exit code {process.ExitCode}):{Environment.NewLine}{diagnostics.Trim()}");
+                }
+
                 if (!File.Exists(partialPath) || new FileInfo(partialPath).Length == 0)
+                {
                     throw new InvalidDataException("FFmpeg completed without producing a video file.");
+                }
 
                 renderCancellation.Token.ThrowIfCancellationRequested();
                 File.Move(partialPath, outputPath, overwrite: true);
@@ -1337,7 +1647,10 @@ public sealed partial class MixTrackView
             finally
             {
                 TryDeleteVideoTemp(partialPath);
-                if (audioPath != null) TryDeleteVideoTemp(audioPath);
+                if (audioPath != null)
+                {
+                    TryDeleteVideoTemp(audioPath);
+                }
             }
         });
     }
@@ -1367,7 +1680,9 @@ public sealed partial class MixTrackView
 
             if (!Arrangement.Sources.TryGetValue(clip.SourceId, out MixSource? source)
                 || !source.IsVideo || string.IsNullOrWhiteSpace(source.VideoFilePath) || !File.Exists(source.VideoFilePath))
+            {
                 throw new FileNotFoundException("A video segment source is unavailable.", source?.VideoFilePath);
+            }
 
             AddVideoArguments(startInfo, "-i", source.VideoFilePath);
             string videoDuration = clip.SourceDuration.ToString("0.######", System.Globalization.CultureInfo.InvariantCulture);
@@ -1400,7 +1715,10 @@ public sealed partial class MixTrackView
 
     private static void AddVideoArguments(ProcessStartInfo startInfo, params string[] arguments)
     {
-        foreach (string argument in arguments) startInfo.ArgumentList.Add(argument);
+        foreach (string argument in arguments)
+        {
+            startInfo.ArgumentList.Add(argument);
+        }
     }
 
     private async Task<string?> RenderArrangementAudioForVideoAsync(double start, double end,
@@ -1422,14 +1740,29 @@ public sealed partial class MixTrackView
                     part.Copy.Start = visibleStart - start;
                     part.Copy.SourceOffset += (visibleStart - part.Original.Start) * factor;
                     part.Copy.SourceDuration = (visibleEnd - visibleStart) * factor;
-                    if (visibleStart > part.Original.Start) part.Copy.FadeIn = 0;
-                    if (visibleEnd < part.Original.Start + Arrangement.ClipDuration(part.Original)) part.Copy.FadeOut = 0;
+                    if (visibleStart > part.Original.Start)
+                    {
+                        part.Copy.FadeIn = 0;
+                    }
+
+                    if (visibleEnd < part.Original.Start + Arrangement.ClipDuration(part.Original))
+                    {
+                        part.Copy.FadeOut = 0;
+                    }
+
                     return part.Copy;
                 }).ToList();
             return copy;
         }).ToList();
-        foreach (var source in Arrangement.Sources) snapshot.Sources.Add(source.Key, source.Value);
-        if (!snapshot.Lanes.Any(lane => lane.Clips.Count > 0)) return null;
+        foreach (var source in Arrangement.Sources)
+        {
+            snapshot.Sources.Add(source.Key, source.Value);
+        }
+
+        if (!snapshot.Lanes.Any(lane => lane.Clips.Count > 0))
+        {
+            return null;
+        }
 
         using AudioObj rendered = await MixRenderer.RenderAsync(snapshot, cancellationToken,
             new Progress<double>(fraction => report(fraction))).ConfigureAwait(false);
@@ -1467,13 +1800,21 @@ public sealed partial class MixTrackView
 
     private static void TryKillVideoProcess(Process process)
     {
-        try { if (!process.HasExited) process.Kill(entireProcessTree: true); }
+        try { if (!process.HasExited)
+            {
+                process.Kill(entireProcessTree: true);
+            }
+        }
         catch (InvalidOperationException) { }
     }
 
     private static void TryDeleteVideoTemp(string path)
     {
-        try { if (File.Exists(path)) File.Delete(path); }
+        try { if (File.Exists(path))
+            {
+                File.Delete(path);
+            }
+        }
         catch (Exception error) when (error is IOException or UnauthorizedAccessException)
         { LogManager.Log($"Unable to remove temporary video render file '{path}'.", error); }
     }

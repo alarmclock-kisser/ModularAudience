@@ -94,7 +94,9 @@ public sealed class AudioScanControllerTests
         int uiThread = Environment.CurrentManagedThreadId;
         List<int> resultThreads = [];
         foreach (TextBox result in fixture.Results)
+        {
             result.TextChanged += (_, _) => resultThreads.Add(Environment.CurrentManagedThreadId);
+        }
 
         Task.Run(() =>
         {
@@ -290,16 +292,34 @@ public sealed class AudioScanControllerTests
 
     private static void CompleteScan(string kind, TaskCompletionSource<double> bpm, TaskCompletionSource<float> timing, TaskCompletionSource<string> key)
     {
-        if (kind == "BPM") bpm.SetResult(128.5);
-        else if (kind == "timing") timing.SetResult(2f);
-        else key.SetResult("C# minor");
+        if (kind == "BPM")
+        {
+            bpm.SetResult(128.5);
+        }
+        else if (kind == "timing")
+        {
+            timing.SetResult(2f);
+        }
+        else
+        {
+            key.SetResult("C# minor");
+        }
     }
 
     private static void AssertScanResult(string kind, AudioObj audio)
     {
-        if (kind == "BPM") Assert.AreEqual(128.5f, audio.ScannedBpm);
-        else if (kind == "timing") Assert.AreEqual(2f, audio.ScannedTiming);
-        else Assert.AreEqual("C# minor", audio.ScannedKey);
+        if (kind == "BPM")
+        {
+            Assert.AreEqual(128.5f, audio.ScannedBpm);
+        }
+        else if (kind == "timing")
+        {
+            Assert.AreEqual(2f, audio.ScannedTiming);
+        }
+        else
+        {
+            Assert.AreEqual("C# minor", audio.ScannedKey);
+        }
     }
 
     private static bool Drain(Task<bool> task)

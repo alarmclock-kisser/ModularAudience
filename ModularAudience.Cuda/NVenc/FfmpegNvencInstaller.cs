@@ -155,7 +155,11 @@ namespace ModularAudience.Cuda.NVenc
             foreach (var entry in pathEnv.Split(Path.PathSeparator))
             {
                 var dir = entry.Trim().Trim('"');
-                if (string.IsNullOrWhiteSpace(dir) || !Path.IsPathFullyQualified(dir)) continue;
+                if (string.IsNullOrWhiteSpace(dir) || !Path.IsPathFullyQualified(dir))
+                {
+                    continue;
+                }
+
                 try
                 {
                     var candidate = Path.Combine(dir, "ffmpeg.exe");
@@ -234,7 +238,10 @@ namespace ModularAudience.Cuda.NVenc
         /// </summary>
         public static void RemoveManagedNvencFfmpeg()
         {
-            if (!Directory.Exists(BinaryRootDirectory)) return;
+            if (!Directory.Exists(BinaryRootDirectory))
+            {
+                return;
+            }
 
             foreach (var dir in Directory.EnumerateDirectories(BinaryRootDirectory, "ffmpeg-nvenc-*", SearchOption.TopDirectoryOnly))
             {
@@ -336,7 +343,11 @@ namespace ModularAudience.Cuda.NVenc
                 {
                     foreach (var asset in assets.EnumerateArray())
                     {
-                        if (!asset.TryGetProperty("name", out var nameProp)) continue;
+                        if (!asset.TryGetProperty("name", out var nameProp))
+                        {
+                            continue;
+                        }
+
                         string name = nameProp.GetString() ?? "";
 
                         bool matches = assetSuffix switch
@@ -365,7 +376,10 @@ namespace ModularAudience.Cuda.NVenc
                 foreach (var rel in doc.RootElement.EnumerateArray())
                 {
                     string? tag = rel.TryGetProperty("tag_name", out var t) ? t.GetString() : null;
-                    if (string.IsNullOrWhiteSpace(tag) || tag == "latest") continue;
+                    if (string.IsNullOrWhiteSpace(tag) || tag == "latest")
+                    {
+                        continue;
+                    }
 
                     progress?.Report($"Checking release {tag} for {assetSuffix} build...");
 
@@ -373,11 +387,18 @@ namespace ModularAudience.Cuda.NVenc
                         $"https://api.github.com/repos/{GithubRepository}/releases/tags/{tag}").ConfigureAwait(false);
 
                     using var rdoc = JsonDocument.Parse(releaseJson);
-                    if (!rdoc.RootElement.TryGetProperty("assets", out var rassets)) continue;
+                    if (!rdoc.RootElement.TryGetProperty("assets", out var rassets))
+                    {
+                        continue;
+                    }
 
                     foreach (var asset in rassets.EnumerateArray())
                     {
-                        if (!asset.TryGetProperty("name", out var nameProp)) continue;
+                        if (!asset.TryGetProperty("name", out var nameProp))
+                        {
+                            continue;
+                        }
+
                         string name = nameProp.GetString() ?? "";
 
                         // Look for a 6.1 asset with win64-gpl (static, smaller)
@@ -395,7 +416,10 @@ namespace ModularAudience.Cuda.NVenc
                         }
                     }
 
-                    if (downloadUrl != null) break;
+                    if (downloadUrl != null)
+                    {
+                        break;
+                    }
                 }
             }
 

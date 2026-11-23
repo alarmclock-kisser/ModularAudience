@@ -55,14 +55,21 @@ public static partial class AudioEffectProcessor
         {
             delay = Math.Clamp(delay, 1, this.data.Length - 2);
             double index = this.position - delay;
-            if (index < 0) index += this.data.Length;
+            if (index < 0)
+            {
+                index += this.data.Length;
+            }
+
             int left = (int)index, right = (left + 1) % this.data.Length;
             return this.data[left] + (this.data[right] - this.data[left]) * (index - left);
         }
         internal void Write(double input)
         {
             this.data[this.position] = input;
-            if (++this.position == this.data.Length) this.position = 0;
+            if (++this.position == this.data.Length)
+            {
+                this.position = 0;
+            }
         }
     }
 
@@ -77,7 +84,11 @@ public static partial class AudioEffectProcessor
         {
             double delayed = this.data[this.position], output = delayed - this.coefficient * input;
             this.data[this.position] = input + this.coefficient * output;
-            if (++this.position == this.data.Length) this.position = 0;
+            if (++this.position == this.data.Length)
+            {
+                this.position = 0;
+            }
+
             return output;
         }
     }

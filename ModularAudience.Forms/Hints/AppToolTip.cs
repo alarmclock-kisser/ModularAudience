@@ -23,7 +23,7 @@ public sealed class AppToolTip : System.Windows.Forms.ToolTip
 
     public AppToolTip()
     {
-        this.Popup += (_, e) => { if (!this.CanShow) e.Cancel = true; };
+        this.Popup += (_, e) => { if (!this.CanShow) { e.Cancel = true; } };
         HintPolicy.Register(this);
     }
 
@@ -34,9 +34,15 @@ public sealed class AppToolTip : System.Windows.Forms.ToolTip
     {
         ArgumentNullException.ThrowIfNull(control);
         if (this.IsParameterHelp && control is NumericUpDown number && !string.IsNullOrWhiteSpace(caption))
+        {
             caption += $"\nAllowed range: {number.Minimum} to {number.Maximum}; step: {number.Increment}.";
+        }
+
         if (!this.targets.Any(reference => reference.TryGetTarget(out var target) && ReferenceEquals(target, control)))
+        {
             this.targets.Add(new(control));
+        }
+
         base.SetToolTip(control, caption);
         if (this.IsParameterHelp && control is not Label && control.Parent is { } parent)
         {
@@ -44,14 +50,21 @@ public sealed class AppToolTip : System.Windows.Forms.ToolTip
             if (index > 0 && parent.Controls[index - 1] is Label label)
             {
                 base.SetToolTip(label, caption);
-                if (!this.targets.Any(reference => reference.TryGetTarget(out var target) && ReferenceEquals(target, label))) this.targets.Add(new(label));
+                if (!this.targets.Any(reference => reference.TryGetTarget(out var target) && ReferenceEquals(target, label)))
+                {
+                    this.targets.Add(new(label));
+                }
             }
         }
     }
 
     internal void ApplyHintPolicy()
     {
-        if (this.disposed) return;
+        if (this.disposed)
+        {
+            return;
+        }
+
         var owner = this.targets.Select(reference => reference.TryGetTarget(out var target) ? target : null)
             .FirstOrDefault(control => control is { IsDisposed: false, IsHandleCreated: true });
         if (owner?.InvokeRequired == true)
@@ -61,31 +74,74 @@ public sealed class AppToolTip : System.Windows.Forms.ToolTip
         }
         this.Active = this.CanShow;
         if (!this.CanShow)
+        {
             foreach (var reference in this.targets)
-                if (reference.TryGetTarget(out var control) && !control.IsDisposed) base.Hide(control);
+            {
+                if (reference.TryGetTarget(out var control) && !control.IsDisposed)
+                {
+                    base.Hide(control);
+                }
+            }
+        }
+
         this.targets.RemoveAll(reference => !reference.TryGetTarget(out var control) || control.IsDisposed);
     }
 
     private bool Prepare(IWin32Window window)
     {
-        if (!this.CanShow || !this.Active) return false;
+        if (!this.CanShow || !this.Active)
+        {
+            return false;
+        }
+
         if (window is Control control && !this.targets.Any(reference => reference.TryGetTarget(out var target) && ReferenceEquals(target, control)))
+        {
             this.targets.Add(new(control));
+        }
+
         return true;
     }
 
     // ToolTip.Active alone does not reliably suppress programmatic Show calls.
-    public new void Show(string? text, IWin32Window window) { if (this.Prepare(window)) base.Show(text, window); }
-    public new void Show(string? text, IWin32Window window, int duration) { if (this.Prepare(window)) base.Show(text, window, duration); }
-    public new void Show(string? text, IWin32Window window, Point point) { if (this.Prepare(window)) base.Show(text, window, point); }
-    public new void Show(string? text, IWin32Window window, Point point, int duration) { if (this.Prepare(window)) base.Show(text, window, point, duration); }
-    public new void Show(string? text, IWin32Window window, int x, int y) { if (this.Prepare(window)) base.Show(text, window, x, y); }
-    public new void Show(string? text, IWin32Window window, int x, int y, int duration) { if (this.Prepare(window)) base.Show(text, window, x, y, duration); }
+    public new void Show(string? text, IWin32Window window) { if (this.Prepare(window))
+        {
+            base.Show(text, window);
+        }
+    }
+    public new void Show(string? text, IWin32Window window, int duration) { if (this.Prepare(window))
+        {
+            base.Show(text, window, duration);
+        }
+    }
+    public new void Show(string? text, IWin32Window window, Point point) { if (this.Prepare(window))
+        {
+            base.Show(text, window, point);
+        }
+    }
+    public new void Show(string? text, IWin32Window window, Point point, int duration) { if (this.Prepare(window))
+        {
+            base.Show(text, window, point, duration);
+        }
+    }
+    public new void Show(string? text, IWin32Window window, int x, int y) { if (this.Prepare(window))
+        {
+            base.Show(text, window, x, y);
+        }
+    }
+    public new void Show(string? text, IWin32Window window, int x, int y, int duration) { if (this.Prepare(window))
+        {
+            base.Show(text, window, x, y, duration);
+        }
+    }
 
     protected override void Dispose(bool disposing)
     {
         this.disposed = true;
-        if (disposing) this.targets.Clear();
+        if (disposing)
+        {
+            this.targets.Clear();
+        }
+
         base.Dispose(disposing);
     }
 }

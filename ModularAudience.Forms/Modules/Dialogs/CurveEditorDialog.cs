@@ -83,7 +83,7 @@ internal sealed class CurveEditorDialog : Form
             new Label { Text = "Keep rows in x order. First x = 0; last x = 1. Up to 512 points.", AutoSize = true }]);
         pointsPage.Controls.Add(this.points); pointsPage.Controls.Add(pointActions);
         add.Click += (_, _) => { int row = this.points.Rows.Add(); this.points.CurrentCell = this.points.Rows[row].Cells[0]; this.points.BeginEdit(true); };
-        remove.Click += (_, _) => { foreach (DataGridViewRow row in this.points.SelectedRows.Cast<DataGridViewRow>().Where(row => !row.IsNewRow).ToArray()) this.points.Rows.Remove(row); this.ValidateCurve(); };
+        remove.Click += (_, _) => { foreach (DataGridViewRow row in this.points.SelectedRows.Cast<DataGridViewRow>().Where(row => !row.IsNewRow).ToArray()) { this.points.Rows.Remove(row); } this.ValidateCurve(); };
         this.points.DataError += (_, e) => { e.ThrowException = false; this.status.Text = "Enter numeric checkpoint values using decimal points."; };
         this.points.CellValueChanged += (_, _) => this.ValidateCurve(); this.points.RowsRemoved += (_, _) => this.ValidateCurve();
         this.interpolation.SelectedIndexChanged += (_, _) => this.ValidateCurve(); this.modes.SelectedIndexChanged += (_, _) => this.ValidateCurve();
@@ -100,7 +100,7 @@ internal sealed class CurveEditorDialog : Form
         // Enter must not auto-apply the curve; editing a coefficient and pressing Enter should only commit the field.
         this.AcceptButton = null;
         this.apply.Click += (_, _) => this.Safe(this.AcceptCurve);
-        this.presets.Presets.SelectedIndexChanged += (_, _) => { if (!this.refreshing) this.Safe(this.LoadSelectedPreset); this.UpdatePresetButtons(); };
+        this.presets.Presets.SelectedIndexChanged += (_, _) => { if (!this.refreshing) { this.Safe(this.LoadSelectedPreset); } this.UpdatePresetButtons(); };
         this.presets.Presets.DropDown += (_, _) => this.Safe(() => this.RefreshPresets(this.presets.Presets.SelectedItem as CurvePreset));
         this.presets.LoadButton.Click += (_, _) => this.Safe(this.LoadSelectedPreset); this.presets.SaveButton.Click += (_, _) => this.Safe(this.SavePreset);
         this.presets.RenameButton.Click += (_, _) => this.Safe(this.RenamePreset); this.presets.DeleteButton.Click += (_, _) => this.Safe(this.DeletePreset);
@@ -147,10 +147,16 @@ internal sealed class CurveEditorDialog : Form
             this.equation.Text = curve.Equation; this.modes.SelectedIndex = (int)curve.Mode; this.interpolation.SelectedIndex = (int)curve.Interpolation;
             this.coefficients["f"].Value = (decimal)curve.Cycles; this.coefficients["p"].Value = (decimal)curve.Phase;
             this.coefficients["a"].Value = (decimal)curve.A; this.coefficients["b"].Value = (decimal)curve.B; this.coefficients["c"].Value = (decimal)curve.C; this.coefficients["d"].Value = (decimal)curve.D;
-            this.points.Rows.Clear(); foreach (EffectCurvePoint point in curve.Points) this.points.Rows.Add(point.X.ToString("G17", CultureInfo.InvariantCulture), point.Y.ToString("G17", CultureInfo.InvariantCulture));
+            this.points.Rows.Clear(); foreach (EffectCurvePoint point in curve.Points)
+            {
+                this.points.Rows.Add(point.X.ToString("G17", CultureInfo.InvariantCulture), point.Y.ToString("G17", CultureInfo.InvariantCulture));
+            }
         }
         finally { this.syncing = wasSyncing; }
-        if (!this.syncing) this.ValidateCurve();
+        if (!this.syncing)
+        {
+            this.ValidateCurve();
+        }
     }
     internal void AcceptCurve() { EffectParameterCurve binding = this.CurrentBinding; this.accepted(binding.Copy()); this.DialogResult = DialogResult.OK; this.Close(); }
     internal void SavePreset()
@@ -160,19 +166,31 @@ internal sealed class CurveEditorDialog : Form
     }
     internal void LoadSelectedPreset()
     {
-        if (this.presets.Presets.SelectedItem is not CurvePreset selected) return;
+        if (this.presets.Presets.SelectedItem is not CurvePreset selected)
+        {
+            return;
+        }
+
         CurvePreset loaded = selected.IsBuiltIn ? selected : this.store.Load(selected.Name);
         this.presets.PresetName.Text = loaded.IsBuiltIn ? string.Empty : loaded.Name; this.SetShape(loaded.Curve);
         this.status.Text = "Loaded shape: " + loaded.Name + ". Range and timing are unchanged. Save a variant with a new name (blank = Curve#N).";
     }
     internal void RenamePreset()
     {
-        if (this.presets.Presets.SelectedItem is not CurvePreset { IsBuiltIn: false } selected) return;
+        if (this.presets.Presets.SelectedItem is not CurvePreset { IsBuiltIn: false } selected)
+        {
+            return;
+        }
+
         CurvePreset renamed = this.store.Rename(selected.Name, this.presets.PresetName.Text); this.presets.PresetName.Text = renamed.Name; this.RefreshPresets(renamed);
     }
     internal void DeletePreset()
     {
-        if (this.presets.Presets.SelectedItem is not CurvePreset { IsBuiltIn: false } selected) return;
+        if (this.presets.Presets.SelectedItem is not CurvePreset { IsBuiltIn: false } selected)
+        {
+            return;
+        }
+
         this.store.Delete(selected.Name); this.presets.PresetName.Clear(); this.RefreshPresets(null);
         this.status.Text = "User preset deleted. The current unsaved curve is unchanged.";
     }
@@ -197,12 +215,19 @@ internal sealed class CurveEditorDialog : Form
     {
         if (!double.TryParse(Convert.ToString(row.Cells[0].Value, CultureInfo.InvariantCulture), NumberStyles.Float, CultureInfo.InvariantCulture, out double x) ||
             !double.TryParse(Convert.ToString(row.Cells[1].Value, CultureInfo.InvariantCulture), NumberStyles.Float, CultureInfo.InvariantCulture, out double y))
+        {
             throw new ArgumentException("Every checkpoint row needs numeric x and y values (use decimal points).");
+        }
+
         return new EffectCurvePoint(x, y);
     }).ToArray();
     private void ValidateCurve()
     {
-        if (this.syncing) return;
+        if (this.syncing)
+        {
+            return;
+        }
+
         try
         {
             CompiledEffectCurve curve = this.CurrentBinding.Curve.Compile();
@@ -225,7 +250,11 @@ internal sealed class CurveEditorDialog : Form
     private void UpdateEnd()
     {
         this.end.Enabled = !this.follow.Checked;
-        if (this.follow.Checked) this.end.Value = Math.Clamp((decimal)this.ToDisplay(this.currentTarget()), this.end.Minimum, this.end.Maximum);
+        if (this.follow.Checked)
+        {
+            this.end.Value = Math.Clamp((decimal)this.ToDisplay(this.currentTarget()), this.end.Minimum, this.end.Maximum);
+        }
+
         this.tips.SetToolTip(this.end, this.target.InterpolateSpeed ? "Speed multiplier relative to Source BPM. The duration factor is its reciprocal." : "Parameter value when the curve reaches y=1.");
     }
     private void Safe(Action action) { try { action(); } catch (Exception error) when (EffectOptionsEditor.IsEffectError(error)) { this.status.ForeColor = Color.Firebrick; this.status.Text = error.Message; } }
@@ -250,8 +279,11 @@ internal sealed class CurveEditorDialog : Form
             double val = maxY - range * t; g.DrawString(val.ToString("G3", CultureInfo.InvariantCulture), this.Font, Brushes.Gainsboro, 2, yy - 6); }
         g.DrawString("x = 0", this.Font, Brushes.Gainsboro, area.Left, area.Bottom + 3); g.DrawString("x = 1", this.Font, Brushes.Gainsboro, area.Right - 40, area.Bottom + 3);
         g.DrawString("Curve shape (y may be negative)", this.Font, Brushes.Gainsboro, area.Left, 2);
-        if (this.plotted is not null) g.DrawLines(line, this.plotted.Select((y, i) => new PointF(area.Left + area.Width * i / (this.plotted.Length - 1),
+        if (this.plotted is not null)
+        {
+            g.DrawLines(line, this.plotted.Select((y, i) => new PointF(area.Left + area.Width * i / (this.plotted.Length - 1),
             (float)(area.Bottom - area.Height * (y - minY) / range))).ToArray());
+        }
     }
     protected override void Dispose(bool disposing) { if (disposing) { this.tips.Dispose(); this.equation.Font.Dispose(); } base.Dispose(disposing); }
 }

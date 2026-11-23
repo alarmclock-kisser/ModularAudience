@@ -109,14 +109,22 @@ public sealed class YoutubePipelineUiTests
         using var scope = new Scope();
         var window = scope.Window;
         int downloads = 0, active = 0, peak = 0;
-        foreach (int i in Enumerable.Range(1, 5)) scope.Wav(i);
+        foreach (int i in Enumerable.Range(1, 5))
+        {
+            scope.Wav(i);
+        }
+
         Set(window, "downloadProvider", new Func<YtdlpVideo, YtdlpDownloadOptions, CancellationToken, Task<YtdlpDownloadResult>>(async (video, _, token) =>
         {
             downloads++; active++; peak = Math.Max(peak, active);
             try
             {
                 await Task.Delay(20, token);
-                if (video.Id == Video(0).Id) throw new IOException("Independent download failure");
+                if (video.Id == Video(0).Id)
+                {
+                    throw new IOException("Independent download failure");
+                }
+
                 return Result(scope.PathFor(video));
             }
             finally { active--; }
@@ -130,7 +138,11 @@ public sealed class YoutubePipelineUiTests
         Assert.AreEqual(0, scope.Imported.Count);
         Assert.IsTrue(Field<TableLayoutPanel>(window, "queryPanel").Enabled);
         Assert.IsTrue(Jobs(batch).Skip(1).All(job => Get<bool>(job, "WaitingForBpmWithoutLimit")));
-        foreach (int i in Enumerable.Range(1, 5)) Assert.IsTrue(AudioObj.WriteBpmTagToFile(scope.PathFor(Video(i)), 100 + i));
+        foreach (int i in Enumerable.Range(1, 5))
+        {
+            Assert.IsTrue(AudioObj.WriteBpmTagToFile(scope.PathFor(Video(i)), 100 + i));
+        }
+
         PumpTask(scope.Work);
         Assert.AreEqual(5, scope.Imported.Count);
         Assert.IsTrue(scope.Imported.All(audio => audio.Bpm > 0));
@@ -142,7 +154,11 @@ public sealed class YoutubePipelineUiTests
     {
         using var source = new CancellationTokenSource();
         using var scope = new Scope();
-        foreach (int i in new[] { 0, 1 }) scope.Wav(i);
+        foreach (int i in new[] { 0, 1 })
+        {
+            scope.Wav(i);
+        }
+
         scope.UseLocalDownloads();
         object batch = scope.StartPass([Video(0), Video(1)], source, true, TimeSpan.Zero, 0, 1);
         PumpUntil(() => Jobs(batch).All(job => Get<bool>(job, "WaitingForBpmWithoutLimit")));
@@ -189,7 +205,15 @@ public sealed class YoutubePipelineUiTests
         Set(scope.Window, "downloadProvider", new Func<YtdlpVideo, YtdlpDownloadOptions, CancellationToken, Task<YtdlpDownloadResult>>((video, options, _) =>
         {
             attempts++;
-            if (first is null) first = options; else Assert.AreSame(first, options);
+            if (first is null)
+            {
+                first = options;
+            }
+            else
+            {
+                Assert.AreSame(first, options);
+            }
+
             return attempts == 1 ? Task.FromException<YtdlpDownloadResult>(new IOException("Retry me")) : Task.FromResult(Result(scope.PathFor(video)));
         }));
         object batch = scope.StartPass([Video(0)], source, false, TimeSpan.Zero, 1, 1);
@@ -322,7 +346,11 @@ public sealed class YoutubePipelineUiTests
                 try { Work.GetAwaiter().GetResult(); } catch (OperationCanceledException) { }
             }
             Window.Dispose();
-            foreach (var audio in Imported) audio.Dispose();
+            foreach (var audio in Imported)
+            {
+                audio.Dispose();
+            }
+
             importGate.Dispose();
             Directory.Delete(directory, recursive: true);
         }

@@ -34,8 +34,16 @@ public sealed class SharedModelPool<T> where T : class, IDisposable
         {
             if (slot.Model != null && !slot.Keys.Contains(key))
             {
-                if (load == null) return null;
-                if (slot.Users > 0) throw new InvalidOperationException("This model is already in use with different load options. Close its other separation windows before changing the model configuration.");
+                if (load == null)
+                {
+                    return null;
+                }
+
+                if (slot.Users > 0)
+                {
+                    throw new InvalidOperationException("This model is already in use with different load options. Close its other separation windows before changing the model configuration.");
+                }
+
                 slot.Expiry?.Dispose(); slot.Expiry = null;
                 slot.Model.Dispose();
                 slot.Model = null;
@@ -44,7 +52,11 @@ public sealed class SharedModelPool<T> where T : class, IDisposable
             }
             if (slot.Model == null)
             {
-                if (load == null) return null;
+                if (load == null)
+                {
+                    return null;
+                }
+
                 token.ThrowIfCancellationRequested();
                 slot.Model = await Task.Run(load, token).ConfigureAwait(false);
                 Interlocked.Exchange(ref slot.Loaded, 1);
@@ -55,7 +67,11 @@ public sealed class SharedModelPool<T> where T : class, IDisposable
             return new Lease(model, slot.Operation, keep => Release(slot, model, keep), alias =>
             {
                 slot.Gate.Wait();
-                try { if (ReferenceEquals(slot.Model, model)) slot.Keys.Add(alias); }
+                try { if (ReferenceEquals(slot.Model, model))
+                    {
+                        slot.Keys.Add(alias);
+                    }
+                }
                 finally { slot.Gate.Release(); }
             });
         }
@@ -65,9 +81,16 @@ public sealed class SharedModelPool<T> where T : class, IDisposable
     {
         foreach (var (resource, slot) in slots)
         {
-            if (Volatile.Read(ref slot.Loaded) == 0) continue;
+            if (Volatile.Read(ref slot.Loaded) == 0)
+            {
+                continue;
+            }
+
             T? model = slot.Model;
-            if (model is not null && predicate(resource, model)) return true;
+            if (model is not null && predicate(resource, model))
+            {
+                return true;
+            }
         }
         return false;
     }
@@ -77,8 +100,16 @@ public sealed class SharedModelPool<T> where T : class, IDisposable
         slot.Gate.Wait();
         try
         {
-            if (!ReferenceEquals(slot.Model, model) || slot.Users <= 0) return;
-            if (--slot.Users > 0) return;
+            if (!ReferenceEquals(slot.Model, model) || slot.Users <= 0)
+            {
+                return;
+            }
+
+            if (--slot.Users > 0)
+            {
+                return;
+            }
+
             slot.Expiry?.Dispose(); slot.Expiry = null;
             if (keepAlive <= TimeSpan.Zero)
             {
@@ -94,7 +125,11 @@ public sealed class SharedModelPool<T> where T : class, IDisposable
                 slot.Gate.Wait();
                 try
                 {
-                    if (!ReferenceEquals(slot.Expiry, timer) || slot.Users != 0 || !ReferenceEquals(slot.Model, model)) return;
+                    if (!ReferenceEquals(slot.Expiry, timer) || slot.Users != 0 || !ReferenceEquals(slot.Model, model))
+                    {
+                        return;
+                    }
+
                     slot.Expiry = null;
                     slot.Model.Dispose();
                     slot.Model = null;
@@ -114,7 +149,11 @@ public sealed class SharedModelPool<T> where T : class, IDisposable
             slot.Gate.Wait();
             try
             {
-                if (slot.Users != 0) continue;
+                if (slot.Users != 0)
+                {
+                    continue;
+                }
+
                 slot.Expiry?.Dispose();
                 slot.Expiry = null;
                 slot.Model?.Dispose();

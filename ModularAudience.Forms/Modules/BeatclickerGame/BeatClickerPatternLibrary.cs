@@ -386,10 +386,24 @@ namespace ModularAudience.Forms.Modules.BeatclickerGame
             int screenH)
         {
             float maxForward = float.PositiveInfinity;
-            if (dx > 0.001f) maxForward = Math.Min(maxForward, (screenW - margin - startX) / dx);
-            else if (dx < -0.001f) maxForward = Math.Min(maxForward, (margin - startX) / dx);
-            if (dy > 0.001f) maxForward = Math.Min(maxForward, (screenH - margin - startY) / dy);
-            else if (dy < -0.001f) maxForward = Math.Min(maxForward, (margin - startY) / dy);
+            if (dx > 0.001f)
+            {
+                maxForward = Math.Min(maxForward, (screenW - margin - startX) / dx);
+            }
+            else if (dx < -0.001f)
+            {
+                maxForward = Math.Min(maxForward, (margin - startX) / dx);
+            }
+
+            if (dy > 0.001f)
+            {
+                maxForward = Math.Min(maxForward, (screenH - margin - startY) / dy);
+            }
+            else if (dy < -0.001f)
+            {
+                maxForward = Math.Min(maxForward, (margin - startY) / dy);
+            }
+
             return maxForward;
         }
 

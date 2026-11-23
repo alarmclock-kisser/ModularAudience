@@ -40,14 +40,22 @@ internal sealed record ApplicationPreferences
 
     internal static int DefaultBits(string format)
     {
-        if (!AudioExporter.AvailableExportFormats.TryGetValue(format, out int[]? bits) || bits.Length == 0) return 16;
+        if (!AudioExporter.AvailableExportFormats.TryGetValue(format, out int[]? bits) || bits.Length == 0)
+        {
+            return 16;
+        }
+
         int preferred = AudioExporter.IsMp3Format(format) ? 192 : 16;
         return bits.Contains(preferred) ? preferred : bits[bits.Length / 2];
     }
 
     internal static string NormalizeDirectory(string directory)
     {
-        if (!Path.IsPathFullyQualified(directory)) throw new InvalidDataException("The audio working directory must be an absolute path.");
+        if (!Path.IsPathFullyQualified(directory))
+        {
+            throw new InvalidDataException("The audio working directory must be an absolute path.");
+        }
+
         return Path.TrimEndingDirectorySeparator(Path.GetFullPath(directory));
     }
 }

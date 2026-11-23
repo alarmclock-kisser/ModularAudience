@@ -75,7 +75,10 @@ public sealed class IbmQuantumBackendTests
     public async Task AuthenticationFailuresAndDiscoveryTimeout_DoNotSubmitJobs()
     {
         using (var unauthorized = new IbmClientFixture(_ => MockHttpMessageHandler.Json("{}", HttpStatusCode.Unauthorized)))
+        {
             await Assert.ThrowsExactlyAsync<HttpRequestException>(() => ((IQuantumBackendClient)unauthorized.Client).GetBackendsAsync(CancellationToken.None));
+        }
+
         using var timeout = new IbmClientFixture(async (_, token) =>
         { await Task.Delay(Timeout.InfiniteTimeSpan, token); return MockHttpMessageHandler.Json("{}"); }, options => options.JobTimeout = TimeSpan.FromMilliseconds(30));
         await Assert.ThrowsExactlyAsync<TimeoutException>(() => ((IQuantumBackendClient)timeout.Client).GetBackendsAsync(CancellationToken.None));

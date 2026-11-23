@@ -117,9 +117,15 @@ namespace ModularAudience.Forms
             List<InstrumentProfileId> selected = new();
             foreach (int index in this.checkedListBox_profiles.CheckedIndices)
             {
-                if (index == pendingProfileIndex) continue;
+                if (index == pendingProfileIndex)
+                {
+                    continue;
+                }
+
                 if (this.checkedListBox_profiles.Items[index] is InstrumentProfile profile)
+                {
                     selected.Add(profile.Id);
+                }
             }
 
             if (pendingProfileIndex >= 0
@@ -215,7 +221,9 @@ namespace ModularAudience.Forms
             if (!valid)
             {
                 if (!operationRunning)
+                {
                     this.label_status.Text = $"Invalid settings: {validationMessage}";
+                }
             }
             else if (!operationRunning && this.analysis != null && !canSeparate)
             {
@@ -241,7 +249,11 @@ namespace ModularAudience.Forms
             }
 
             string? preset = this.comboBox_presets.SelectedItem as string;
-            if (preset == null) return;
+            if (preset == null)
+            {
+                return;
+            }
+
             this.ApplyPreset(preset);
             this.label_hopSizeValue.Text = $"{(int)this.comboBox_windowSize.SelectedItem! / 4} samples (fixed)";
             if (this.analysis == null)
@@ -408,7 +420,10 @@ namespace ModularAudience.Forms
             catch (OperationCanceledException) when (cancellation.IsCancellationRequested)
             {
                 this.acceptingProgress = false;
-                if (this.CanUseUi) this.label_status.Text = "Operation cancelled.";
+                if (this.CanUseUi)
+                {
+                    this.label_status.Text = "Operation cancelled.";
+                }
             }
             catch (Exception ex)
             {
@@ -462,7 +477,11 @@ namespace ModularAudience.Forms
 
         private void UpdateElapsedLabel(double fraction)
         {
-            if (this.operationStart == null || !this.CanUseUi) return;
+            if (this.operationStart == null || !this.CanUseUi)
+            {
+                return;
+            }
+
             double elapsed = (DateTime.Now - this.operationStart.Value).TotalSeconds;
             if (fraction <= 0)
             {
@@ -604,19 +623,33 @@ namespace ModularAudience.Forms
                 result = await DeterministicSeparationProcessor.SeparateAsync(
                     current, selectedIds, this.CreateProgress(cancellation), cancellation.Token);
                 this.acceptingProgress = false;
-                if (!this.IsCurrentOperation(cancellation)) return;
+                if (!this.IsCurrentOperation(cancellation))
+                {
+                    return;
+                }
+
                 published = this.PublishStems(result.Stems, current.SourceName, cancellation);
-                if (published && this.IsCurrentOperation(cancellation)) this.ShowSeparationReport(result);
+                if (published && this.IsCurrentOperation(cancellation))
+                {
+                    this.ShowSeparationReport(result);
+                }
             }
             finally
             {
-                if (result != null && !published) this.DisposeUnownedStems(result.Stems);
+                if (result != null && !published)
+                {
+                    this.DisposeUnownedStems(result.Stems);
+                }
             }
         }
 
         private bool PublishStems(IReadOnlyList<AudioObj> stems, string sourceName, CancellationTokenSource cancellation)
         {
-            if (!this.IsCurrentOperation(cancellation)) return false;
+            if (!this.IsCurrentOperation(cancellation))
+            {
+                return false;
+            }
+
             AudioCollectionView? collection = null;
             bool published = false;
             try
@@ -624,11 +657,19 @@ namespace ModularAudience.Forms
                 collection = new AudioCollectionView([], $"{sourceName} - Stems Deterministic");
                 foreach (AudioObj stem in stems)
                 {
-                    if (!this.IsCurrentOperation(cancellation) || collection.IsDisposed || collection.Disposing) return false;
+                    if (!this.IsCurrentOperation(cancellation) || collection.IsDisposed || collection.Disposing)
+                    {
+                        return false;
+                    }
+
                     collection.AudioC.Audios.Add(stem);
                 }
 
-                if (!this.IsCurrentOperation(cancellation) || collection.IsDisposed || collection.Disposing) return false;
+                if (!this.IsCurrentOperation(cancellation) || collection.IsDisposed || collection.Disposing)
+                {
+                    return false;
+                }
+
                 collection.Show();
                 published = this.IsCurrentOperation(cancellation) && !collection.IsDisposed && !collection.Disposing;
                 return published;
@@ -637,7 +678,11 @@ namespace ModularAudience.Forms
             {
                 if (!published && collection != null)
                 {
-                    if (!collection.IsDisposed && !collection.Disposing) collection.Close();
+                    if (!collection.IsDisposed && !collection.Disposing)
+                    {
+                        collection.Close();
+                    }
+
                     WindowMain.CollectionViews.Remove(collection);
                 }
             }
@@ -670,14 +715,22 @@ namespace ModularAudience.Forms
         private void ReportError(string title, Exception ex)
         {
             LogManager.Log($"{title}: {ex}");
-            if (!this.CanUseUi) return;
+            if (!this.CanUseUi)
+            {
+                return;
+            }
+
             this.label_status.Text = $"{title}. See the error details.";
             WindowMainStaticHelpers.ShowErrorWithCopyButton(this, title, ex);
         }
 
         private void button_cancel_Click(object? sender, EventArgs e)
         {
-            if (!this.CanUseUi || this.operationCancellation == null) return;
+            if (!this.CanUseUi || this.operationCancellation == null)
+            {
+                return;
+            }
+
             this.acceptingProgress = false;
             this.operationCancellation.Cancel();
             this.button_cancel.Enabled = false;
@@ -770,16 +823,28 @@ namespace ModularAudience.Forms
         {
             bool cancelled = cancellation.IsCancellationRequested;
             this.acceptingProgress = false;
-            if (ReferenceEquals(this.operationCancellation, cancellation)) this.operationCancellation = null;
+            if (ReferenceEquals(this.operationCancellation, cancellation))
+            {
+                this.operationCancellation = null;
+            }
+
             cancellation.Dispose();
-            if (this.IsDisposed || this.Disposing) return;
+            if (this.IsDisposed || this.Disposing)
+            {
+                return;
+            }
+
             if (this.closeRequested)
             {
                 this.Close();
                 return;
             }
 
-            if (cancelled) this.label_status.Text = "Operation cancelled.";
+            if (cancelled)
+            {
+                this.label_status.Text = "Operation cancelled.";
+            }
+
             this.SetOperationState(false);
         }
     }

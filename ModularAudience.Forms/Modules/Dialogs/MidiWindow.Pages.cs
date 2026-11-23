@@ -10,9 +10,17 @@ public partial class MidiWindow
 
     private void button_merge_Click(object? sender, EventArgs e)
     {
-        if (this.tracks.Count == 0 || ReferenceEquals(this.SelectedTrack, this.mergedTrack)) return;
+        if (this.tracks.Count == 0 || ReferenceEquals(this.SelectedTrack, this.mergedTrack))
+        {
+            return;
+        }
+
         int trackIndex = this.SelectedTrack.Index;
-        if (!this.mergedTrackIndices.Add(trackIndex)) this.mergedTrackIndices.Remove(trackIndex);
+        if (!this.mergedTrackIndices.Add(trackIndex))
+        {
+            this.mergedTrackIndices.Remove(trackIndex);
+        }
+
         this.previewCts?.Cancel();
         this.RefreshMidiPages((int)this.numericUpDown_track.Value);
     }
@@ -52,7 +60,10 @@ public partial class MidiWindow
 
     internal MidiFileData CreateOutputMidi(bool currentPageOnly, bool merge = false)
     {
-        if (!currentPageOnly) return merge ? this.midiFile.MergeTracks() : this.midiFile;
+        if (!currentPageOnly)
+        {
+            return merge ? this.midiFile.MergeTracks() : this.midiFile;
+        }
 
         // The selected page may be the derived Merged page, which is not in midiFile.
         MidiFileData page = MidiFileData.CreateGenerated([this.SelectedTrack], this.midiFile.TicksPerQuarterNote,

@@ -13,14 +13,22 @@ internal sealed partial class ReleaseUpdateDialog
 
     private async void History_Shown(object? sender, EventArgs e)
     {
-        if (this.historyRequested || this.historyStopped || this.IsDisposed || this.Disposing || this.loadHistory is null) return;
+        if (this.historyRequested || this.historyStopped || this.IsDisposed || this.Disposing || this.loadHistory is null)
+        {
+            return;
+        }
+
         this.historyRequested = true;
         using var cancellation = new CancellationTokenSource(TimeSpan.FromSeconds(20));
         this.activeHistoryLoad = cancellation;
         try
         {
             ReleaseCommitHistory history = await this.loadHistory(cancellation.Token);
-            if (this.IsDisposed || this.Disposing || this.historyStopped || cancellation.IsCancellationRequested) return;
+            if (this.IsDisposed || this.Disposing || this.historyStopped || cancellation.IsCancellationRequested)
+            {
+                return;
+            }
+
             string text = ReleaseCommitHistoryFormatter.Format(history, this.currentRelease, this.release.Number, out int latestReleaseStart);
             this.SetHistoryText(text, latestReleaseStart);
         }
@@ -54,7 +62,9 @@ internal sealed partial class ReleaseUpdateDialog
             int visibleLines = Math.Max(1, this.historyTextBox.ClientSize.Height / this.historyTextBox.Font.Height + 1);
             int paddingLines = Math.Max(0, visibleLines - (lastLine - targetLine) - 1);
             if (paddingLines > 0)
+            {
                 this.historyTextBox.AppendText(string.Concat(Enumerable.Repeat(Environment.NewLine, paddingLines)));
+            }
         }
         this.historyTextBox.SelectionStart = position;
         this.historyTextBox.SelectionLength = 0;
@@ -63,7 +73,9 @@ internal sealed partial class ReleaseUpdateDialog
         int firstVisibleLine = SendMessage(this.historyTextBox.Handle, EmGetFirstVisibleLine, IntPtr.Zero, IntPtr.Zero).ToInt32();
         int linesToScroll = targetVisibleLine - firstVisibleLine;
         if (linesToScroll != 0)
+        {
             SendMessage(this.historyTextBox.Handle, EmLineScroll, IntPtr.Zero, new IntPtr(linesToScroll));
+        }
     }
 
     private void WordWrap_CheckedChanged(object? sender, EventArgs e)
@@ -74,7 +86,11 @@ internal sealed partial class ReleaseUpdateDialog
 
     private void ShowHistoryUnavailable(string reason)
     {
-        if (this.IsDisposed || this.Disposing || this.historyStopped) return;
+        if (this.IsDisposed || this.Disposing || this.historyStopped)
+        {
+            return;
+        }
+
         this.SetHistoryText($"Commit messages could not be loaded.\r\n\r\n{reason}\r\n\r\nYou can still update, skip, or dismiss this release.");
     }
 

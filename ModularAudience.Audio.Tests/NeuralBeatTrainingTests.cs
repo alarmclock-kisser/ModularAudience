@@ -72,7 +72,9 @@ public sealed class NeuralBeatTrainingTests
         var branch = engine.Snapshot().Branches.Single(branch => branch.Id == child);
         Assert.AreEqual(saved.Id, branch.SourcePatternId);
         for (int step = 0; step < 8; step++)
+        {
             Assert.AreEqual(2f, branch.DensityWeights[step][saved.Pattern.Count(row => row[step])]);
+        }
     }
 
     [TestMethod]
@@ -96,7 +98,11 @@ public sealed class NeuralBeatTrainingTests
                 Assert.AreEqual(child, restored.Document.ActiveNodeId);
                 Assert.AreEqual(JsonSerializer.Serialize(document.Model), JsonSerializer.Serialize(restored.Engine.Snapshot()));
                 Assert.AreEqual(embedded ? 1 : 0, restored.Samples.Count);
-                if (embedded) CollectionAssert.AreEqual(sample.Data, restored.Samples[0].Data);
+                if (embedded)
+                {
+                    CollectionAssert.AreEqual(sample.Data, restored.Samples[0].Data);
+                }
+
                 var next = await restored.Engine.GeneratePatternAsync(child);
                 await restored.Engine.ApplyFeedbackAsync(child, next, 1);
                 Assert.AreEqual(1, restored.Engine.Snapshot().Branches.Single(branch => branch.Id == child).FeedbackCount);
@@ -135,7 +141,12 @@ public sealed class NeuralBeatTrainingTests
         collection.Audios.Remove(clone); clone.Dispose();
         Assert.IsTrue(Field<Button>(window, "button_generate").Enabled);
         Set(window, "engine", null);
-        foreach (var audio in collection.Audios) audio.Dispose(); collection.Audios.Clear();
+        foreach (var audio in collection.Audios)
+        {
+            audio.Dispose();
+        }
+
+        collection.Audios.Clear();
     }
 
     [STATestMethod]
@@ -159,7 +170,12 @@ public sealed class NeuralBeatTrainingTests
         explorer.Close();
         Set(window, "engine", null);
         var collection = Field<AudioCollection>(window, "Audios");
-        foreach (var audio in collection.Audios) audio.Dispose(); collection.Audios.Clear();
+        foreach (var audio in collection.Audios)
+        {
+            audio.Dispose();
+        }
+
+        collection.Audios.Clear();
     }
 
     [STATestMethod]
@@ -197,10 +213,17 @@ public sealed class NeuralBeatTrainingTests
             Assert.IsTrue(feedback.Bottom <= feedback.Parent!.ClientSize.Height, $"Feedback is outside the visible layout at {size}.");
             var flow = Field<FlowLayoutPanel>(window, "flowLayoutPanel_feedback");
             foreach (Control control in flow.Controls)
+            {
                 Assert.IsTrue(control.Bottom <= flow.ClientSize.Height, $"Feedback control {control.Name} is clipped at {size}.");
+            }
         }
         var collection = Field<AudioCollection>(window, "Audios");
-        foreach (var audio in collection.Audios) audio.Dispose(); collection.Audios.Clear();
+        foreach (var audio in collection.Audios)
+        {
+            audio.Dispose();
+        }
+
+        collection.Audios.Clear();
     }
 
     [STATestMethod]
@@ -242,13 +265,21 @@ public sealed class NeuralBeatTrainingTests
         Assert.AreEqual(.25f, engine.Config.LearningRate);
         var tooltips = Field<ToolTip>(window, "optionToolTips");
         foreach (string label in new[] { "label_learningRate", "label_temperature", "label_weightDecay", "label_minWeight", "label_maxWeight", "label_threadCount", "label_bars", "label_beatsPerBar", "label_stepsPerBeat", "label_bpm", "label_interleaved", "label_mutation" })
+        {
             Assert.IsFalse(string.IsNullOrWhiteSpace(tooltips.GetToolTip(Field<Label>(window, label))), label);
+        }
+
         Assert.IsTrue(Field<CheckBox>(window, "checkBox_loopFeedback").Checked);
         Assert.IsFalse(Field<CheckBox>(window, "checkBox_loopUntilFeedback").Checked);
         StringAssert.Contains(Field<Label>(window, "trainingIterationsLabel").Text, "Training iterations: 1");
         Set(window, "engine", null);
         var collection = Field<AudioCollection>(window, "Audios");
-        foreach (var audio in collection.Audios) audio.Dispose(); collection.Audios.Clear();
+        foreach (var audio in collection.Audios)
+        {
+            audio.Dispose();
+        }
+
+        collection.Audios.Clear();
     }
 
     [TestMethod]

@@ -16,7 +16,11 @@ namespace ModularAudience.Audio.Processors_V4
 
         internal double SpectralWeight(double frequency)
         {
-            if (frequency <= 0) return 0.02;
+            if (frequency <= 0)
+            {
+                return 0.02;
+            }
+
             double distance = Math.Log2(frequency / this.BrightnessHz);
             return 0.02 + 0.98 * Math.Exp(-0.5 * distance * distance / 2.25);
         }

@@ -94,12 +94,19 @@ namespace ModularAudience.Audio.Processors_V1
                 }
                 catch
                 {
-                    foreach (AudioObj audio in list) audio.Dispose();
+                    foreach (AudioObj audio in list)
+                    {
+                        audio.Dispose();
+                    }
+
                     throw;
                 }
                 finally
                 {
-                    foreach (AudioObj candidate in candidates) candidate.Dispose();
+                    foreach (AudioObj candidate in candidates)
+                    {
+                        candidate.Dispose();
+                    }
                 }
 
                 return list;
@@ -121,12 +128,19 @@ namespace ModularAudience.Audio.Processors_V1
                 }
                 catch
                 {
-                    foreach (AudioObj atomic in all) atomic.Dispose();
+                    foreach (AudioObj atomic in all)
+                    {
+                        atomic.Dispose();
+                    }
+
                     throw;
                 }
                 finally
                 {
-                    foreach (AudioObj candidate in candidates) candidate.Dispose();
+                    foreach (AudioObj candidate in candidates)
+                    {
+                        candidate.Dispose();
+                    }
                 }
 
                 return all;
@@ -172,12 +186,19 @@ namespace ModularAudience.Audio.Processors_V1
             }
             catch
             {
-                foreach (AudioObj representative in representatives) representative.Dispose();
+                foreach (AudioObj representative in representatives)
+                {
+                    representative.Dispose();
+                }
+
                 throw;
             }
             finally
             {
-                foreach (AudioObj candidate in candidates) candidate.Dispose();
+                foreach (AudioObj candidate in candidates)
+                {
+                    candidate.Dispose();
+                }
             }
 
             return representatives;

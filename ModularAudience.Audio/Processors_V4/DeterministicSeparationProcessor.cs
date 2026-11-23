@@ -31,9 +31,14 @@ namespace ModularAudience.Audio.Processors_V4
             settings.Validate();
             // ILRMA requires stereo input — validate before analysis.
             if (settings.UseIlrma && source.Channels != 2)
+            {
                 throw new ArgumentException("ILRMA requires stereo input (two spatially independent channels).", nameof(settings));
+            }
+
             if (settings.UseIlrma && settings.InstrumentProfiles.Length > 2)
+            {
                 throw new ArgumentException("ILRMA is limited to two source profiles for two-microphone input.", nameof(settings));
+            }
 
             ValidateFormat(source.Data, source.SampleRate, source.Channels);
             if (settings.UsePyin)
@@ -131,15 +136,21 @@ namespace ModularAudience.Audio.Processors_V4
                 if (analysis.Settings.UseIlrma)
                 {
                     if (analysis.Settings.UseCqtSynthesis)
+                    {
                         throw new InvalidOperationException("ILRMA is incompatible with CQT synthesis.");
+                    }
                     // ILRMA supports at most two spatial sources for two-microphone input.
                     int[] ilrmaSelected = selected.Length > 2 ? selected[..2] : selected;
                     DeterministicIlrma.Render(analysis.Source, analysis.Settings, ilrmaSelected, output, progress, token);
                 }
                 else if (analysis.Settings.UseCqtSynthesis)
+                {
                     CqtSliceRenderer.Render(analysis.Source, analysis.Settings, analysis.Model, selected, output, progress, token);
+                }
                 else
+                {
                     RenderBlocks(analysis, selected, output, progress, token);
+                }
             }
             progress?.Report(new(0.96, "Restoring mixture consistency in Residual"));
             double error = RestoreResidual(analysis.Source.Samples, output, token);
@@ -190,11 +201,23 @@ namespace ModularAudience.Audio.Processors_V4
             double maximumError = 0;
             for (int sample = 0; sample < original.Length; sample++)
             {
-                if ((sample & 65535) == 0) token.ThrowIfCancellationRequested();
+                if ((sample & 65535) == 0)
+                {
+                    token.ThrowIfCancellationRequested();
+                }
+
                 double sum = 0;
-                for (int stem = 0; stem < output.Length - 1; stem++) sum += output[stem][sample];
+                for (int stem = 0; stem < output.Length - 1; stem++)
+                {
+                    sum += output[stem][sample];
+                }
+
                 output[^1][sample] = (float)(original[sample] - sum);
-                if (!float.IsFinite(output[^1][sample])) throw new ArithmeticException("Non-finite residual reconstruction.");
+                if (!float.IsFinite(output[^1][sample]))
+                {
+                    throw new ArithmeticException("Non-finite residual reconstruction.");
+                }
+
                 maximumError = Math.Max(maximumError, Math.Abs(original[sample] - (sum + output[^1][sample])));
             }
             return maximumError;
@@ -218,7 +241,11 @@ namespace ModularAudience.Audio.Processors_V4
             }
             catch
             {
-                foreach (AudioObj stem in stems) stem.Dispose();
+                foreach (AudioObj stem in stems)
+                {
+                    stem.Dispose();
+                }
+
                 throw;
             }
         }

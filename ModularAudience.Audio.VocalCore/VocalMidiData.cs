@@ -90,11 +90,22 @@ public sealed class VocalMidiFileData : IVocalMidiFile
         int timeSignatureNumerator = 4,
         int timeSignatureDenominator = 4)
     {
-        if (ticksPerQuarterNote <= 0) throw new ArgumentOutOfRangeException(nameof(ticksPerQuarterNote));
-        if (!double.IsFinite(defaultBpm) || defaultBpm <= 0) throw new ArgumentOutOfRangeException(nameof(defaultBpm));
+        if (ticksPerQuarterNote <= 0)
+        {
+            throw new ArgumentOutOfRangeException(nameof(ticksPerQuarterNote));
+        }
+
+        if (!double.IsFinite(defaultBpm) || defaultBpm <= 0)
+        {
+            throw new ArgumentOutOfRangeException(nameof(defaultBpm));
+        }
+
         if (timeSignatureNumerator <= 0 || timeSignatureDenominator <= 0
             || (timeSignatureDenominator & (timeSignatureDenominator - 1)) != 0)
+        {
             throw new ArgumentOutOfRangeException(nameof(timeSignatureDenominator));
+        }
+
         ArgumentNullException.ThrowIfNull(tracks);
         FilePath = filePath ?? string.Empty;
         TicksPerQuarterNote = ticksPerQuarterNote;
@@ -142,12 +153,17 @@ public sealed class VocalMidiFileData : IVocalMidiFile
     public static VocalMidiFileData Load(string filePath)
     {
         ArgumentException.ThrowIfNullOrWhiteSpace(filePath);
-        if (!File.Exists(filePath)) throw new FileNotFoundException("The MIDI file was not found.", filePath);
+        if (!File.Exists(filePath))
+        {
+            throw new FileNotFoundException("The MIDI file was not found.", filePath);
+        }
 
         MidiFile midiFile = new(filePath, strictChecking: false);
         int ticksPerQuarterNote = midiFile.DeltaTicksPerQuarterNote;
         if (ticksPerQuarterNote <= 0)
+        {
             throw new InvalidDataException("The MIDI file does not use supported PPQ timing.");
+        }
 
         double bpm = 120;
         int timeNumerator = 4;
@@ -167,20 +183,32 @@ public sealed class VocalMidiFileData : IVocalMidiFile
                 {
                     if (signature.Numerator <= 0 || signature.Denominator <= 0
                         || (signature.Denominator & (signature.Denominator - 1)) != 0)
+                    {
                         throw new InvalidDataException("The MIDI file contains an invalid time signature.");
+                    }
+
                     timeNumerator = signature.Numerator;
                     timeDenominator = signature.Denominator;
                     hasTimeSignature = true;
                 }
                 if (midiEvent is TempoEvent tempo && tempo.MicrosecondsPerQuarterNote > 0)
+                {
                     bpm = 60_000_000.0 / tempo.MicrosecondsPerQuarterNote;
-                if (midiEvent is not NoteEvent note || note.NoteNumber is < 0 or > 127) continue;
+                }
+
+                if (midiEvent is not NoteEvent note || note.NoteNumber is < 0 or > 127)
+                {
+                    continue;
+                }
 
                 var key = (note.Channel, note.NoteNumber);
                 if (note.CommandCode == MidiCommandCode.NoteOn && note.Velocity > 0)
                 {
                     if (!activeNotes.TryGetValue(key, out Queue<(long Tick, int Velocity)>? starts))
+                    {
                         activeNotes[key] = starts = new Queue<(long Tick, int Velocity)>();
+                    }
+
                     starts.Enqueue((note.AbsoluteTime, note.Velocity));
                 }
                 else if (note.CommandCode == MidiCommandCode.NoteOff
@@ -217,10 +245,17 @@ public sealed class VocalMidiFileData : IVocalMidiFile
                 }
             }
             track.ExtendLengthTo(lastTick);
-            if (track.MutableNotes.Count > 0) tracks.Add(track);
+            if (track.MutableNotes.Count > 0)
+            {
+                tracks.Add(track);
+            }
         }
 
-        if (tracks.Count == 0) throw new InvalidDataException("The MIDI file contains no playable notes.");
+        if (tracks.Count == 0)
+        {
+            throw new InvalidDataException("The MIDI file contains no playable notes.");
+        }
+
         return new VocalMidiFileData(
             Path.GetFullPath(filePath), ticksPerQuarterNote, bpm, tracks, 440, timeNumerator, timeDenominator);
     }
@@ -229,8 +264,16 @@ public sealed class VocalMidiFileData : IVocalMidiFile
     {
         foreach (MidiEvent midiEvent in events)
         {
-            if (midiEvent is not MetaEvent meta || meta.MetaEventType != MetaEventType.SequenceTrackName) continue;
-            if (meta is TextEvent text && !string.IsNullOrWhiteSpace(text.Text)) return text.Text.Trim();
+            if (midiEvent is not MetaEvent meta || meta.MetaEventType != MetaEventType.SequenceTrackName)
+            {
+                continue;
+            }
+
+            if (meta is TextEvent text && !string.IsNullOrWhiteSpace(text.Text))
+            {
+                return text.Text.Trim();
+            }
+
             break;
         }
         return $"Track {ordinal}";

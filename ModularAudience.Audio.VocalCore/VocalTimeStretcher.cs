@@ -13,24 +13,41 @@ internal static class VocalTimeStretcher
         if (channels <= 0 || data.Length == 0 || data.Length % channels != 0 || targetFrames < 1
             || fftSize < 256 || fftSize > 16384 || (fftSize & (fftSize - 1)) != 0
             || !double.IsFinite(overlap) || overlap < 0.5 || overlap > 0.95)
+        {
             throw new ArgumentException("Invalid phase-vocoder format, frame count or window settings.");
+        }
+
         long outputSamples = (long)targetFrames * channels;
         if (outputSamples > int.MaxValue)
+        {
             throw new ArgumentOutOfRangeException(nameof(targetFrames), "Phase-vocoder output is too large.");
+        }
+
         cancellationToken.ThrowIfCancellationRequested();
         int inputFrames = data.Length / channels;
-        if (targetFrames == inputFrames) return (float[])data.Clone();
+        if (targetFrames == inputFrames)
+        {
+            return (float[])data.Clone();
+        }
+
         float[] result = new float[(int)outputSamples];
         for (int channel = 0; channel < channels; channel++)
         {
             cancellationToken.ThrowIfCancellationRequested();
             float[] mono = new float[inputFrames];
             for (int frame = 0; frame < inputFrames; frame++)
+            {
                 mono[frame] = data[frame * channels + channel];
+            }
+
             float[] stretched = StretchChannel(mono, targetFrames, fftSize, overlap, cancellationToken);
             for (int frame = 0; frame < targetFrames; frame++)
             {
-                if ((frame & 2047) == 0) cancellationToken.ThrowIfCancellationRequested();
+                if ((frame & 2047) == 0)
+                {
+                    cancellationToken.ThrowIfCancellationRequested();
+                }
+
                 result[frame * channels + channel] = stretched[frame];
             }
         }
@@ -81,7 +98,10 @@ internal static class VocalTimeStretcher
                 double residual = frame == 0 ? 0 : Wrap(phase - previousPhase[bin] - expected);
                 frequencies[bin] = 2 * Math.PI * bin / size + residual / analysisHop;
                 previousPhase[bin] = phase;
-                if (frame == 0) synthesisPhase[bin] = phase;
+                if (frame == 0)
+                {
+                    synthesisPhase[bin] = phase;
+                }
                 else
                 {
                     int previousOutput = (int)Math.Round((frame - 1) * synthesisHop);
@@ -89,14 +109,24 @@ internal static class VocalTimeStretcher
                 }
             }
             for (int bin = 0; bin <= size / 2; bin++)
+            {
                 spectrum[bin] = Complex.FromPolarCoordinates(magnitudes[bin], synthesisPhase[bin]);
+            }
+
             for (int bin = size / 2 + 1; bin < size; bin++)
+            {
                 spectrum[bin] = Complex.Conjugate(spectrum[size - bin]);
+            }
+
             Fourier.Inverse(spectrum, FourierOptions.Matlab);
             for (int sample = 0; sample < size; sample++)
             {
                 int destination = outputPosition + sample;
-                if ((uint)destination >= (uint)outputCapacity) continue;
+                if ((uint)destination >= (uint)outputCapacity)
+                {
+                    continue;
+                }
+
                 output[destination] += spectrum[sample].Real * window[sample];
                 weights[destination] += window[sample] * window[sample];
             }
@@ -106,10 +136,16 @@ internal static class VocalTimeStretcher
         float[] result = new float[targetFrames];
         for (int frame = 0; frame < targetFrames; frame++)
         {
-            if ((frame & 2047) == 0) cancellationToken.ThrowIfCancellationRequested();
+            if ((frame & 2047) == 0)
+            {
+                cancellationToken.ThrowIfCancellationRequested();
+            }
+
             int source = frame + center;
             if (source < outputCapacity && weights[source] > 1e-10)
+            {
                 result[frame] = (float)(output[source] / weights[source]);
+            }
         }
         return result;
     }

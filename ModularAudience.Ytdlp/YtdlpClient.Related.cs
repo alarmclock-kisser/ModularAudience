@@ -29,21 +29,41 @@ public sealed partial class YtdlpClient
         var seen = new HashSet<string>(StringComparer.Ordinal) { video.Id };
         string? continuation = null;
         if (initial is not null)
-            foreach (var related in ReadPage(initial.RootElement)) yield return related;
+        {
+            foreach (var related in ReadPage(initial.RootElement))
+            {
+                yield return related;
+            }
+        }
 
         string version = Regex.Match(html, "\"INNERTUBE_CLIENT_VERSION\"\\s*:\\s*\"([^\"]+)\"").Groups[1].Value;
         string visitor = Regex.Match(html, "\"VISITOR_DATA\"\\s*:\\s*\"([^\"]+)\"").Groups[1].Value;
         var usedTokens = new HashSet<string>(StringComparer.Ordinal);
         for (int page = 0; count < maxResults && version.Length > 0 && page < YtdlpParser.MaximumResults; page++)
         {
-            if (count > 0 && continuation is null) break;
-            if (continuation is not null && !usedTokens.Add(continuation)) break;
+            if (count > 0 && continuation is null)
+            {
+                break;
+            }
+
+            if (continuation is not null && !usedTokens.Add(continuation))
+            {
+                break;
+            }
+
             var payload = new Dictionary<string, object?>
             {
                 ["context"] = new { client = new { clientName = "WEB", clientVersion = version, hl = "en", visitorData = visitor } }
             };
-            if (continuation is null) payload["videoId"] = video.Id;
-            else payload["continuation"] = continuation;
+            if (continuation is null)
+            {
+                payload["videoId"] = video.Id;
+            }
+            else
+            {
+                payload["continuation"] = continuation;
+            }
+
             using var request = new HttpRequestMessage(HttpMethod.Post, "https://www.youtube.com/youtubei/v1/next")
             {
                 Content = new StringContent(JsonSerializer.Serialize(payload), Encoding.UTF8, "application/json")
@@ -52,20 +72,32 @@ public sealed partial class YtdlpClient
             request.Headers.Referrer = new Uri(url);
             string json = await ReadRelatedResponseAsync(http, request, cancellationToken);
             using var next = JsonDocument.Parse(json);
-            foreach (var related in ReadPage(next.RootElement)) yield return related;
+            foreach (var related in ReadPage(next.RootElement))
+            {
+                yield return related;
+            }
+
             progress.Report($"Loaded {count}/{maxResults} related videos; loading further recommendations...");
-            if (continuation is null) break;
+            if (continuation is null)
+            {
+                break;
+            }
         }
         if (count == 0)
+        {
             throw new InvalidDataException("YouTube returned no related / next-up videos for this video. Recommendations may be unavailable for this session.");
+        }
+
         IEnumerable<YtdlpVideo> ReadPage(JsonElement root)
         {
             foreach (var related in YoutubeRelatedParser.Parse(root, maxResults, out continuation))
+            {
                 if (count < maxResults && seen.Add(related.Id))
                 {
                     count++;
                     yield return related;
                 }
+            }
         }
     }
 
@@ -80,7 +112,10 @@ public sealed partial class YtdlpClient
         while ((count = await stream.ReadAsync(buffer, token)) > 0)
         {
             if (output.Length + count > 16 * 1024 * 1024)
+            {
                 throw new InvalidDataException("The YouTube recommendations response exceeded the size limit.");
+            }
+
             output.Write(buffer, 0, count);
         }
         return Encoding.UTF8.GetString(output.GetBuffer(), 0, (int)output.Length);

@@ -15,10 +15,22 @@ internal sealed partial class YoutubeRecoveryDialog : Form
         availableActions = Enum.GetValues<YtdlpRecoveryAction>()
             .Where(action => errors.Any(error => YtdlpRecoveryRules.CanApply(error, action, options))).ToArray();
         for (int index = actionCombo.Items.Count - 1; index >= 0; index--)
-            if (!availableActions.Contains((YtdlpRecoveryAction)index)) actionCombo.Items.RemoveAt(index);
+        {
+            if (!availableActions.Contains((YtdlpRecoveryAction)index))
+            {
+                actionCombo.Items.RemoveAt(index);
+            }
+        }
+
         if (errors.Any(error => error.FailureKind == YtdlpFailureKind.BrowserCookies))
+        {
             cookieFileCheck.Checked = true;
-        if (availableActions.Length > 0) actionCombo.SelectedIndex = 0;
+        }
+
+        if (availableActions.Length > 0)
+        {
+            actionCombo.SelectedIndex = 0;
+        }
         else
         {
             validationLabel.Text = "No safe automatic recovery applies. Review the diagnostics; browser cookies cannot repair TLS, rate limits or access restrictions.";
@@ -59,7 +71,11 @@ internal sealed partial class YoutubeRecoveryDialog : Form
     {
         using var dialog = new OpenFileDialog { Title = "Select exported YouTube cookies (Netscape format)",
             Filter = "Cookie text files (*.txt)|*.txt|All files (*.*)|*.*", CheckFileExists = true };
-        if (dialog.ShowDialog(this) != DialogResult.OK) return;
+        if (dialog.ShowDialog(this) != DialogResult.OK)
+        {
+            return;
+        }
+
         cookieFileText.Text = dialog.FileName;
         consentCheck.Checked = false;
         UpdateAvailability();
@@ -67,7 +83,11 @@ internal sealed partial class YoutubeRecoveryDialog : Form
 
     private async void ConnectChrome_Click(object? sender, EventArgs e)
     {
-        if (bridgeCancellation is not null) return;
+        if (bridgeCancellation is not null)
+        {
+            return;
+        }
+
         using var cancellation = new CancellationTokenSource(TimeSpan.FromMinutes(5));
         bridgeCancellation = cancellation;
         try
@@ -80,15 +100,27 @@ internal sealed partial class YoutubeRecoveryDialog : Form
             retryButton.Enabled = false;
             validationLabel.Text = "Chrome opens the connection and extensions tabs. Extension folder copied to clipboard. Enable Developer mode → Load unpacked → Ctrl+V in the folder dialog → Select folder. Then reload the connection tab. Connecting authorizes YouTube cookies for this window's downloads.";
             var session = await YoutubeChromeBridge.ConnectAsync(cancellation.Token);
-            if (IsDisposed) return;
+            if (IsDisposed)
+            {
+                return;
+            }
+
             bridgeCancellation = null;
             Decision = new(YtdlpRecoveryAction.BrowserSession, session);
             DialogResult = DialogResult.OK;
         }
         catch (OperationCanceledException)
-        { if (!IsDisposed) validationLabel.Text = "Chrome connection cancelled or timed out. You can connect again."; }
+        { if (!IsDisposed)
+            {
+                validationLabel.Text = "Chrome connection cancelled or timed out. You can connect again.";
+            }
+        }
         catch (Exception error)
-        { if (!IsDisposed) validationLabel.Text = "Chrome connection failed: " + error.Message; }
+        { if (!IsDisposed)
+            {
+                validationLabel.Text = "Chrome connection failed: " + error.Message;
+            }
+        }
         finally
         {
             bridgeCancellation = null;
@@ -104,7 +136,11 @@ internal sealed partial class YoutubeRecoveryDialog : Form
 
     private void Retry_Click(object? sender, EventArgs e)
     {
-        if (!retryButton.Enabled || actionCombo.SelectedIndex < 0) return;
+        if (!retryButton.Enabled || actionCombo.SelectedIndex < 0)
+        {
+            return;
+        }
+
         try
         {
             YtdlpBrowserSession? session = UsesBrowser ? new()

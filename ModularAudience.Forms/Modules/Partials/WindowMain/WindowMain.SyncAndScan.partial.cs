@@ -15,21 +15,33 @@ namespace ModularAudience.Forms
 
         private async void button_scanBpm_Click(object sender, EventArgs e)
         {
-            if (this.scanControls == null) return;
+            if (this.scanControls == null)
+            {
+                return;
+            }
+
             this.scanControls.SetTarget(this.GetSelectedAudioForCommands());
             await this.scanControls.ScanBpmAsync();
         }
 
         private async void button_scanTiming_Click(object sender, EventArgs e)
         {
-            if (this.scanControls == null) return;
+            if (this.scanControls == null)
+            {
+                return;
+            }
+
             this.scanControls.SetTarget(this.GetSelectedAudioForCommands());
             await this.scanControls.ScanTimingAsync();
         }
 
         private async void button_scanKey_Click(object sender, EventArgs e)
         {
-            if (this.scanControls == null) return;
+            if (this.scanControls == null)
+            {
+                return;
+            }
+
             this.scanControls.SetTarget(this.GetSelectedAudioForCommands());
             await this.scanControls.ScanKeyAsync();
         }

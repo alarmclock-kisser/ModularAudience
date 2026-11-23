@@ -20,7 +20,11 @@ public partial class YoutubeBrowserWindow
             configuredBinariesPath = settings.YTDownloaderBinariesPath;
             checkForUpdates.Checked = settings.CheckForUpdates;
             Size = new Size(settings.Width, settings.Height);
-            if (settings.Maximized) WindowState = FormWindowState.Maximized;
+            if (settings.Maximized)
+            {
+                WindowState = FormWindowState.Maximized;
+            }
+
             mainSplit.SplitterDistance = Math.Clamp(settings.SplitterDistance, mainSplit.Panel1MinSize,
                 Math.Max(mainSplit.Panel1MinSize, mainSplit.Width - mainSplit.Panel2MinSize - mainSplit.SplitterWidth));
             thumbnailCheck.Checked = settings.ShowThumbnails;
@@ -47,7 +51,10 @@ public partial class YoutubeBrowserWindow
             stretchSettings = settings.Stretch;
             stretchCheck.Checked = settings.StretchEnabled;
             for (int index = 0; index < columnMenuItems.Length; index++)
+            {
                 columnMenuItems[index].Checked = settings.VisibleColumns[index];
+            }
+
             ApplyColumns();
             UpdateOptionAvailability();
         }
@@ -92,13 +99,21 @@ public partial class YoutubeBrowserWindow
 
     private void Options_Changed(object? sender, EventArgs e)
     {
-        if (sender == formatCombo) UpdateAudioQuality();
+        if (sender == formatCombo)
+        {
+            UpdateAudioQuality();
+        }
+
         UpdateOptionAvailability();
     }
 
     private void WaitForBpm_CheckedChanged(object? sender, EventArgs e)
     {
-        if (restoringSettings) return;
+        if (restoringSettings)
+        {
+            return;
+        }
+
         decimal seconds = waitForBpmCheck.Checked ? cooldownSeconds.Value * 4 : cooldownSeconds.Value / 4;
         cooldownSeconds.Value = Math.Clamp(decimal.Round(seconds, 0, MidpointRounding.AwayFromZero),
             cooldownSeconds.Minimum, cooldownSeconds.Maximum);
@@ -110,7 +125,11 @@ public partial class YoutubeBrowserWindow
         audioQuality.SelectedItemChanged -= AudioQuality_Changed;
         audioQuality.Items.Clear();
         int[] values = mp3 ? [320, 256, 192, 128, 96, 64] : [32, 24, 16, 8];
-        foreach (int value in values) audioQuality.Items.Add(value.ToString(System.Globalization.CultureInfo.InvariantCulture));
+        foreach (int value in values)
+        {
+            audioQuality.Items.Add(value.ToString(System.Globalization.CultureInfo.InvariantCulture));
+        }
+
         audioQuality.SelectedItem = (mp3 ? mp3Bitrate : wavBitDepth).ToString(System.Globalization.CultureInfo.InvariantCulture);
         audioQualityLabel.Text = mp3 ? "kbps" : "PCM bits";
         audioQuality.AccessibleName = mp3 ? "MP3 bitrate in kbps" : "WAV PCM bit depth (32-bit signed integer)";
@@ -119,9 +138,19 @@ public partial class YoutubeBrowserWindow
 
     private void AudioQuality_Changed(object? sender, EventArgs e)
     {
-        if (!int.TryParse(audioQuality.SelectedItem?.ToString(), out int value)) return;
-        if (formatCombo.SelectedIndex == 1) mp3Bitrate = value;
-        else wavBitDepth = value;
+        if (!int.TryParse(audioQuality.SelectedItem?.ToString(), out int value))
+        {
+            return;
+        }
+
+        if (formatCombo.SelectedIndex == 1)
+        {
+            mp3Bitrate = value;
+        }
+        else
+        {
+            wavBitDepth = value;
+        }
     }
 
     private void UpdateOptionAvailability()
@@ -140,7 +169,10 @@ public partial class YoutubeBrowserWindow
     private ModularAudience.Ytdlp.YtdlpNetworkOptions CaptureNetworkOptions()
     {
         if (proxyModeCombo.SelectedIndex == 2 && string.IsNullOrWhiteSpace(proxyText.Text))
+        {
             throw new ArgumentException("Enter an HTTP(S) proxy URL or select Environment / default. An explicit proxy cannot be empty.");
+        }
+
         var options = new ModularAudience.Ytdlp.YtdlpNetworkOptions
         {
             IpVersion = (ModularAudience.Ytdlp.YtdlpIpVersion)ipVersionCombo.SelectedIndex,
@@ -163,14 +195,21 @@ public partial class YoutubeBrowserWindow
         try
         {
             folderDialog.SelectedPath = outputDirectory.Text;
-            if (folderDialog.ShowDialog(this) == DialogResult.OK) outputDirectory.Text = folderDialog.SelectedPath;
+            if (folderDialog.ShowDialog(this) == DialogResult.OK)
+            {
+                outputDirectory.Text = folderDialog.SelectedPath;
+            }
         }
         catch (Exception error) { ReportError("Unable to choose an output directory", error); }
     }
 
     private void Stretch_CheckedChanged(object? sender, EventArgs e)
     {
-        if (restoringSettings) return;
+        if (restoringSettings)
+        {
+            return;
+        }
+
         if (stretchCheck.Checked && !ConfigureStretch())
         {
             restoringSettings = true;
@@ -194,7 +233,11 @@ public partial class YoutubeBrowserWindow
             using var dummy = new AudioObj { Bpm = stretchSettings?.TargetBpm ?? workingBpm, ScannedBpm = workingBpm };
             dummy.Rename("YouTube import configuration");
             using var dialog = new TimeStretchDialog(audios: [dummy]) { IsConfigureMode = true };
-            if (dialog.ShowDialog(this) != DialogResult.OK || dialog.ConfirmedSettings is null) return false;
+            if (dialog.ShowDialog(this) != DialogResult.OK || dialog.ConfirmedSettings is null)
+            {
+                return false;
+            }
+
             stretchSettings = dialog.ConfirmedSettings;
             return true;
         }
@@ -207,7 +250,10 @@ public partial class YoutubeBrowserWindow
 
     private void Column_CheckedChanged(object? sender, EventArgs e)
     {
-        if (!restoringSettings) ApplyColumns();
+        if (!restoringSettings)
+        {
+            ApplyColumns();
+        }
     }
 
     private void ApplyColumns()
@@ -217,12 +263,19 @@ public partial class YoutubeBrowserWindow
 
     private void Column_WidthChanging(object? sender, ColumnWidthChangingEventArgs e)
     {
-        if (fittingColumns) return;
+        if (fittingColumns)
+        {
+            return;
+        }
+
         if (!columnMenuItems[e.ColumnIndex].Checked)
         {
             e.Cancel = true;
             e.NewWidth = 0;
         }
-        else if (e.NewWidth > 24) columnWidths[e.ColumnIndex] = e.NewWidth;
+        else if (e.NewWidth > 24)
+        {
+            columnWidths[e.ColumnIndex] = e.NewWidth;
+        }
     }
 }

@@ -60,7 +60,9 @@ public sealed class CoOpSecurityTests
         finally
         {
             if (Directory.Exists(directory))
+            {
                 Directory.Delete(directory, recursive: true);
+            }
         }
     }
 
@@ -81,7 +83,9 @@ public sealed class CoOpSecurityTests
         {
             string directory = Path.GetDirectoryName(path)!;
             if (Directory.Exists(directory))
+            {
                 Directory.Delete(directory, recursive: true);
+            }
         }
     }
 }

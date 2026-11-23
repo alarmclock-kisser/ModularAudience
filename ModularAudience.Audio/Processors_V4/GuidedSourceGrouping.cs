@@ -16,7 +16,10 @@ namespace ModularAudience.Audio.Processors_V4
             IReadOnlyList<InstrumentProfile> profiles, InstrumentEnsembleMode mode, CancellationToken token)
         {
             double total = components.Sum(component => component.Energy);
-            if (total <= 0 || profiles.Count == 0) return [];
+            if (total <= 0 || profiles.Count == 0)
+            {
+                return [];
+            }
 
             DeterministicComponentFeatures[] retained = components.Where(component => component.Energy > total * 1e-5)
                 .OrderByDescending(component => component.Energy).ThenBy(component => component.Index).ToArray();
@@ -28,26 +31,51 @@ namespace ModularAudience.Audio.Processors_V4
                 token.ThrowIfCancellationRequested();
                 DeterministicComponentFeatures component = retained[c];
                 for (int p = 0; p < profiles.Count; p++)
+                {
                     scores[c, p] = ProfileCompatibility(component, profiles[p]);
+                }
             }
 
             // ProfilesAndAutomatic reserves weakly matched material for automatic groups.
             double[][] weights = new double[profiles.Count][];
-            for (int p = 0; p < profiles.Count; p++) weights[p] = new double[retained.Length];
+            for (int p = 0; p < profiles.Count; p++)
+            {
+                weights[p] = new double[retained.Length];
+            }
+
             double[] automaticWeights = new double[retained.Length];
             for (int c = 0; c < retained.Length; c++)
             {
                 double maxScore = scores[c, 0];
-                for (int p = 1; p < profiles.Count; p++) maxScore = Math.Max(maxScore, scores[c, p]);
-                if (maxScore <= 0.05) continue; // below the ambiguity threshold: leave for Residual / automatic groups
+                for (int p = 1; p < profiles.Count; p++)
+                {
+                    maxScore = Math.Max(maxScore, scores[c, p]);
+                }
+
+                if (maxScore <= 0.05)
+                {
+                    continue; // below the ambiguity threshold: leave for Residual / automatic groups
+                }
+
                 double sum = 0;
-                for (int p = 0; p < profiles.Count; p++) sum += Math.Max(0, scores[c, p] - 0.02);
-                if (sum <= 0) continue;
+                for (int p = 0; p < profiles.Count; p++)
+                {
+                    sum += Math.Max(0, scores[c, p] - 0.02);
+                }
+
+                if (sum <= 0)
+                {
+                    continue;
+                }
+
                 double profileCoverage = mode == InstrumentEnsembleMode.ProfilesAndAutomatic
                     ? Math.Min(0.85, Math.Clamp((maxScore - 0.05) / 0.95, 0, 1))
                     : 1;
                 for (int p = 0; p < profiles.Count; p++)
+                {
                     weights[p][c] = Math.Max(0, scores[c, p] - 0.02) / sum * profileCoverage;
+                }
+
                 automaticWeights[c] = 1 - profileCoverage;
             }
 
@@ -61,7 +89,11 @@ namespace ModularAudience.Audio.Processors_V4
                 double energy = 0, h = 0, perc = 0, pan = 0;
                 for (int c = 0; c < retained.Length; c++)
                 {
-                    if (weights[p][c] <= 1e-4) continue;
+                    if (weights[p][c] <= 1e-4)
+                    {
+                        continue;
+                    }
+
                     memberIndices.Add(retained[c].Index);
                     double w = weights[p][c];
                     energy += w * retained[c].Energy;
@@ -70,7 +102,11 @@ namespace ModularAudience.Audio.Processors_V4
                     pan += w * retained[c].Pan;
                 }
 
-                if (memberIndices.Count == 0) continue; // profile matched nothing: skip, material stays in Residual
+                if (memberIndices.Count == 0)
+                {
+                    continue; // profile matched nothing: skip, material stays in Residual
+                }
+
                 memberIndices.Sort();
                 double fittedEnergy = energy > 0 ? energy : 1e-300;
                 double confidence = Math.Clamp(energy / total * 0.6 + 0.25, 0, 0.85);
@@ -142,7 +178,11 @@ namespace ModularAudience.Audio.Processors_V4
             // The mask builder indexes weights by NMF component index; build a full-length array.
             int rank = retained.Max(component => component.Index) + 1;
             double[] full = new double[rank];
-            for (int c = 0; c < retained.Length; c++) full[retained[c].Index] = profileWeights[c];
+            for (int c = 0; c < retained.Length; c++)
+            {
+                full[retained[c].Index] = profileWeights[c];
+            }
+
             return full;
         }
 
@@ -153,7 +193,9 @@ namespace ModularAudience.Audio.Processors_V4
             {
                 DeterministicComponentFeatures feature = retained.First(f => f.Index == component);
                 if (feature.FundamentalHz > 0 && feature.PitchScore > best)
+                {
                     best = feature.FundamentalHz;
+                }
             }
 
             return best;
@@ -162,9 +204,15 @@ namespace ModularAudience.Audio.Processors_V4
         private static string DescribeCharacter(InstrumentProfile profile, double harmonic, double percussive)
         {
             if (harmonic >= 0.45 && harmonic > 1.4 * percussive)
+            {
                 return $"{profile.Name}: sustained/harmonic, pitch {profile.MinimumPitchHz:F0}–{profile.MaximumPitchHz:F0} Hz";
+            }
+
             if (percussive >= 0.45 && percussive > 1.4 * harmonic)
+            {
                 return $"{profile.Name}: transient/percussion-like, brightness near {profile.BrightnessHz:F0} Hz";
+            }
+
             return $"{profile.Name}: mixed character, pitch {profile.MinimumPitchHz:F0}–{profile.MaximumPitchHz:F0} Hz";
         }
 
@@ -179,7 +227,10 @@ namespace ModularAudience.Audio.Processors_V4
             // Use pYIN pitch if available and more reliable than the QIFFT estimate.
             double pitchHz = component.FundamentalHz;
             if (component.PyinPitchHz > 0 && component.PyinPitchHz != component.FundamentalHz)
+            {
                 pitchHz = component.PyinPitchHz;
+            }
+
             double pitchScore = 0;
             if (pitchHz > 0)
             {

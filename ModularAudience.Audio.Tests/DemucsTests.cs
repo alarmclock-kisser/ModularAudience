@@ -207,10 +207,16 @@ public sealed class DemucsTests
             Assert.IsTrue(options.Bottom <= root.GetControlFromPosition(0, 2)!.Top,
                 $"Options must not overlap the stems row: bottom={options.Bottom}, stems={root.GetControlFromPosition(0, 2)!.Top}, size={dialog.Size}.");
             foreach (Control child in options.Controls)
+            {
                 Assert.IsTrue(child.Right <= options.ClientSize.Width, $"Option {child.Text} must fit horizontally.");
+            }
+
             var checks = (TableLayoutPanel)Field("checksPanel")!;
             foreach (Control child in checks.Controls)
+            {
                 Assert.IsTrue(child.Right <= checks.ClientSize.Width, $"Checkbox {child.Text} must fit horizontally.");
+            }
+
             Assert.IsTrue(root.GetControlFromPosition(0, 4)!.Bottom <= root.ClientSize.Height,
                 "Progress and status must remain inside the dialog.");
             var footer = (TableLayoutPanel)root.GetControlFromPosition(0, 4)!;
@@ -446,7 +452,11 @@ public sealed class DemucsTests
     public void ApplyingRuntimeFourierOptionsKeepsInstalledModelOnline()
     {
         const string model = "D:/Models/Demucs/htdemucs_6s.onnx";
-        if (!File.Exists(model)) Assert.Inconclusive("The local Demucs model is not installed.");
+        if (!File.Exists(model))
+        {
+            Assert.Inconclusive("The local Demucs model is not installed.");
+        }
+
         using var service = new OnnxService(loadImmediately: false);
         service.LoadModel(model, new DemucsLoadOptions
         {
@@ -479,7 +489,11 @@ public sealed class DemucsTests
     public async Task IdleModelIsReusedExclusivelyAndUnloadedAfterTimeout()
     {
         const string model = "D:/Models/Demucs/htdemucs_6s.onnx";
-        if (!File.Exists(model)) Assert.Inconclusive("The local Demucs model is not installed.");
+        if (!File.Exists(model))
+        {
+            Assert.Inconclusive("The local Demucs model is not installed.");
+        }
+
         var service = new OnnxService(loadImmediately: false);
         service.LoadModel(model, new DemucsLoadOptions { UseDirectML = false });
         string key = DemucsModelCache.Key(model, service.EffectiveOptions!);
@@ -492,7 +506,11 @@ public sealed class DemucsTests
             await Task.Delay(60);
             Assert.IsTrue(service.IsOnline, "Taken sessions cannot be expired by the old timer.");
             DemucsModelCache.Return(key, service, TimeSpan.FromMilliseconds(50));
-            for (int i = 0; i < 100 && service.IsOnline; i++) await Task.Delay(20);
+            for (int i = 0; i < 100 && service.IsOnline; i++)
+            {
+                await Task.Delay(20);
+            }
+
             Assert.IsFalse(service.IsOnline, "Idle expiry must dispose the native ONNX session.");
             Assert.IsNull(DemucsModelCache.Take(key));
         }
@@ -504,7 +522,11 @@ public sealed class DemucsTests
     public void ZeroRetentionUnloadsModelImmediately()
     {
         const string model = "D:/Models/Demucs/htdemucs_6s.onnx";
-        if (!File.Exists(model)) Assert.Inconclusive("The local Demucs model is not installed.");
+        if (!File.Exists(model))
+        {
+            Assert.Inconclusive("The local Demucs model is not installed.");
+        }
+
         using var service = new OnnxService(loadImmediately: false);
         service.LoadModel(model, new DemucsLoadOptions { UseDirectML = false });
         string key = DemucsModelCache.Key(model, service.EffectiveOptions!);
@@ -520,12 +542,20 @@ public sealed class DemucsTests
     public async Task InstalledModelSeparatesAllStemsWithoutMutatingSource(bool directML, Microsoft.ML.OnnxRuntime.GraphOptimizationLevel optimization)
     {
         const string model = "D:/Models/Demucs/htdemucs_6s.onnx";
-        if (!File.Exists(model)) Assert.Inconclusive("The local Demucs model is not installed.");
+        if (!File.Exists(model))
+        {
+            Assert.Inconclusive("The local Demucs model is not installed.");
+        }
+
         using var service = new OnnxService(loadImmediately: false);
         service.LoadModel(model, new DemucsLoadOptions { UseDirectML = directML, DeviceId = 0, GraphOptimization = optimization });
         string initializedProvider = service.ExecutionProvider;
         Console.WriteLine(service.ExecutionProvider + " " + service.LoadWarning);
-        if (directML) StringAssert.StartsWith(service.ExecutionProvider, "DirectML");
+        if (directML)
+        {
+            StringAssert.StartsWith(service.ExecutionProvider, "DirectML");
+        }
+
         Assert.AreEqual(directML, service.EffectiveOptions!.UseDirectML);
         using var source = new AudioObj { Data = new float[44100 * 2], SampleRate = 44100, Channels = 2 };
         for (int i = 0; i < 44100; i++)
@@ -583,12 +613,19 @@ public sealed class DemucsTests
     public async Task SequentialStemsYieldFirstTrackBeforeNextPassAndKeepItOnCancellation()
     {
         const string model = "D:/Models/Demucs/htdemucs_6s.onnx";
-        if (!File.Exists(model)) Assert.Inconclusive("The local Demucs model is not installed.");
+        if (!File.Exists(model))
+        {
+            Assert.Inconclusive("The local Demucs model is not installed.");
+        }
+
         using var service = new OnnxService(loadImmediately: false);
         service.LoadModel(model, new DemucsLoadOptions { UseDirectML = false });
         using var source = new AudioObj { Data = new float[44100 * 2], SampleRate = 44100, Channels = 2 };
         for (int i = 0; i < 44100; i++)
+        {
             source.Data[2 * i] = source.Data[2 * i + 1] = (float)(0.2 * Math.Sin(2 * Math.PI * 110 * i / 44100));
+        }
+
         using var cancellation = new CancellationTokenSource();
         await using var stems = service.ExtractStemsSequentialAsync(source, ["drums", "bass", "vocals"], cancellationToken: cancellation.Token)
             .GetAsyncEnumerator();
@@ -614,8 +651,16 @@ public sealed class DemucsTests
             AppContext.BaseDirectory,
             "Resources",
             "gimme what you got sample.wav");
-        if (!File.Exists(model)) Assert.Inconclusive("The local Demucs model is not installed.");
-        if (!File.Exists(audioPath)) Assert.Inconclusive("The local audio fixture is not available.");
+        if (!File.Exists(model))
+        {
+            Assert.Inconclusive("The local Demucs model is not installed.");
+        }
+
+        if (!File.Exists(audioPath))
+        {
+            Assert.Inconclusive("The local audio fixture is not available.");
+        }
+
         using var service = new OnnxService(loadImmediately: false);
         service.LoadModel(model, new DemucsLoadOptions
         {
@@ -663,8 +708,16 @@ public sealed class DemucsTests
             AppContext.BaseDirectory,
             "Resources",
             "gimme what you got sample.wav");
-        if (!File.Exists(model)) Assert.Inconclusive("The local Demucs model is not installed.");
-        if (!File.Exists(audioPath)) Assert.Inconclusive("The local audio fixture is not available.");
+        if (!File.Exists(model))
+        {
+            Assert.Inconclusive("The local Demucs model is not installed.");
+        }
+
+        if (!File.Exists(audioPath))
+        {
+            Assert.Inconclusive("The local audio fixture is not available.");
+        }
+
         using AudioObj? source = await AudioObj.FromFileAsync(audioPath);
         Assert.IsNotNull(source);
         using var cpu = new OnnxService(loadImmediately: false);
@@ -716,8 +769,16 @@ public sealed class DemucsTests
             AppContext.BaseDirectory,
             "Resources",
             "gimme what you got sample.wav");
-        if (!File.Exists(model)) Assert.Inconclusive("The local Demucs model is not installed.");
-        if (!File.Exists(audioPath)) Assert.Inconclusive("The local audio fixture is not available.");
+        if (!File.Exists(model))
+        {
+            Assert.Inconclusive("The local Demucs model is not installed.");
+        }
+
+        if (!File.Exists(audioPath))
+        {
+            Assert.Inconclusive("The local audio fixture is not available.");
+        }
+
         using var service = new OnnxService(loadImmediately: false);
         service.LoadModel(model, new DemucsLoadOptions
         {
@@ -773,7 +834,11 @@ public sealed class DemucsTests
     public async Task Non44100AudioKeepsInterleavedStereoChannelsAfterRoundTrip(int sampleRate)
     {
         const string model = "D:/Models/Demucs/htdemucs_6s.onnx";
-        if (!File.Exists(model)) Assert.Inconclusive("The local Demucs model is not installed.");
+        if (!File.Exists(model))
+        {
+            Assert.Inconclusive("The local Demucs model is not installed.");
+        }
+
         using var service = new OnnxService(loadImmediately: false);
         service.LoadModel(model, new DemucsLoadOptions
         {
@@ -826,7 +891,11 @@ public sealed class DemucsTests
     public void FailedDirectMLDeviceReportsEffectiveCpuOptions()
     {
         const string model = "D:/Models/Demucs/htdemucs_6s.onnx";
-        if (!File.Exists(model)) Assert.Inconclusive("The local Demucs model is not installed.");
+        if (!File.Exists(model))
+        {
+            Assert.Inconclusive("The local Demucs model is not installed.");
+        }
+
         using var service = new OnnxService(loadImmediately: false);
         const long luid = 0x12345678;
         var requested = new DemucsLoadOptions

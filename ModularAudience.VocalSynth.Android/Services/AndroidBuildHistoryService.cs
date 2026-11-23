@@ -43,13 +43,20 @@ internal sealed class AndroidBuildHistoryService
         foreach (JsonElement run in runs.EnumerateArray())
         {
             if (entries.Count >= MaxEntries)
+            {
                 break;
+            }
+
             if (run.ValueKind != JsonValueKind.Object)
+            {
                 continue;
+            }
 
             string? sha = GetStringProperty(run, "head_sha");
             if (sha != null && !seenCommits.Add(sha))
+            {
                 continue;
+            }
 
             if (!run.TryGetProperty("run_number", out JsonElement runNumberElement) ||
                 runNumberElement.ValueKind != JsonValueKind.Number ||

@@ -1189,7 +1189,11 @@ namespace ModularAudience.Forms
 
             foreach (var tv in WindowMain.TrackViews)
             {
-                if (tv == null || tv.IsDisposed || tv.Disposing) continue;
+                if (tv == null || tv.IsDisposed || tv.Disposing)
+                {
+                    continue;
+                }
+
                 var audio = tv.OriginalAudio;
                 if (audio != null && audio.PlayerPlaying && !string.IsNullOrWhiteSpace(audio.FilePath))
                 {

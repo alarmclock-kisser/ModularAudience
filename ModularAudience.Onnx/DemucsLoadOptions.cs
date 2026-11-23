@@ -47,17 +47,40 @@ public sealed class DemucsLoadOptions
         try
         {
             if (directML && this.DisableDirectMLGraphFusion)
+            {
                 options.AddSessionConfigEntry("ep.dml.disable_graph_fusion", "1");
+            }
+
             if (this.DisableSpinning)
             {
                 options.AddSessionConfigEntry("session.intra_op.allow_spinning", "0");
                 options.AddSessionConfigEntry("session.inter_op.allow_spinning", "0");
             }
-            if (this.DisablePrepacking) options.AddSessionConfigEntry("session.disable_prepacking", "1");
-            foreach (var (key, value) in this.SessionConfigEntries) options.AddSessionConfigEntry(key, value);
-            if (!string.IsNullOrWhiteSpace(this.OptimizedModelPath)) options.OptimizedModelFilePath = this.OptimizedModelPath;
-            if (!this.AllowCpuOperators && directML) options.AddSessionConfigEntry("session.disable_cpu_ep_fallback", "1");
-            if (directML) options.AppendExecutionProvider_DML(this.DeviceId);
+            if (this.DisablePrepacking)
+            {
+                options.AddSessionConfigEntry("session.disable_prepacking", "1");
+            }
+
+            foreach (var (key, value) in this.SessionConfigEntries)
+            {
+                options.AddSessionConfigEntry(key, value);
+            }
+
+            if (!string.IsNullOrWhiteSpace(this.OptimizedModelPath))
+            {
+                options.OptimizedModelFilePath = this.OptimizedModelPath;
+            }
+
+            if (!this.AllowCpuOperators && directML)
+            {
+                options.AddSessionConfigEntry("session.disable_cpu_ep_fallback", "1");
+            }
+
+            if (directML)
+            {
+                options.AppendExecutionProvider_DML(this.DeviceId);
+            }
+
             return options;
         }
         catch { options.Dispose(); throw; }
@@ -69,13 +92,20 @@ public sealed class DemucsLoadOptions
         this.IntraOpThreads = Math.Clamp(this.IntraOpThreads, 0, Environment.ProcessorCount);
         this.InterOpThreads = Math.Clamp(this.InterOpThreads, 0, Environment.ProcessorCount);
         this.ChunkOverlap = double.IsFinite(this.ChunkOverlap) ? Math.Clamp(this.ChunkOverlap, 0, 0.75) : 0.25;
-        if (this.CudaToolkitVersion is not (0 or 12 or 13)) this.CudaToolkitVersion = 0;
+        if (this.CudaToolkitVersion is not (0 or 12 or 13))
+        {
+            this.CudaToolkitVersion = 0;
+        }
     }
 
     public void NormalizeForProvider(bool directML)
     {
         this.NormalizeWorkers();
-        if (!directML) return;
+        if (!directML)
+        {
+            return;
+        }
+
         this.DisableDirectMLGraphFusion = true;
         this.ExecutionMode = ExecutionMode.ORT_SEQUENTIAL;
         this.EnableMemoryPattern = false;
@@ -85,7 +115,10 @@ public sealed class DemucsLoadOptions
     {
         this.UseDirectML = directML;
         if (!directML && (!this.UseCudaCuFft || this.CudaDeviceId < 0))
+        {
             this.DeviceLuid = null;
+        }
+
         this.NormalizeForProvider(directML);
     }
 }

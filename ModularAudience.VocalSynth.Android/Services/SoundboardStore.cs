@@ -104,7 +104,10 @@ internal sealed class SoundboardStore
         ArgumentNullException.ThrowIfNull(item);
         await using Stream? stream = this.OpenRead(item.FileLocation);
         if (stream == null)
+        {
             throw new FileNotFoundException("The saved soundboard WAV could not be opened.");
+        }
+
         WaveAudioData wave = await Task.Run(
             () => WaveAudioReader.Read(stream),
             cancellationToken);
@@ -134,7 +137,10 @@ internal sealed class SoundboardStore
         {
             int index = this.items.FindIndex(candidate => candidate.Id == item.Id);
             if (index < 0)
+            {
                 throw new InvalidOperationException("The soundboard item no longer exists.");
+            }
+
             (string location, long size) = await this.WriteAudioAsync(item.Id, name, audio, cancellationToken);
             SoundboardItem replacement = item with
             {
@@ -146,7 +152,9 @@ internal sealed class SoundboardStore
             this.items[index] = replacement;
             await this.SaveMetadataAsync(cancellationToken);
             if (!string.Equals(item.FileLocation, location, StringComparison.Ordinal))
+            {
                 this.DeleteAudio(item.FileLocation);
+            }
         }
         finally
         {
@@ -188,7 +196,9 @@ internal sealed class SoundboardStore
             this.items.RemoveAll(item => string.Equals(item.GroupName, groupName, StringComparison.Ordinal));
             await this.SaveMetadataAsync(cancellationToken);
             foreach (SoundboardItem item in removed)
+            {
                 this.DeleteAudio(item.FileLocation);
+            }
         }
         finally
         {
@@ -208,7 +218,10 @@ internal sealed class SoundboardStore
         {
             int index = this.items.FindIndex(candidate => candidate.Id == item.Id);
             if (index < 0)
+            {
                 throw new InvalidOperationException("The soundboard item no longer exists.");
+            }
+
             this.items[index] = this.items[index] with { Name = NormalizeName(newName) };
             await this.SaveMetadataAsync(cancellationToken);
         }
@@ -230,7 +243,10 @@ internal sealed class SoundboardStore
         {
             int index = this.items.FindIndex(candidate => candidate.Id == item.Id);
             if (index < 0)
+            {
                 throw new InvalidOperationException("The soundboard item no longer exists.");
+            }
+
             this.items[index] = this.items[index] with { GroupName = NormalizeGroup(groupName) };
             await this.SaveMetadataAsync(cancellationToken);
         }
@@ -260,12 +276,18 @@ internal sealed class SoundboardStore
     private async Task EnsureLoadedAsync(CancellationToken cancellationToken)
     {
         if (this.loaded)
+        {
             return;
+        }
+
         await this.gate.WaitAsync(cancellationToken);
         try
         {
             if (this.loaded)
+            {
                 return;
+            }
+
             Directory.CreateDirectory(this.root);
             if (File.Exists(this.metadataPath))
             {
@@ -309,7 +331,9 @@ internal sealed class SoundboardStore
         finally
         {
             if (File.Exists(temporaryPath))
+            {
                 File.Delete(temporaryPath);
+            }
         }
     }
 
@@ -331,7 +355,10 @@ internal sealed class SoundboardStore
             values.Put(MediaStore.MediaColumns.IsPending, 1);
             global::Android.Net.Uri? uri = resolver.Insert(MediaStore.Audio.Media.ExternalContentUri, values);
             if (uri == null)
+            {
                 throw new IOException("Android could not create the WAV in Music/ModularAudience.");
+            }
+
             try
             {
                 await using Stream output = resolver.OpenOutputStream(uri)
@@ -352,7 +379,10 @@ internal sealed class SoundboardStore
 
         PermissionStatus permission = await Permissions.RequestAsync<Permissions.StorageWrite>();
         if (permission != PermissionStatus.Granted)
+        {
             throw new UnauthorizedAccessException("Storage permission is required to save WAV files in Music.");
+        }
+
         string musicDirectory = Path.Combine(
             global::Android.OS.Environment.ExternalStorageDirectory!.AbsolutePath,
             global::Android.OS.Environment.DirectoryMusic!,
@@ -390,16 +420,24 @@ internal sealed class SoundboardStore
     {
         string temporaryPath = this.metadataPath + ".tmp";
         await using (FileStream stream = File.Create(temporaryPath))
+        {
             await JsonSerializer.SerializeAsync(stream, this.items, cancellationToken: cancellationToken);
+        }
+
         File.Move(temporaryPath, this.metadataPath, true);
     }
 
     private static float[] ReadSamples(byte[]? bytes)
     {
         if (bytes is null || bytes.Length == 0)
+        {
             return [];
+        }
+
         if (bytes.Length % sizeof(float) != 0)
+        {
             throw new CoOpProtocolException("The audio sample payload is not aligned to 32-bit floats.");
+        }
 
         var samples = new float[bytes.Length / sizeof(float)];
         for (int index = 0; index < samples.Length; index++)
@@ -415,13 +453,17 @@ internal sealed class SoundboardStore
     {
         double durationMilliseconds = samples.Length * 1000d / channels / sampleRate;
         if (durationMilliseconds >= 150)
+        {
             return samples;
+        }
 
         int paddingFrames = (int)Math.Ceiling(sampleRate * 0.05d);
         int paddingSamples = checked(paddingFrames * channels);
         long paddedLength = samples.LongLength + 2L * paddingSamples;
         if (paddedLength > Array.MaxLength)
+        {
             throw new InvalidDataException("The short sample requires too much memory for playback padding.");
+        }
 
         var padded = new float[(int)paddedLength];
         Array.Copy(samples, 0, padded, paddingSamples, samples.Length);

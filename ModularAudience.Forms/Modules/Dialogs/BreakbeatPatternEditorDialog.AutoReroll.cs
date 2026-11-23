@@ -83,10 +83,17 @@ public partial class BreakbeatPatternEditorDialog
         for (int row = 0; row < this.samples.Count; row++)
         {
             var bounds = this.AutoToggleBounds(row);
-            if (!Rectangle.Union(bounds, this.AutoRollBounds(row)).Contains(e.Location)) continue;
+            if (!Rectangle.Union(bounds, this.AutoRollBounds(row)).Contains(e.Location))
+            {
+                continue;
+            }
+
             AudioObj sample = this.samples[row];
             if (!this.autoRerolls.TryGetValue(sample, out var state))
+            {
                 this.autoRerolls[sample] = state = new();
+            }
+
             if (e.Button == MouseButtons.Left && this.AutoCounterBounds(row).Contains(e.Location))
             {
                 int currentLoops = state.Options.Loops;
@@ -112,7 +119,9 @@ public partial class BreakbeatPatternEditorDialog
                 return true;
             }
             if (e.Button == MouseButtons.Left && bounds.Contains(e.Location) && state.Options.Enabled)
+            {
                 state.Options.Enabled = false;
+            }
             else
             {
                 bool deferUntilNextRoll = state.Options.Enabled;
@@ -132,7 +141,11 @@ public partial class BreakbeatPatternEditorDialog
                 dialog.FormClosed += (_, _) =>
                 {
                     this.trackGenerateDialog = null;
-                    if (this.IsDisposed || this.Disposing || this.autoRerollClosing) return;
+                    if (this.IsDisposed || this.Disposing || this.autoRerollClosing)
+                    {
+                        return;
+                    }
+
                     this.Enabled = true;
                     if (dialog.DialogResult == DialogResult.OK && this.samples.Contains(sample))
                     {
@@ -172,25 +185,39 @@ public partial class BreakbeatPatternEditorDialog
         foreach (int target in rows)
         {
             if (!this.autoRerolls.TryGetValue(this.samples[target], out var state))
+            {
                 this.autoRerolls[this.samples[target]] = state = new();
+            }
+
             state.Options = options.Clone();
             state.Options.Enabled = true;
-            if (!deferUntilNextRoll) state.CompletedLoops = 0;
+            if (!deferUntilNextRoll)
+            {
+                state.CompletedLoops = 0;
+            }
         }
         if (!deferUntilNextRoll)
+        {
             this.ApplyTrackAutoRerolls(rows, this.AutoRerollSections());
+        }
     }
     private void ActivateAutoReroll(int row, TrackAutoRerollOptions options)
     {
         AudioObj sample = this.samples[row];
-        if (!this.autoRerolls.TryGetValue(sample, out var state)) this.autoRerolls[sample] = state = new();
+        if (!this.autoRerolls.TryGetValue(sample, out var state))
+        {
+            this.autoRerolls[sample] = state = new();
+        }
+
         state.Options = options.Clone();
         state.CompletedLoops = 0;
         int[] sections = this.AutoRerollSections();
         int quarterTicks = BreakbeatGenerator_V2.PatternTicksPerBar / 4;
         if (state.Options.Enabled && !this.notes.Any(n => n.TrackIndex == row && sections.Any(section =>
             n.StartTick < (section + 1L) * quarterTicks && (long)n.StartTick + n.DurationTicks > section * quarterTicks)))
+        {
             this.ApplyTrackAutoRerolls([row], sections);
+        }
     }
     private void ActivateAutoRerollForAll(TrackAutoRerollOptions options)
     {
@@ -200,39 +227,66 @@ public partial class BreakbeatPatternEditorDialog
         for (int row = 0; row < this.samples.Count; row++)
         {
             if (!this.autoRerolls.TryGetValue(this.samples[row], out var state))
+            {
                 this.autoRerolls[this.samples[row]] = state = new();
+            }
+
             state.Options = options.Clone();
             state.Options.Enabled = true;
             state.CompletedLoops = 0;
             if (!this.notes.Any(n => n.TrackIndex == row && sections.Any(section =>
                 n.StartTick < (section + 1L) * quarterTicks && (long)n.StartTick + n.DurationTicks > section * quarterTicks)))
+            {
                 emptyRows.Add(row);
+            }
         }
         // Fill empty tracks together so their initial ensemble save is one shared final state.
-        if (emptyRows.Count > 0) this.ApplyTrackAutoRerolls(emptyRows, sections);
+        if (emptyRows.Count > 0)
+        {
+            this.ApplyTrackAutoRerolls(emptyRows, sections);
+        }
+
         this.CommitHistoryAction();
         this.pictureBox_pattern.Invalidate();
     }
     private void RollAutoTrack(int row, bool advanceCounter = true)
     {
-        if (this.saveInProgress || this.autoRerollClosing) return;
+        if (this.saveInProgress || this.autoRerollClosing)
+        {
+            return;
+        }
+
         if (!this.autoRerolls.TryGetValue(this.samples[row], out var state))
+        {
             this.autoRerolls[this.samples[row]] = state = new();
+        }
+
         if (advanceCounter && state.Options.Enabled)
+        {
             state.CompletedLoops = (state.CompletedLoops + 1) % Math.Max(1, state.Options.Loops);
+        }
+
         this.ApplyTrackAutoRerolls([row], this.AutoRerollSections());
         this.pictureBox_pattern.Invalidate();
     }
     private void ResetAutoRerollCounters()
     {
-        foreach (var state in this.autoRerolls.Values) state.CompletedLoops = 0;
+        foreach (var state in this.autoRerolls.Values)
+        {
+            state.CompletedLoops = 0;
+        }
+
         this.pictureBox_pattern.Invalidate();
     }
     private void PrepareAutoRerollPlayback()
     {
         this.observedAutoLoopPass = 0;
         int[] sections = this.GetLoopSectionsSnapshot();
-        if (!sections.SequenceEqual(this.autoLoopSelection)) this.ResetAutoRerollCounters();
+        if (!sections.SequenceEqual(this.autoLoopSelection))
+        {
+            this.ResetAutoRerollCounters();
+        }
+
         this.autoLoopSelection = sections;
     }
     private void ResetAutoRerollClock()
@@ -242,14 +296,20 @@ public partial class BreakbeatPatternEditorDialog
     }
     private void checkBox_liveBreakbeat_CheckedChanged(object? sender, EventArgs e)
     {
-        if (this.samples.Count == 0) return;
+        if (this.samples.Count == 0)
+        {
+            return;
+        }
+
         this.combo_liveBreakbeatPreset.Enabled = this.checkBox_liveBreakbeat.Checked;
         if (this.checkBox_liveBreakbeat.Checked)
         {
             this.ConfigureLiveBreakbeat();
 
             if (this.Visible && this.hearCancellationTokenSource is null)
+            {
                 this.button_hear.PerformClick();
+            }
         }
         else
         {
@@ -264,11 +324,17 @@ public partial class BreakbeatPatternEditorDialog
     private void combo_liveBreakbeatPreset_SelectedIndexChanged(object? sender, EventArgs e)
     {
         if (!this.initializing && this.checkBox_liveBreakbeat.Checked)
+        {
             this.ConfigureLiveBreakbeat();
+        }
     }
     private void ConfigureLiveBreakbeat()
     {
-        if (this.samples.Count == 0) return;
+        if (this.samples.Count == 0)
+        {
+            return;
+        }
+
         string ensemblePreset = this.combo_liveBreakbeatPreset.SelectedItem is BreakbeatTrackPresets.LiveBreakbeatPreset preset
             ? preset.Name
             : "LiquidDnB";
@@ -277,7 +343,9 @@ public partial class BreakbeatPatternEditorDialog
         for (int row = 0; row < this.samples.Count; row++)
         {
             if (!this.autoRerolls.TryGetValue(this.samples[row], out var state))
+            {
                 this.autoRerolls[this.samples[row]] = state = new TrackAutoRerollState();
+            }
 
             string trackPresetName = BreakbeatTrackPresets.ResolveLivePreset(ensemblePreset, instruments[row], row);
             BreakbeatTrackPreset trackPreset = BreakbeatTrackPresets.All.Single(p => p.Name == trackPresetName);
@@ -324,11 +392,17 @@ public partial class BreakbeatPatternEditorDialog
     }
     private void checkBox_liveBreakbeat_MouseUp(object? sender, MouseEventArgs e)
     {
-        if (e.Button != MouseButtons.Right || this.samples.Count == 0) return;
+        if (e.Button != MouseButtons.Right || this.samples.Count == 0)
+        {
+            return;
+        }
+
         int row = 0;
         AudioObj sample = this.samples[row];
         if (!this.autoRerolls.TryGetValue(sample, out var state))
+        {
             this.autoRerolls[sample] = state = new TrackAutoRerollState();
+        }
 
         if (this.trackGenerateDialog is { IsDisposed: false } existing)
         {
@@ -345,7 +419,11 @@ public partial class BreakbeatPatternEditorDialog
         dialog.FormClosed += (_, _) =>
         {
             this.trackGenerateDialog = null;
-            if (this.IsDisposed || this.Disposing) return;
+            if (this.IsDisposed || this.Disposing)
+            {
+                return;
+            }
+
             this.Enabled = true;
             if (dialog.DialogResult == DialogResult.OK)
             {
@@ -360,49 +438,91 @@ public partial class BreakbeatPatternEditorDialog
     }
     private void StopAutoRerollPlayback(bool resetCounters)
     {
-        if (resetCounters) this.ResetAutoRerollCounters();
+        if (resetCounters)
+        {
+            this.ResetAutoRerollCounters();
+        }
     }
     private void ObserveAutoRerollLoops(long loopPass)
     {
-        if (this.autoRerollClosing) return;
+        if (this.autoRerollClosing)
+        {
+            return;
+        }
+
         int[] sections = this.GetLoopSectionsSnapshot();
         if (!sections.SequenceEqual(this.autoLoopSelection))
         {
             this.autoLoopSelection = sections;
             this.observedAutoLoopPass = loopPass;
-            foreach (var state in this.autoRerolls.Values) state.CompletedLoops = 0;
+            foreach (var state in this.autoRerolls.Values)
+            {
+                state.CompletedLoops = 0;
+            }
+
             return;
         }
         long elapsed = loopPass - this.observedAutoLoopPass;
-        if (elapsed <= 0) return;
+        if (elapsed <= 0)
+        {
+            return;
+        }
+
         this.observedAutoLoopPass = loopPass;
-        if (sections.Length == 0) return;
+        if (sections.Length == 0)
+        {
+            return;
+        }
+
         this.AdvanceAutoRerollCounters(elapsed, sections);
     }
     private void CompleteNonLoopHear(bool completed)
     {
-        if (!completed || this.autoRerollClosing || this.IsDisposed || this.selectedLoopSections.Count > 0) return;
+        if (!completed || this.autoRerollClosing || this.IsDisposed || this.selectedLoopSections.Count > 0)
+        {
+            return;
+        }
+
         this.AdvanceAutoRerollCounters(1, Enumerable.Range(0, this.bars * 4).ToArray());
     }
     private void DisableAutoRerollForManualNotes(IEnumerable<BreakbeatPatternNote> placed)
     {
-        if (this.automaticGeneration) return;
+        if (this.automaticGeneration)
+        {
+            return;
+        }
+
         foreach (int row in placed.Select(n => n.TrackIndex).Distinct())
+        {
             if (row >= 0 && row < this.samples.Count && this.autoRerolls.TryGetValue(this.samples[row], out var state))
             {
                 state.Options.Enabled = false;
                 state.RemixOptions = null;
             }
+        }
+
         this.pictureBox_pattern.Invalidate();
     }
     private void button_roll_Click(object? sender, EventArgs e)
     {
-        if (this.saveInProgress || this.autoRerollClosing) return;
+        if (this.saveInProgress || this.autoRerollClosing)
+        {
+            return;
+        }
+
         int[] rows = Enumerable.Range(0, this.samples.Count)
             .Where(row => this.autoRerolls.TryGetValue(this.samples[row], out var state) && state.Options.Enabled)
             .ToArray();
-        if (rows.Length == 0) return;
-        foreach (int row in rows) this.autoRerolls[this.samples[row]].CompletedLoops = 0;
+        if (rows.Length == 0)
+        {
+            return;
+        }
+
+        foreach (int row in rows)
+        {
+            this.autoRerolls[this.samples[row]].CompletedLoops = 0;
+        }
+
         this.ApplyTrackAutoRerolls(rows, this.AutoRerollSections());
         this.pictureBox_pattern.Invalidate();
     }
@@ -425,7 +545,11 @@ public partial class BreakbeatPatternEditorDialog
                     remixDue.Add(row);
                 }
             }
-            if (!this.autoRerolls.TryGetValue(this.samples[row], out var state) || !state.Options.Enabled) continue;
+            if (!this.autoRerolls.TryGetValue(this.samples[row], out var state) || !state.Options.Enabled)
+            {
+                continue;
+            }
+
             state.CompletedLoops += elapsed;
             if (state.CompletedLoops >= Math.Max(1, state.Options.Loops))
             {
@@ -433,8 +557,16 @@ public partial class BreakbeatPatternEditorDialog
                 due.Add(row);
             }
         }
-        if (due.Count > 0) this.ApplyTrackAutoRerolls(due, sections);
-        if (remixDue.Count > 0) this.ApplyTrackRemixes(remixDue);
+        if (due.Count > 0)
+        {
+            this.ApplyTrackAutoRerolls(due, sections);
+        }
+
+        if (remixDue.Count > 0)
+        {
+            this.ApplyTrackRemixes(remixDue);
+        }
+
         this.pictureBox_pattern.Invalidate();
     }
     private void ApplyTrackRemixes(IReadOnlyList<int> rows)
@@ -443,15 +575,22 @@ public partial class BreakbeatPatternEditorDialog
         {
             if (!this.autoRerolls.TryGetValue(this.samples[row], out var state)
                 || state.RemixOptions is not BreakbeatRemixOptions options)
+            {
                 continue;
+            }
 
             BreakbeatRemixOptions periodic = options.Clone();
             periodic.CopyToClipboard = false;
             this.selectedNotes.Clear();
             foreach (BreakbeatPatternNote note in this.notes.Where(note => note.TrackIndex == row))
+            {
                 this.selectedNotes.Add(note);
+            }
+
             if (this.selectedNotes.Count > 0)
+            {
                 this.ApplyRemix(periodic);
+            }
         }
         this.selectedNotes.Clear();
     }
@@ -481,8 +620,12 @@ public partial class BreakbeatPatternEditorDialog
                         this.GeneratePatternInArea(row, row, start, end, options);
                         int endTick = (group.End + 1) * quarterTicks;
                         for (int i = 0; i < this.notes.Count; i++)
+                        {
                             if (!previous.Contains(this.notes[i]) && (long)this.notes[i].StartTick + this.notes[i].DurationTicks > endTick)
+                            {
                                 this.notes[i] = this.notes[i] with { DurationTicks = endTick - this.notes[i].StartTick, HardResized = true };
+                            }
+                        }
                     }
                 }
             }
@@ -497,11 +640,21 @@ public partial class BreakbeatPatternEditorDialog
     private static IEnumerable<(int Start, int End)> ContiguousSections(int[] sections)
     {
         int[] ordered = sections.Distinct().Order().ToArray();
-        if (ordered.Length == 0) yield break;
+        if (ordered.Length == 0)
+        {
+            yield break;
+        }
+
         int start = ordered[0], end = start;
         foreach (int section in ordered.Skip(1))
-            if (section == end + 1) end = section;
+        {
+            if (section == end + 1)
+            {
+                end = section;
+            }
             else { yield return (start, end); start = end = section; }
+        }
+
         yield return (start, end);
     }
     private void QueueAutoRerollSaves(IReadOnlyList<int> rows)
@@ -516,13 +669,17 @@ public partial class BreakbeatPatternEditorDialog
     private void checkBox_saveNewSolo_CheckedChanged(object? sender, EventArgs e)
     {
         if (this.checkBox_saveNewSolo.Checked && !this.initializing)
+        {
             this.QueueCurrentPatternSave(solo: true, ensemble: false);
+        }
     }
 
     private void checkBox_saveNewEnsemble_CheckedChanged(object? sender, EventArgs e)
     {
         if (this.checkBox_saveNewEnsemble.Checked && !this.initializing)
+        {
             this.QueueCurrentPatternSave(solo: false, ensemble: true);
+        }
     }
 
     private void QueueCurrentPatternSave(bool solo, bool ensemble)
@@ -547,7 +704,10 @@ public partial class BreakbeatPatternEditorDialog
         int[] solos = soloRows.Where(row =>
             HasNotesInSections(notes.Where(note => note.TrackIndex == row))).ToArray();
         ensemble = ensemble && HasNotesInSections(notes);
-        if (!ensemble && solos.Length == 0) return;
+        if (!ensemble && solos.Length == 0)
+        {
+            return;
+        }
         // Capture the final shared arrangement once AFTER all due tracks rerolled.
         // Only one ensemble is queued, regardless of how many tracks requested it.
         var samples = this.samples.Select(CloneSampleWithMetadata).ToArray();
@@ -566,16 +726,29 @@ public partial class BreakbeatPatternEditorDialog
             try
             {
                 await previous;
-                foreach (int row in solos) await RenderAsync(notes.Where(n => n.TrackIndex == row).ToArray(), $"{labels[row]} — Solo {variation}", row);
-                if (ensemble) await RenderAsync(notes, $"Ensemble {variation}", null);
+                foreach (int row in solos)
+                {
+                    await RenderAsync(notes.Where(n => n.TrackIndex == row).ToArray(), $"{labels[row]} — Solo {variation}", row);
+                }
+
+                if (ensemble)
+                {
+                    await RenderAsync(notes, $"Ensemble {variation}", null);
+                }
             }
             catch (Exception error)
             {
                 LogManager.Log("Auto-reroll save failed."); LogManager.Log(error);
                 if (!this.IsDisposed && !this.pictureBox_pattern.IsDisposed)
+                {
                     this.toolTip_pattern.Show("Auto-reroll save failed: " + error.Message, this.pictureBox_pattern, 8, 8, 8000);
+                }
             }
-            finally { foreach (var sample in samples) sample.Dispose(); }
+            finally { foreach (var sample in samples)
+                {
+                    sample.Dispose();
+                }
+            }
         }
         async Task RenderAsync(BreakbeatPatternNote[] renderNotes, string name, int? soloRow)
         {
@@ -583,7 +756,11 @@ public partial class BreakbeatPatternEditorDialog
             AudioObj? rendered = await BreakbeatPatternInstrumentRenderer.RenderAsync(renderNotes, samples, instruments,
                 settings, bars, bpm, resolution, swing, name, CancellationToken.None, this.instrumentSampleCache,
                 attackMilliseconds: attackMilliseconds);
-            if (rendered == null) return;
+            if (rendered == null)
+            {
+                return;
+            }
+
             try
             {
                 if (sections.Length > 0)
@@ -592,7 +769,11 @@ public partial class BreakbeatPatternEditorDialog
                     rendered.Dispose(); rendered = excerpt;
                 }
                 rendered.Rename(name);
-                if (this.IsDisposed || this.Disposing) return;
+                if (this.IsDisposed || this.Disposing)
+                {
+                    return;
+                }
+
                 string? hash = null;
                 if (isEnsemble)
                 {
@@ -603,7 +784,10 @@ public partial class BreakbeatPatternEditorDialog
                     }
                     var bytes = System.Runtime.InteropServices.MemoryMarshal.AsBytes(rendered.Data.AsSpan());
                     hash = $"{rendered.SampleRate}:{rendered.Channels}:" + Convert.ToHexString(System.Security.Cryptography.SHA256.HashData(bytes));
-                    if (this.savedEnsembleHashes.Contains(hash)) return;
+                    if (this.savedEnsembleHashes.Contains(hash))
+                    {
+                        return;
+                    }
                 }
                 AudioObj? soloTrack = isEnsemble ? null : trackIdentities[soloRow!.Value];
                 bool soloBpmChanged = !isEnsemble && this.autoSoloBpm.TryGetValue(soloTrack!, out float existingSoloBpm) && existingSoloBpm != bpm;
@@ -623,7 +807,11 @@ public partial class BreakbeatPatternEditorDialog
                     }
                 }
                 collection.AudioC.Audios.Add(rendered); rendered = null;
-                if (hash != null) this.savedEnsembleHashes.Add(hash);
+                if (hash != null)
+                {
+                    this.savedEnsembleHashes.Add(hash);
+                }
+
                 collection.Show();
             }
             finally { rendered?.Dispose(); }

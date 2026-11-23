@@ -82,13 +82,25 @@ public sealed class YtdlpProgressParserTests
             Assert.IsNull(progress, line);
         }
         foreach (string field in new[] { "downloaded_bytes", "total_bytes", "total_bytes_estimate", "speed", "eta", "elapsed" })
-        foreach (string value in new[] { "true", "{}", "[]", "\"garbage\"", "\"NaN\"", "\"Infinity\"", "\"-Infinity\"", "-1", "1e400" })
-            AssertInvalidField(field, value);
+        {
+            foreach (string value in new[] { "true", "{}", "[]", "\"garbage\"", "\"NaN\"", "\"Infinity\"", "\"-Infinity\"", "-1", "1e400" })
+            {
+                AssertInvalidField(field, value);
+            }
+        }
+
         foreach (string field in new[] { "downloaded_bytes", "total_bytes", "total_bytes_estimate" })
-        foreach (string value in new[] { "1.5", "9223372036854775808" })
-            AssertInvalidField(field, value);
+        {
+            foreach (string value in new[] { "1.5", "9223372036854775808" })
+            {
+                AssertInvalidField(field, value);
+            }
+        }
+
         foreach (string field in new[] { "eta", "elapsed" })
+        {
             AssertInvalidField(field, "1e20");
+        }
     }
 
     [TestMethod]

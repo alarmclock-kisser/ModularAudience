@@ -332,10 +332,17 @@ namespace ModularAudience.Audio.Tests
             {
                 if (Math.Abs(audio.Data[i]) >= threshold)
                 {
-                    if (silence >= gap) attacks++;
+                    if (silence >= gap)
+                    {
+                        attacks++;
+                    }
+
                     silence = 0;
                 }
-                else silence++;
+                else
+                {
+                    silence++;
+                }
             }
 
             return attacks;

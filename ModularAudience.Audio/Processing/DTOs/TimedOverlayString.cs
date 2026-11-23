@@ -53,7 +53,9 @@ namespace ModularAudience.Audio.Processing.DTOs
         private void ParseSubtitlesLine(string subtitlesLine)
         {
             if (string.IsNullOrWhiteSpace(subtitlesLine))
+            {
                 throw new FormatException("Subtitle line is empty.");
+            }
 
             // Pattern: start time, separator ( - -- - | -> >), end time, then the text.
             // Times: H:M:S.mmm or M:S.mmm, decimal separator dot or comma.

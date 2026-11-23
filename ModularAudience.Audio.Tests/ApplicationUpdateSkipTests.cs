@@ -16,7 +16,10 @@ public sealed class ApplicationUpdateSkipTests
     public void MissingSkipPreference_DefaultsToNullForNewAndLegacySettings(bool legacyFile)
     {
         using var files = new SettingsFiles();
-        if (legacyFile) File.WriteAllText(files.Path, """{"AskToUpdate":true,"CurrentReleaseNumber":127}""");
+        if (legacyFile)
+        {
+            File.WriteAllText(files.Path, """{"AskToUpdate":true,"CurrentReleaseNumber":127}""");
+        }
 
         ReleaseUpdateSettings settings = files.Store.LoadAndRecordRunningRelease(127);
 
@@ -208,7 +211,10 @@ public sealed class ApplicationUpdateSkipTests
             skip.PerformClick();
             // A disabled/broken action must fail the assertion, not leave a
             // modal test window open indefinitely.
-            if (dialog.DialogResult == DialogResult.None) dialog.Close();
+            if (dialog.DialogResult == DialogResult.None)
+            {
+                dialog.Close();
+            }
         };
 
         DialogResult result = dialog.ShowDialog();

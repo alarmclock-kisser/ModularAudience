@@ -23,9 +23,15 @@ internal static class BasicAudioEditor
         ArgumentNullException.ThrowIfNull(source);
         if (source.Channels is < 1 or > 2 || source.SampleRate <= 0
             || source.Data.Length % source.Channels != 0)
+        {
             throw new InvalidDataException("The selected audio format cannot be edited.");
+        }
+
         if (!double.IsFinite(rate) || rate is < 0.5 or > 2)
+        {
             throw new ArgumentOutOfRangeException(nameof(rate));
+        }
+
         int frames = source.Data.Length / source.Channels;
         int startFrame = Math.Clamp((int)Math.Round(Math.Clamp(trimStart, 0, 0.99) * frames), 0, frames - 1);
         int endFrame = Math.Clamp((int)Math.Round(Math.Clamp(trimEnd, 0.01, 1) * frames), startFrame + 1, frames);
@@ -38,12 +44,20 @@ internal static class BasicAudioEditor
         {
             double gain = 1;
             if (fadeInFrames > 0 && frame < fadeInFrames)
+            {
                 gain = Math.Min(gain, frame / (double)fadeInFrames);
+            }
+
             int remaining = trimmedFrames - frame - 1;
             if (fadeOutFrames > 0 && remaining < fadeOutFrames)
+            {
                 gain = Math.Min(gain, remaining / (double)fadeOutFrames);
+            }
+
             for (int channel = 0; channel < channels; channel++)
+            {
                 trimmed[frame * channels + channel] = (float)(trimmed[frame * channels + channel] * gain);
+            }
         }
 
         float[] transformed = mode switch
@@ -67,7 +81,10 @@ internal static class BasicAudioEditor
     private static float[] ChangePitchWithoutLengthChange(float[] source, int channels, double pitchRate)
     {
         if (Math.Abs(pitchRate - 1) < 0.0001)
+        {
             return source;
+        }
+
         float[] resampled = Resample(source, channels, pitchRate);
         return StretchWsola(resampled, channels, 1 / pitchRate);
     }
@@ -98,13 +115,18 @@ internal static class BasicAudioEditor
         int sourceFrames = source.Length / channels;
         int outputFrames = Math.Max(1, (int)Math.Round(sourceFrames / rate));
         if (Math.Abs(rate - 1) < 0.0001)
+        {
             return source;
+        }
 
         const int windowFrames = 1024;
         const int overlapFrames = 512;
         const int searchFrames = 128;
         if (sourceFrames < windowFrames * 2)
+        {
             return Resample(source, channels, rate);
+        }
+
         float[] output = new float[checked(outputFrames * channels)];
         int firstFrames = Math.Min(windowFrames, Math.Min(sourceFrames, outputFrames));
         Array.Copy(source, output, firstFrames * channels);
@@ -153,7 +175,10 @@ internal static class BasicAudioEditor
             }
             int copyFrames = available - crossfade;
             if (copyFrames > 0)
+            {
                 Array.Copy(source, (best + crossfade) * channels, output, (outputPosition + crossfade) * channels, copyFrames * channels);
+            }
+
             outputPosition += windowFrames - overlapFrames;
         }
         return output;

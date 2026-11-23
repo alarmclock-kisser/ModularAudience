@@ -22,7 +22,11 @@ internal static class MixProjectMenu
         var mix = new MixTrackView(); mix.Show();
         try { await mix.OpenProjectAsync(); }
         catch (OperationCanceledException) { }
-        finally { if (!mix.IsDisposed && !mix.HasLoadedProject) mix.Dispose(); }
+        finally { if (!mix.IsDisposed && !mix.HasLoadedProject)
+            {
+                mix.Dispose();
+            }
+        }
     }
     private static void OpenEmpty()
     {

@@ -22,7 +22,11 @@ internal sealed class DemucsDialogSettings
     internal static DemucsDialogSettings Load(string? path = null)
     {
         path ??= SettingsPath;
-        if (!File.Exists(path)) return new();
+        if (!File.Exists(path))
+        {
+            return new();
+        }
+
         var result = JsonSerializer.Deserialize<DemucsDialogSettings>(File.ReadAllText(path), JsonOptions) ?? new();
         result.ModelDirectories ??= ["D:/Models/Demucs"];
         result.Options ??= new();

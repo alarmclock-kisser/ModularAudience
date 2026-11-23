@@ -47,7 +47,11 @@ public sealed class MidiSampleRenderTests
     {
         using var sample = new AudioObj { Data = new float[4800], SampleRate = 48000, Channels = 1 };
         double root = 440 * Math.Pow(2, (60 - 69) / 12.0);
-        for (int i = 0; i < sample.Data.Length; i++) sample.Data[i] = (float)(0.25 * Math.Sin(2 * Math.PI * root * i / sample.SampleRate));
+        for (int i = 0; i < sample.Data.Length; i++)
+        {
+            sample.Data[i] = (float)(0.25 * Math.Sin(2 * Math.PI * root * i / sample.SampleRate));
+        }
+
         var original = (float[])sample.Data.Clone();
         var track = new MidiTrackData { Index = 0, Name = "Sustained" };
         track.Notes.Add(new() { NoteNumber = 60, Channel = 1, Velocity = 100, StartTick = 0, DurationTicks = 1920 });
@@ -125,7 +129,10 @@ public sealed class MidiSampleRenderTests
         using var empty = new AudioObj { Data = [], SampleRate = 16000, Channels = 1 };
         var track = new MidiTrackData { Index = 0 };
         for (int i = 0; i < 24; i++)
+        {
             track.Notes.Add(new() { NoteNumber = 60, Velocity = 100, StartTick = i * 240, DurationTicks = 192 });
+        }
+
         track.ExtendLengthTo(24 * 240);
         var midi = MidiFileData.CreateGenerated([track], 960, 120);
         using var cache = new MidiSampleRenderCache();
@@ -158,7 +165,11 @@ public sealed class MidiSampleRenderTests
     {
         using var sample = new AudioObj { Data = Enumerable.Range(0, 8000).Select(i => (float)(0.8 * Math.Sin(i * 0.1))).ToArray(), SampleRate = 16000, Channels = 1 };
         var track = new MidiTrackData { Index = 0 };
-        for (int i = 0; i < 6; i++) track.Notes.Add(new() { NoteNumber = 60, Channel = 1, Velocity = 127, StartTick = 0, DurationTicks = 960 });
+        for (int i = 0; i < 6; i++)
+        {
+            track.Notes.Add(new() { NoteNumber = 60, Channel = 1, Velocity = 127, StartTick = 0, DurationTicks = 960 });
+        }
+
         track.ExtendLengthTo(960);
         using var audio = MidiAudioRenderer.Render(MidiFileData.CreateGenerated([track], 960, 120), 0,
             MidiInstrument.CustomSample, 120, sample, sampleRate: 16000);

@@ -139,10 +139,26 @@ namespace ModularAudience.Forms.ControlsConfig
         public static ModifierKey FromModifierKeys(Keys keyData)
         {
             ModifierKey mods = ModifierKey.None;
-            if ((keyData & Keys.Control) == Keys.Control) mods |= ModifierKey.Control;
-            if ((keyData & Keys.Shift) == Keys.Shift) mods |= ModifierKey.Shift;
-            if ((keyData & Keys.Alt) == Keys.Alt) mods |= ModifierKey.Alt;
-            if ((keyData & Keys.LWin) == Keys.LWin || (keyData & Keys.RWin) == Keys.RWin) mods |= ModifierKey.Win;
+            if ((keyData & Keys.Control) == Keys.Control)
+            {
+                mods |= ModifierKey.Control;
+            }
+
+            if ((keyData & Keys.Shift) == Keys.Shift)
+            {
+                mods |= ModifierKey.Shift;
+            }
+
+            if ((keyData & Keys.Alt) == Keys.Alt)
+            {
+                mods |= ModifierKey.Alt;
+            }
+
+            if ((keyData & Keys.LWin) == Keys.LWin || (keyData & Keys.RWin) == Keys.RWin)
+            {
+                mods |= ModifierKey.Win;
+            }
+
             return mods;
         }
 

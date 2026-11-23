@@ -34,7 +34,11 @@ internal static class DirectMLDevices
     {
         var adapters = new List<Adapter>();
         Guid iid = new("770aae78-f26f-4dba-a829-253c83d1b387");
-        if (CreateDXGIFactory1(iid, out IntPtr factory) < 0) return [];
+        if (CreateDXGIFactory1(iid, out IntPtr factory) < 0)
+        {
+            return [];
+        }
+
         try
         {
             var enumerate = Marshal.GetDelegateForFunctionPointer<EnumAdapters>(Marshal.ReadIntPtr(Marshal.ReadIntPtr(factory), 12 * IntPtr.Size));
@@ -44,7 +48,9 @@ internal static class DirectMLDevices
                 {
                     var describe = Marshal.GetDelegateForFunctionPointer<GetDescription>(Marshal.ReadIntPtr(Marshal.ReadIntPtr(adapter), 10 * IntPtr.Size));
                     if (describe(adapter, out var description) >= 0 && (description.Flags & 2) == 0)
+                    {
                         adapters.Add(new Adapter((int)index, description.Description, description.Luid));
+                    }
                 }
                 finally { Marshal.Release(adapter); }
             }

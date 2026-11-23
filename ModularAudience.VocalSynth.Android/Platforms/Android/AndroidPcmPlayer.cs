@@ -17,7 +17,10 @@ internal sealed class AndroidPcmPlayer : IDisposable
         ArgumentNullException.ThrowIfNull(audio);
         long startSamplePosition = (long)startFrame * audio.Channels;
         if (startFrame < 0 || startSamplePosition >= audio.Data.LongLength)
+        {
             throw new ArgumentOutOfRangeException(nameof(startFrame));
+        }
+
         int startSample = (int)startSamplePosition;
         Stop();
         cancellationToken.ThrowIfCancellationRequested();
@@ -40,7 +43,10 @@ internal sealed class AndroidPcmPlayer : IDisposable
         }
         long requestedBufferSize = Math.Max(minimumBufferSize, (long)audio.SampleRate * audio.Channels / 2);
         if (requestedBufferSize > int.MaxValue)
+        {
             throw new InvalidOperationException("The requested Android audio buffer is too large.");
+        }
+
         int bufferSize = (int)requestedBufferSize;
         AudioFormat format = new AudioFormat.Builder()
             .SetEncoding(AudioEncoding.Pcm16bit)
@@ -94,9 +100,15 @@ internal sealed class AndroidPcmPlayer : IDisposable
                     }
                     int written = output.Write(chunk, 0, count, WriteMode.Blocking);
                     if (written < 0)
+                    {
                         throw new InvalidOperationException($"Android audio output failed with code {written}.");
+                    }
+
                     if (written == 0)
+                    {
                         throw new InvalidOperationException("Android audio output stopped accepting audio data.");
+                    }
+
                     position += written;
                 }
             }, playback.Token);
@@ -127,8 +139,15 @@ internal sealed class AndroidPcmPlayer : IDisposable
         {
             lock (gate)
             {
-                if (ReferenceEquals(track, output)) track = null;
-                if (ReferenceEquals(playbackCancellation, playback)) playbackCancellation = null;
+                if (ReferenceEquals(track, output))
+                {
+                    track = null;
+                }
+
+                if (ReferenceEquals(playbackCancellation, playback))
+                {
+                    playbackCancellation = null;
+                }
             }
             playback.Dispose();
             output.Release();

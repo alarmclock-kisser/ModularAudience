@@ -10,14 +10,22 @@ public partial class YoutubeBrowserWindow
 
     private void ResultType_Changed(object? sender, EventArgs e)
     {
-        if (restoringSettings || restoringResultType || !CanBrowse) return;
+        if (restoringSettings || restoringResultType || !CanBrowse)
+        {
+            return;
+        }
+
         string query = queryText.Text.Trim();
         if (displayedChannel is { } channel && query == "Channel :: " + channel.Name)
         {
             RefreshChannel(channel);
             return;
         }
-        if (query.Length == 0 || query.StartsWith("Playlist :: ", StringComparison.Ordinal)) return;
+        if (query.Length == 0 || query.StartsWith("Playlist :: ", StringComparison.Ordinal))
+        {
+            return;
+        }
+
         Search(false);
     }
 
@@ -53,19 +61,33 @@ public partial class YoutubeBrowserWindow
         resultsSummary.Text = "Loading results...";
         var seen = new HashSet<(bool Channel, bool Playlist, string Id)>();
         if (activePlaybackVideo is { } playing)
+        {
             seen.Add((playing.IsChannel, playing.IsPlaylist, playing.Id));
+        }
+
         int count = 0;
         await foreach (var video in stream.WithCancellation(token))
         {
             token.ThrowIfCancellationRequested();
-            if (closing || resourcesReleased) break;
-            if (!YtdlpParser.MatchesResultType(video, resultType) || !seen.Add((video.IsChannel, video.IsPlaylist, video.Id))) continue;
+            if (closing || resourcesReleased)
+            {
+                break;
+            }
+
+            if (!YtdlpParser.MatchesResultType(video, resultType) || !seen.Add((video.IsChannel, video.IsPlaylist, video.Id)))
+            {
+                continue;
+            }
+
             UpdateResultRowsPreservingInteraction(() =>
             {
                 var row = CreateResultRow(video);
                 originalResultOrder[row] = originalResultOrder.Count;
                 resultsList.Items.Add(row);
-                if (sortColumn >= 0) ApplySort();
+                if (sortColumn >= 0)
+                {
+                    ApplySort();
+                }
             });
             count++;
             resultsSummary.Text = summary(count) + " | Loading...";
@@ -73,16 +95,31 @@ public partial class YoutubeBrowserWindow
             // EndUpdate has already run: yield to the message loop between arrivals,
             // rather than holding a paint/update lock for the entire network request.
             await Task.Yield();
-            if (maxResults is { } limit && count >= limit) break;
+            if (maxResults is { } limit && count >= limit)
+            {
+                break;
+            }
         }
         token.ThrowIfCancellationRequested();
-        if (closing || resourcesReleased) return count;
+        if (closing || resourcesReleased)
+        {
+            return count;
+        }
+
         countChanged?.Invoke(count);
         resultsSummary.Text = summary(count);
         displayedQuery = countChanged is null ? query : queryText.Text;
-        if (historyPosition >= 0) resultsHistory[historyPosition] = CaptureResultsPage();
+        if (historyPosition >= 0)
+        {
+            resultsHistory[historyPosition] = CaptureResultsPage();
+        }
+
         var videos = resultsList.Items.Cast<ListViewItem>().Select(row => (YtdlpVideo)row.Tag!).Where(video => video.IsVideo).ToArray();
-        if (videos.Length > 0) StartUploadDates(videos);
+        if (videos.Length > 0)
+        {
+            StartUploadDates(videos);
+        }
+
         return count;
     }
 

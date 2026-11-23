@@ -18,7 +18,9 @@ public sealed class YtdlpDownloadResult : IDisposable, IAsyncDisposable
     {
         var directory = Interlocked.Exchange(ref ownedDirectory, null);
         if (directory is null)
+        {
             return;
+        }
 
         try
         {

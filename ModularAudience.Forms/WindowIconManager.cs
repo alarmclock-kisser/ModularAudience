@@ -10,7 +10,10 @@ internal static class WindowIconManager
     internal static void Apply(Form form)
     {
         ArgumentNullException.ThrowIfNull(form);
-        if (!ReferenceEquals(form.Icon, SharedIcon)) form.Icon = SharedIcon;
+        if (!ReferenceEquals(form.Icon, SharedIcon))
+        {
+            form.Icon = SharedIcon;
+        }
     }
 
     private static Icon LoadApplicationIcon()

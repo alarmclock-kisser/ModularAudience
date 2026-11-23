@@ -121,18 +121,45 @@ namespace ModularAudience.Generators
 
         private static void ValidateSettings(MidiGenerationSettings settings)
         {
-            if (settings.TicksPerQuarterNote <= 0) throw new ArgumentOutOfRangeException(nameof(settings.TicksPerQuarterNote));
-            if (settings.NumberOfBars <= 0) throw new ArgumentOutOfRangeException(nameof(settings.NumberOfBars));
-            if (settings.NumberOfTracks <= 0) throw new ArgumentOutOfRangeException(nameof(settings.NumberOfTracks));
-            if (settings.TimeSignatureNumerator <= 0) throw new ArgumentOutOfRangeException(nameof(settings.TimeSignatureNumerator));
+            if (settings.TicksPerQuarterNote <= 0)
+            {
+                throw new ArgumentOutOfRangeException(nameof(settings.TicksPerQuarterNote));
+            }
+
+            if (settings.NumberOfBars <= 0)
+            {
+                throw new ArgumentOutOfRangeException(nameof(settings.NumberOfBars));
+            }
+
+            if (settings.NumberOfTracks <= 0)
+            {
+                throw new ArgumentOutOfRangeException(nameof(settings.NumberOfTracks));
+            }
+
+            if (settings.TimeSignatureNumerator <= 0)
+            {
+                throw new ArgumentOutOfRangeException(nameof(settings.TimeSignatureNumerator));
+            }
+
             if (settings.TimeSignatureDenominator <= 0 || (settings.TimeSignatureDenominator & (settings.TimeSignatureDenominator - 1)) != 0)
+            {
                 throw new ArgumentOutOfRangeException(nameof(settings.TimeSignatureDenominator));
+            }
+
             if (!double.IsFinite(settings.Tempo) || settings.Tempo < 20.0 || settings.Tempo > 400.0)
+            {
                 throw new ArgumentOutOfRangeException(nameof(settings.Tempo));
+            }
+
             if (!double.IsFinite(settings.PitchFrequency) || settings.PitchFrequency <= 0)
+            {
                 throw new ArgumentOutOfRangeException(nameof(settings.PitchFrequency));
+            }
+
             if (!double.IsFinite(settings.Intensity) || settings.Intensity < 0.0 || settings.Intensity > 100.0)
+            {
                 throw new ArgumentOutOfRangeException(nameof(settings.Intensity));
+            }
         }
 
         private static long BarTicks(MidiGenerationSettings settings) =>
@@ -175,7 +202,10 @@ namespace ModularAudience.Generators
 
         private static void CheckCancellation(CancellationToken cancellationToken, int index)
         {
-            if ((index & 255) == 0) cancellationToken.ThrowIfCancellationRequested();
+            if ((index & 255) == 0)
+            {
+                cancellationToken.ThrowIfCancellationRequested();
+            }
         }
 
         private static void BuildDefault(List<MidiTrackData> tracks, MidiGenerationSettings settings, Random random, IProgress<double>? progress, CancellationToken cancellationToken)
@@ -222,8 +252,16 @@ namespace ModularAudience.Generators
                 for (int index = 0; index < settings.TimeSignatureNumerator * 4; index++)
                 {
                     long tick = start + index * step;
-                    if (index % 4 == 0 || index == 7 || index == 10) AddDrum(tracks[0], 36, tick, step, 108);
-                    if (index % 8 == 4) AddDrum(tracks[0], 38, tick, step, 112);
+                    if (index % 4 == 0 || index == 7 || index == 10)
+                    {
+                        AddDrum(tracks[0], 36, tick, step, 108);
+                    }
+
+                    if (index % 8 == 4)
+                    {
+                        AddDrum(tracks[0], 38, tick, step, 112);
+                    }
+
                     AddDrum(tracks[0], 42, tick, step / 2, index % 2 == 0 ? 70 : 54);
                 }
                 AddNote(tracks[Math.Min(1, tracks.Count - 1)], ScaleNote(settings, bar % 4, -1), start, BarTicks(settings), 86);
@@ -263,10 +301,25 @@ namespace ModularAudience.Generators
                 for (int index = 0; index < settings.TimeSignatureNumerator * 4; index++)
                 {
                     long tick = start + index * step;
-                    if (index % 4 == 0) AddDrum(tracks[0], 36, tick, step, 105);
-                    if (index % 8 == 4) AddDrum(tracks[0], 39, tick, step, 92);
-                    if (index % 2 == 0) AddDrum(tracks[0], 42, tick, step / 2, 62);
-                    if (Chance(random, 0.65)) AddNote(tracks[Math.Min(1, tracks.Count - 1)], ScaleNote(settings, index + bar, 1), tick, step / 2, 70);
+                    if (index % 4 == 0)
+                    {
+                        AddDrum(tracks[0], 36, tick, step, 105);
+                    }
+
+                    if (index % 8 == 4)
+                    {
+                        AddDrum(tracks[0], 39, tick, step, 92);
+                    }
+
+                    if (index % 2 == 0)
+                    {
+                        AddDrum(tracks[0], 42, tick, step / 2, 62);
+                    }
+
+                    if (Chance(random, 0.65))
+                    {
+                        AddNote(tracks[Math.Min(1, tracks.Count - 1)], ScaleNote(settings, index + bar, 1), tick, step / 2, 70);
+                    }
                 }
                 CheckCancellation(cancellationToken, bar);
                 progress?.Report((bar + 1) / (double)settings.NumberOfBars);
@@ -282,11 +335,22 @@ namespace ModularAudience.Generators
             for (int bar = 0; bar < settings.NumberOfBars; bar++)
             {
                 long start = bar * BarTicks(settings);
-                foreach (int index in kicks) AddDrum(tracks[0], 36, start + index * step, step, 105);
-                foreach (int index in snares) AddDrum(tracks[0], 38, start + index * step, step, 112);
+                foreach (int index in kicks)
+                {
+                    AddDrum(tracks[0], 36, start + index * step, step, 105);
+                }
+
+                foreach (int index in snares)
+                {
+                    AddDrum(tracks[0], 38, start + index * step, step, 112);
+                }
+
                 for (int index = 0; index < 16; index++)
                 {
-                    if (index % 2 == 0 || Chance(random, 0.2)) AddDrum(tracks[0], 42, start + index * step, step / 2, 58 + random.Next(25));
+                    if (index % 2 == 0 || Chance(random, 0.2))
+                    {
+                        AddDrum(tracks[0], 42, start + index * step, step / 2, 58 + random.Next(25));
+                    }
                 }
                 CheckCancellation(cancellationToken, bar);
                 progress?.Report((bar + 1) / (double)settings.NumberOfBars);
@@ -303,7 +367,11 @@ namespace ModularAudience.Generators
                 int trackIndex = index % tracks.Count;
                 long tick = index * step;
                 AddNote(tracks[trackIndex], ScaleNote(settings, random.Next(7), random.Next(-1, 2)), tick, step, 45 + random.Next(80), trackIndex % 9);
-                if (index % 3 == 0) AddDrum(tracks[0], 37, tick, step / 2, 70);
+                if (index % 3 == 0)
+                {
+                    AddDrum(tracks[0], 37, tick, step / 2, 70);
+                }
+
                 CheckCancellation(cancellationToken, index);
                 progress?.Report((index + 1) / (double)totalSteps);
             }
@@ -319,7 +387,10 @@ namespace ModularAudience.Generators
                 for (int index = 0; index < 16; index++)
                 {
                     AddNote(tracks[0], ScaleNote(settings, (bar * 3 + index) % 7, index % 2), start + index * step, step, 82, 0);
-                    if (index % 4 == 0) AddDrum(tracks[0], 36, start + index * step, step, 92);
+                    if (index % 4 == 0)
+                    {
+                        AddDrum(tracks[0], 36, start + index * step, step, 92);
+                    }
                 }
                 CheckCancellation(cancellationToken, bar);
                 progress?.Report((bar + 1) / (double)settings.NumberOfBars);
@@ -335,10 +406,21 @@ namespace ModularAudience.Generators
                 long start = bar * BarTicks(settings);
                 for (int index = 0; index < 16; index++)
                 {
-                    if (index % 4 == 0 || index == 7 || index == 14) AddDrum(tracks[0], 36, start + index * step, step, 120);
-                    if (index % 8 == 4) AddDrum(tracks[0], 38, start + index * step, step, 127);
+                    if (index % 4 == 0 || index == 7 || index == 14)
+                    {
+                        AddDrum(tracks[0], 36, start + index * step, step, 120);
+                    }
+
+                    if (index % 8 == 4)
+                    {
+                        AddDrum(tracks[0], 38, start + index * step, step, 127);
+                    }
+
                     AddNote(tracks[Math.Min(1, tracks.Count - 1)], ScaleNote(settings, (index + bar) % 7, -1), start + index * step, step, 100);
-                    if (Chance(random, 0.35)) AddNote(tracks[^1], ScaleNote(settings, random.Next(7), 1), start + index * step, step / 2, 110);
+                    if (Chance(random, 0.35))
+                    {
+                        AddNote(tracks[^1], ScaleNote(settings, random.Next(7), 1), start + index * step, step / 2, 110);
+                    }
                 }
                 CheckCancellation(cancellationToken, bar);
                 progress?.Report((bar + 1) / (double)settings.NumberOfBars);

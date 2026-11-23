@@ -44,7 +44,10 @@ public sealed class AutoTuneProcessorTests
         AutoTuneResult result = AutoTuneProcessor.Process(stereo, 8000, 2, Fast);
 
         Assert.IsTrue(result.CorrectedFrames > 0, "Strongest-channel detection must not cancel antiphase stereo.");
-        for (int i = 0; i < mono.Length; i++) Assert.AreEqual(-0.5f * result.Samples[2 * i], result.Samples[2 * i + 1], 0.0001f);
+        for (int i = 0; i < mono.Length; i++)
+        {
+            Assert.AreEqual(-0.5f * result.Samples[2 * i], result.Samples[2 * i + 1], 0.0001f);
+        }
     }
 
     [TestMethod]

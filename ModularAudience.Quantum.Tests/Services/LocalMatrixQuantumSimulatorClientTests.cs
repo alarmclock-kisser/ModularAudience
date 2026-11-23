@@ -87,9 +87,13 @@ public sealed class LocalMatrixQuantumSimulatorClientTests
     {
         string qasm = new OpenQasmCircuitBuilder().Build().Replace("measure q -> c;", gate + "\nmeasure q -> c;", StringComparison.Ordinal);
         if (argumentError)
+        {
             await Assert.ThrowsExactlyAsync<ArgumentException>(() => Create().ExecuteAsync(new(qasm, 4, 1), CancellationToken.None));
+        }
         else
+        {
             await Assert.ThrowsExactlyAsync<NotSupportedException>(() => Create().ExecuteAsync(new(qasm, 4, 1), CancellationToken.None));
+        }
     }
 
     [TestMethod]
@@ -100,7 +104,10 @@ public sealed class LocalMatrixQuantumSimulatorClientTests
             valid.Replace("OPENQASM 2.0", "OPENQASM 1.0", StringComparison.Ordinal),
             valid.Replace("measure q -> c;", "", StringComparison.Ordinal)];
         foreach (string qasm in invalid)
+        {
             await Assert.ThrowsExactlyAsync<NotSupportedException>(() => Create().ExecuteAsync(new(qasm, 4, 1), CancellationToken.None));
+        }
+
         await Assert.ThrowsExactlyAsync<NotSupportedException>(() => Create().ExecuteAsync(new(valid, 4, 1, "other"), CancellationToken.None));
     }
 

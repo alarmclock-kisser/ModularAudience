@@ -78,12 +78,20 @@ public sealed class ThemeEditor : Form
         AddButton(ruleBar, "Add rule", this.AddRule);
         AddButton(ruleBar, "Remove", () =>
         {
-            if (this.rules.SelectedItem is ThemeRule rule) this.draft.Rules.Remove(rule);
+            if (this.rules.SelectedItem is ThemeRule rule)
+            {
+                this.draft.Rules.Remove(rule);
+            }
+
             this.RefreshRules(); this.ShowPalette(); this.Preview();
         });
         AddButton(ruleBar, "Duplicate", () =>
         {
-            if (this.rules.SelectedItem is not ThemeRule rule) return;
+            if (this.rules.SelectedItem is not ThemeRule rule)
+            {
+                return;
+            }
+
             var copy = JsonSerializer.Deserialize<ThemeRule>(JsonSerializer.Serialize(rule))!;
             copy.Description += " (copy)"; this.draft.Rules.Add(copy); this.RefreshRules(); this.rules.SelectedItem = copy; this.Preview();
         });
@@ -132,7 +140,11 @@ public sealed class ThemeEditor : Form
         this.savedThemes.DropDown += (_, _) => this.RefreshSavedThemes();
         this.savedThemes.SelectedIndexChanged += (_, _) =>
         {
-            if (this.refreshingThemes) return;
+            if (this.refreshingThemes)
+            {
+                return;
+            }
+
             this.Run(() =>
             {
                 if (this.savedThemes.SelectedItem is SavedTheme item)
@@ -151,34 +163,67 @@ public sealed class ThemeEditor : Form
         this.colors.CellEndEdit += (_, _) => this.StoreColors();
         this.colors.EditingControlShowing += (_, e) =>
         {
-            if (this.editingText != null) this.editingText.TextChanged -= this.EditTextChanged;
+            if (this.editingText != null)
+            {
+                this.editingText.TextChanged -= this.EditTextChanged;
+            }
+
             this.editingText = e.Control as TextBox;
-            if (this.editingText != null) this.editingText.TextChanged += this.EditTextChanged;
+            if (this.editingText != null)
+            {
+                this.editingText.TextChanged += this.EditTextChanged;
+            }
         };
         this.editTimer.Tick += (_, _) =>
         {
             this.editTimer.Stop();
-            if (this.editingText == null || !this.colors.IsCurrentCellInEditMode || this.colors.CurrentCell?.ColumnIndex != 1) return;
+            if (this.editingText == null || !this.colors.IsCurrentCellInEditMode || this.colors.CurrentCell?.ColumnIndex != 1)
+            {
+                return;
+            }
+
             string value = this.editingText.Text.Trim();
             try
             {
-                if (value.Length > 0) ThemeFiles.ParseColor(value);
+                if (value.Length > 0)
+                {
+                    ThemeFiles.ParseColor(value);
+                }
+
                 this.colors.CurrentCell.Value = value;
                 this.StoreColors();
             }
             catch (FormatException) { this.status.Text = "Enter #RRGGBB, #AARRGGBB or a named color. Partial input is not applied."; }
         };
-        this.colors.CellDoubleClick += (_, e) => { if (e.RowIndex >= 0 && e.ColumnIndex == 1) this.ChooseColor(); };
+        this.colors.CellDoubleClick += (_, e) => { if (e.RowIndex >= 0 && e.ColumnIndex == 1) { this.ChooseColor(); } };
         foreach (var box in new[] { this.description, this.formType, this.controlType, this.elementPath })
+        {
             box.TextChanged += (_, _) => this.StoreSelectors();
+        }
+
         this.enabled.CheckedChanged += (_, _) => this.StoreSelectors();
         this.themeName.TextChanged += (_, _) => { if (!this.updating) { this.draft.Name = this.themeName.Text; this.Preview(); } };
-        this.live.CheckedChanged += (_, _) => { if (this.live.Checked) this.Preview(); else ThemeManager.SetTheme(this.before); };
+        this.live.CheckedChanged += (_, _) => { if (this.live.Checked)
+            {
+                this.Preview();
+            }
+            else
+            {
+                ThemeManager.SetTheme(this.before);
+            }
+        };
         this.FormClosed += (_, _) =>
         {
             this.editTimer.Dispose();
-            if (this.picker != null) Application.RemoveMessageFilter(this.picker);
-            if (!this.committed) ThemeManager.SetTheme(this.before);
+            if (this.picker != null)
+            {
+                Application.RemoveMessageFilter(this.picker);
+            }
+
+            if (!this.committed)
+            {
+                ThemeManager.SetTheme(this.before);
+            }
         };
         this.ReplaceDraft(this.draft);
         this.RefreshSavedThemes();
@@ -210,16 +255,32 @@ public sealed class ThemeEditor : Form
     private void ShowPalette()
     {
         this.updating = true; this.rules.SelectedIndex = -1;
-        foreach (var control in new Control[] { this.description, this.formType, this.controlType, this.elementPath, this.enabled }) control.Enabled = false;
+        foreach (var control in new Control[] { this.description, this.formType, this.controlType, this.elementPath, this.enabled })
+        {
+            control.Enabled = false;
+        }
+
         this.colors.Rows.Clear();
-        foreach (string key in PaletteProperties) this.colors.Rows.Add(key, typeof(ThemeColors).GetProperty(key)!.GetValue(this.draft.Palette) ?? "");
+        foreach (string key in PaletteProperties)
+        {
+            this.colors.Rows.Add(key, typeof(ThemeColors).GetProperty(key)!.GetValue(this.draft.Palette) ?? "");
+        }
+
         this.updating = false; this.PaintSwatches();
     }
     private void ShowSelectedRule()
     {
-        if (this.updating || this.rules.SelectedItem is not ThemeRule rule) return;
+        if (this.updating || this.rules.SelectedItem is not ThemeRule rule)
+        {
+            return;
+        }
+
         this.updating = true;
-        foreach (var control in new Control[] { this.description, this.formType, this.controlType, this.elementPath, this.enabled }) control.Enabled = true;
+        foreach (var control in new Control[] { this.description, this.formType, this.controlType, this.elementPath, this.enabled })
+        {
+            control.Enabled = true;
+        }
+
         this.description.Text = rule.Description; this.formType.Text = rule.FormType; this.controlType.Text = rule.ControlType;
         this.elementPath.Text = rule.ElementPath; this.enabled.Checked = rule.Enabled;
         this.colors.Rows.Clear();
@@ -227,19 +288,30 @@ public sealed class ThemeEditor : Form
         string[] actual = selected == null ? [] : TypeDescriptor.GetProperties(selected).Cast<PropertyDescriptor>()
             .Where(p => p.PropertyType == typeof(Color) && !p.IsReadOnly).Select(p => p.Name).ToArray();
         foreach (string key in StandardProperties.Concat(actual).Concat(rule.Colors.Keys).Distinct(StringComparer.OrdinalIgnoreCase))
+        {
             this.colors.Rows.Add(key, rule.Colors.GetValueOrDefault(key) ?? "");
+        }
+
         this.updating = false; this.PaintSwatches();
     }
     private void StoreSelectors()
     {
-        if (this.updating || this.rules.SelectedItem is not ThemeRule rule) return;
+        if (this.updating || this.rules.SelectedItem is not ThemeRule rule)
+        {
+            return;
+        }
+
         rule.Description = this.description.Text; rule.FormType = this.formType.Text; rule.ControlType = this.controlType.Text;
         rule.ElementPath = this.elementPath.Text; rule.Enabled = this.enabled.Checked;
         this.rules.Refresh(); this.Preview();
     }
     private void StoreColors()
     {
-        if (this.updating) return;
+        if (this.updating)
+        {
+            return;
+        }
+
         this.Run(() =>
         {
             var values = new Dictionary<string, string>();
@@ -248,8 +320,18 @@ public sealed class ThemeEditor : Form
                 string text = row.Cells[1].Value?.ToString()?.Trim() ?? "";
                 if (text.Length > 0) { ThemeFiles.ParseColor(text); values[row.Cells[0].Value!.ToString()!] = text; }
             }
-            if (this.rules.SelectedItem is ThemeRule rule) rule.Colors = values;
-            else foreach (string key in PaletteProperties) typeof(ThemeColors).GetProperty(key)!.SetValue(this.draft.Palette, values.GetValueOrDefault(key));
+            if (this.rules.SelectedItem is ThemeRule rule)
+            {
+                rule.Colors = values;
+            }
+            else
+            {
+                foreach (string key in PaletteProperties)
+                {
+                    typeof(ThemeColors).GetProperty(key)!.SetValue(this.draft.Palette, values.GetValueOrDefault(key));
+                }
+            }
+
             this.PaintSwatches(); this.Preview();
         });
     }
@@ -272,17 +354,29 @@ public sealed class ThemeEditor : Form
     }
     private void ChooseColor()
     {
-        if (this.colors.CurrentRow is not { } row) return;
+        if (this.colors.CurrentRow is not { } row)
+        {
+            return;
+        }
+
         using var picker = new ColorDialog { FullOpen = true, CustomColors = this.draft.Rules.SelectMany(r => r.Colors.Values)
             .Concat(PaletteProperties.Select(p => typeof(ThemeColors).GetProperty(p)!.GetValue(this.draft.Palette) as string).OfType<string>())
             .Where(s => !string.IsNullOrWhiteSpace(s)).Select(s => ColorTranslator.ToOle(ThemeFiles.ParseColor(s))).Distinct().Take(16).ToArray() };
-        try { if (row.Cells[1].Value is string color && color.Length > 0) picker.Color = ThemeFiles.ParseColor(color); } catch (FormatException) { }
-        if (picker.ShowDialog(this) != DialogResult.OK) return;
+        try { if (row.Cells[1].Value is string color && color.Length > 0) { picker.Color = ThemeFiles.ParseColor(color); } } catch (FormatException) { }
+        if (picker.ShowDialog(this) != DialogResult.OK)
+        {
+            return;
+        }
+
         row.Cells[1].Value = ThemeFiles.FormatColor(picker.Color); this.StoreColors();
     }
     private void Preview()
     {
-        if (!this.live.Checked) return;
+        if (!this.live.Checked)
+        {
+            return;
+        }
+
         this.committed = false;
         this.Run(() => { ThemeManager.SetTheme(this.IsEmptyTheme() ? null : this.draft); this.PaintSwatches(); this.status.Text = "Live preview — Apply & remember to keep this theme. Closing discards unapplied changes."; });
     }
@@ -291,7 +385,11 @@ public sealed class ThemeEditor : Form
         this.colors.EndEdit();
         bool empty = this.IsEmptyTheme();
         ThemeManager.SetTheme(empty ? null : this.draft, persist: true);
-        if (this.editingPath != null && !empty) ThemeFiles.Save(this.editingPath, this.draft);
+        if (this.editingPath != null && !empty)
+        {
+            ThemeFiles.Save(this.editingPath, this.draft);
+        }
+
         this.before = empty ? null : this.draft.Clone(); this.committed = false;
         this.status.Text = "Theme applied and saved as active-theme.json.";
     });
@@ -319,21 +417,39 @@ public sealed class ThemeEditor : Form
         TreeNode Visit(Control control)
         {
             var node = new TreeNode($"{control.GetType().Name}: {(string.IsNullOrEmpty(control.Name) ? control.Text : control.Name)}") { Tag = control };
-            foreach (Control child in control.Controls) node.Nodes.Add(Visit(child));
-            if (control is ToolStrip strip) AddItems(node, strip.Items);
+            foreach (Control child in control.Controls)
+            {
+                node.Nodes.Add(Visit(child));
+            }
+
+            if (control is ToolStrip strip)
+            {
+                AddItems(node, strip.Items);
+            }
+
             if (control.ContextMenuStrip is { } menu)
             {
                 var menuNode = new TreeNode("@contextMenu") { Tag = menu }; AddItems(menuNode, menu.Items); node.Nodes.Add(menuNode);
             }
             return node;
         }
-        foreach (Form form in Application.OpenForms.Cast<Form>().ToArray()) if (!ReferenceEquals(form, this)) this.elements.Nodes.Add(Visit(form));
+        foreach (Form form in Application.OpenForms.Cast<Form>().ToArray())
+        {
+            if (!ReferenceEquals(form, this))
+            {
+                this.elements.Nodes.Add(Visit(form));
+            }
+        }
+
         void AddItems(TreeNode parent, ToolStripItemCollection items)
         {
             foreach (ToolStripItem item in items)
             {
                 var node = new TreeNode($"{item.GetType().Name}: {(string.IsNullOrEmpty(item.Name) ? item.Text : item.Name)}") { Tag = item };
-                parent.Nodes.Add(node); if (item is ToolStripDropDownItem drop) AddItems(node, drop.DropDownItems);
+                parent.Nodes.Add(node); if (item is ToolStripDropDownItem drop)
+                {
+                    AddItems(node, drop.DropDownItems);
+                }
             }
         }
     }
@@ -342,7 +458,11 @@ public sealed class ThemeEditor : Form
         object? target = this.elements.SelectedNode?.Tag;
         var control = target as Control;
         Form? form = control as Form ?? control?.FindForm();
-        if (target is ToolStripItem item) form = item.Owner?.FindForm();
+        if (target is ToolStripItem item)
+        {
+            form = item.Owner?.FindForm();
+        }
+
         if (this.scope.SelectedIndex < 3 && target == null) { this.status.Text = "Select an element in the open windows tree first."; return; }
         string path = control == null ? "*" : ThemeManager.ElementPath(control);
         if (target is ToolStripItem)
@@ -351,12 +471,22 @@ public sealed class ThemeEditor : Form
             var parts = new Stack<string>();
             for (TreeNode? node = this.elements.SelectedNode; node != null; node = node.Parent)
             {
-                if (node.Tag is ToolStripItem menuItem) parts.Push(string.IsNullOrEmpty(menuItem.Name) ? $"{menuItem.GetType().Name}[{menuItem.Owner?.Items.IndexOf(menuItem) ?? 0}]" : menuItem.Name);
-                else if (node.Text == "@contextMenu") parts.Push("@contextMenu");
+                if (node.Tag is ToolStripItem menuItem)
+                {
+                    parts.Push(string.IsNullOrEmpty(menuItem.Name) ? $"{menuItem.GetType().Name}[{menuItem.Owner?.Items.IndexOf(menuItem) ?? 0}]" : menuItem.Name);
+                }
+                else if (node.Text == "@contextMenu")
+                {
+                    parts.Push("@contextMenu");
+                }
                 else if (node.Tag is Control parentControl) { path = ThemeManager.ElementPath(parentControl) + "/" + string.Join("/", parts); break; }
             }
             TreeNode? root = this.elements.SelectedNode;
-            while (root?.Parent != null) root = root.Parent;
+            while (root?.Parent != null)
+            {
+                root = root.Parent;
+            }
+
             form ??= root?.Tag as Form;
         }
         var rule = new ThemeRule { Description = this.scope.Text + ": " + (target?.GetType().Name ?? "all controls"),
@@ -367,7 +497,11 @@ public sealed class ThemeEditor : Form
     }
     private void MoveRule(int delta)
     {
-        if (this.rules.SelectedItem is not ThemeRule rule) return;
+        if (this.rules.SelectedItem is not ThemeRule rule)
+        {
+            return;
+        }
+
         int index = this.draft.Rules.IndexOf(rule), next = Math.Clamp(index + delta, 0, this.draft.Rules.Count - 1);
         this.draft.Rules.RemoveAt(index); this.draft.Rules.Insert(next, rule);
         this.RefreshRules(); this.rules.SelectedItem = rule; this.Preview();
@@ -384,17 +518,28 @@ public sealed class ThemeEditor : Form
         try
         {
             this.savedThemes.Items.Clear(); this.savedThemes.Items.Add("No theme — original Forms colors");
-            foreach (string path in ThemeFiles.SavedThemes()) this.savedThemes.Items.Add(new SavedTheme(path));
+            foreach (string path in ThemeFiles.SavedThemes())
+            {
+                this.savedThemes.Items.Add(new SavedTheme(path));
+            }
+
             this.savedThemes.SelectedItem = this.savedThemes.Items.OfType<SavedTheme>()
                 .FirstOrDefault(t => string.Equals(t.Path, this.editingPath, StringComparison.OrdinalIgnoreCase));
-            if (this.IsEmptyTheme()) this.savedThemes.SelectedIndex = 0;
+            if (this.IsEmptyTheme())
+            {
+                this.savedThemes.SelectedIndex = 0;
+            }
         }
         finally { this.refreshingThemes = false; }
     }
     private void DeleteTheme() => this.Run(() =>
     {
         if (this.savedThemes.SelectedItem is not SavedTheme item) { this.status.Text = "Select a saved theme to delete."; return; }
-        if (MessageBox.Show(this, $"Delete '{item}'?", "Delete theme", MessageBoxButtons.YesNo, MessageBoxIcon.Question) != DialogResult.Yes) return;
+        if (MessageBox.Show(this, $"Delete '{item}'?", "Delete theme", MessageBoxButtons.YesNo, MessageBoxIcon.Question) != DialogResult.Yes)
+        {
+            return;
+        }
+
         File.Delete(item.Path);
         ThemeManager.SetTheme(null, persist: true); this.before = null;
         this.editingPath = null; this.ReplaceDraft(new ColorTheme { Name = "No theme" });
@@ -403,7 +548,11 @@ public sealed class ThemeEditor : Form
     });
     private void StartPicker()
     {
-        if (this.picker != null) Application.RemoveMessageFilter(this.picker);
+        if (this.picker != null)
+        {
+            Application.RemoveMessageFilter(this.picker);
+        }
+
         this.status.Text = "Click a control in any application window to select it. Press Escape to cancel picking.";
         this.picker = new ElementPicker(control =>
         {
@@ -412,8 +561,15 @@ public sealed class ThemeEditor : Form
             {
                 foreach (TreeNode node in nodes)
                 {
-                    if (ReferenceEquals(node.Tag, control)) return node;
-                    if (Find(node.Nodes) is { } result) return result;
+                    if (ReferenceEquals(node.Tag, control))
+                    {
+                        return node;
+                    }
+
+                    if (Find(node.Nodes) is { } result)
+                    {
+                        return result;
+                    }
                 }
                 return null;
             }
@@ -431,7 +587,10 @@ public sealed class ThemeEditor : Form
         if (disposing)
         {
             this.editTimer.Dispose();
-            if (this.picker != null) Application.RemoveMessageFilter(this.picker);
+            if (this.picker != null)
+            {
+                Application.RemoveMessageFilter(this.picker);
+            }
         }
         base.Dispose(disposing);
     }
@@ -442,8 +601,16 @@ public sealed class ThemeEditor : Form
         {
             if (m.Msg == 0x100 && (Keys)m.WParam == Keys.Escape) { Application.RemoveMessageFilter(this); return true; }
             if (finishOnMouseUp && m.Msg == 0x202) { Application.RemoveMessageFilter(this); return true; }
-            if (m.Msg != 0x201) return false;
-            if (Control.FromChildHandle(m.HWnd) is not { } control || control.FindForm() is ThemeEditor) return false;
+            if (m.Msg != 0x201)
+            {
+                return false;
+            }
+
+            if (Control.FromChildHandle(m.HWnd) is not { } control || control.FindForm() is ThemeEditor)
+            {
+                return false;
+            }
+
             this.finishOnMouseUp = true; selected(control); return true;
         }
     }

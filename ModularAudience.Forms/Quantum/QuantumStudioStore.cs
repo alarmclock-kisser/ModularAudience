@@ -65,7 +65,11 @@ internal sealed class WindowsQuantumSecretProtector : IQuantumSecretProtector
 
     public string Unprotect(string ciphertext)
     {
-        if (!ciphertext.StartsWith("dpapi:v1:", StringComparison.Ordinal)) throw new CryptographicException("Unsupported quantum credential protection format.");
+        if (!ciphertext.StartsWith("dpapi:v1:", StringComparison.Ordinal))
+        {
+            throw new CryptographicException("Unsupported quantum credential protection format.");
+        }
+
         byte[] bytes = ProtectedData.Unprotect(Convert.FromBase64String(ciphertext[9..]), Purpose, DataProtectionScope.CurrentUser);
         try { return Encoding.UTF8.GetString(bytes); }
         finally { CryptographicOperations.ZeroMemory(bytes); }
@@ -119,7 +123,10 @@ internal sealed class QuantumStudioStore
     {
         var stored = JsonSerializer.Deserialize(Read(this.PathFor("Experiments", "experiment-", name)), QuantumStudioJsonContext.Default.StoredQuantumExperiment);
         if (stored is null || stored.Version != 1 || !string.Equals(stored.Name, name, StringComparison.OrdinalIgnoreCase))
+        {
             throw new InvalidDataException("The saved quantum experiment has an unsupported format.");
+        }
+
         var workspace = ValidateWorkspace(stored.Workspace);
         _ = QuantumExperimentSerializer.Serialize(workspace.Experiment);
         return workspace with { LoadedExperimentName = name };
@@ -128,7 +135,11 @@ internal sealed class QuantumStudioStore
     internal void RenameExperiment(string oldName, string newName)
     {
         string oldPath = this.PathFor("Experiments", "experiment-", oldName), newPath = this.PathFor("Experiments", "experiment-", newName);
-        if (File.Exists(newPath)) throw new IOException("An experiment with that name already exists.");
+        if (File.Exists(newPath))
+        {
+            throw new IOException("An experiment with that name already exists.");
+        }
+
         var workspace = this.LoadExperiment(oldName);
         this.SaveExperiment(newName, workspace with { LoadedExperimentName = newName });
         File.Delete(oldPath);
@@ -140,7 +151,11 @@ internal sealed class QuantumStudioStore
     {
         ArgumentNullException.ThrowIfNull(settings);
         ValidateName(settings.ProfileName);
-        if (settings.Secret.Length > 65_536) throw new ArgumentException("The quantum credential is too long.");
+        if (settings.Secret.Length > 65_536)
+        {
+            throw new ArgumentException("The quantum credential is too long.");
+        }
+
         var document = new QuantumConnectionDocument(1, settings with { Secret = "" }, this.protector.Protect(settings.Secret));
         AtomicWrite(this.PathFor("Connections", "connection-", settings.ProfileName), JsonSerializer.Serialize(document, QuantumStudioJsonContext.Default.QuantumConnectionDocument));
     }
@@ -150,7 +165,10 @@ internal sealed class QuantumStudioStore
         var stored = JsonSerializer.Deserialize(Read(this.PathFor("Connections", "connection-", name)), QuantumStudioJsonContext.Default.QuantumConnectionDocument);
         if (stored is null || stored.Version != 1 || stored.Settings is null || !Enum.IsDefined(stored.Settings.Authentication) ||
             !string.Equals(stored.Settings.ProfileName, name, StringComparison.OrdinalIgnoreCase) || stored.ProtectedSecret is null || stored.ProtectedSecret.Length > 131_072)
+        {
             throw new InvalidDataException("The connection profile has an unsupported format.");
+        }
+
         return stored.Settings with { Secret = this.protector.Unprotect(stored.ProtectedSecret) };
     }
 
@@ -168,7 +186,10 @@ internal sealed class QuantumStudioStore
     {
         if (string.IsNullOrWhiteSpace(name) || name != name.Trim() || name.Length > 80 || name is "." or ".." ||
             name.EndsWith('.') || name.IndexOfAny(Path.GetInvalidFileNameChars()) >= 0)
+        {
             throw new ArgumentException("Use a name of 1 to 80 characters without file-name special characters or trailing spaces/dots.");
+        }
+
         return name;
     }
 
@@ -182,13 +203,20 @@ internal sealed class QuantumStudioStore
             workspace.PreparedIsa is null || workspace.PreparedIsa.Length > 524_288 || workspace.OptimizationLevel is < 0 or > 3 ||
             workspace.Experiment.Circuit.Gates.Any(gate => gate is null || !Enum.IsDefined(gate.Kind) || gate.Qubit is < 0 or > 15 ||
                 gate.Target is < 0 or > 15 || !double.IsFinite(gate.AngleRadians)))
+        {
             throw new InvalidDataException("The quantum workspace has an unsupported version or invalid settings.");
+        }
+
         return workspace;
     }
 
     private static string Read(string path)
     {
-        if (new FileInfo(path).Length > 1_048_576) throw new InvalidDataException("Quantum settings files must not exceed 1 MiB.");
+        if (new FileInfo(path).Length > 1_048_576)
+        {
+            throw new InvalidDataException("Quantum settings files must not exceed 1 MiB.");
+        }
+
         return File.ReadAllText(path);
     }
 
@@ -197,6 +225,10 @@ internal sealed class QuantumStudioStore
         Directory.CreateDirectory(Path.GetDirectoryName(path)!);
         string temporary = path + "." + Guid.NewGuid().ToString("N") + ".tmp";
         try { File.WriteAllText(temporary, json, new UTF8Encoding(false)); File.Move(temporary, path, overwrite: true); }
-        finally { if (File.Exists(temporary)) File.Delete(temporary); }
+        finally { if (File.Exists(temporary))
+            {
+                File.Delete(temporary);
+            }
+        }
     }
 }

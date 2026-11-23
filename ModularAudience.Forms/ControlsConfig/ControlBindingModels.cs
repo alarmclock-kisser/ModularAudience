@@ -101,7 +101,11 @@ namespace ModularAudience.Forms.ControlsConfig
 
         public string GetSecondaryBindingString()
         {
-            if (SecondaryInput == InputType.None) return "—";
+            if (SecondaryInput == InputType.None)
+            {
+                return "—";
+            }
+
             return FormatBinding(SecondaryInput, SecondaryKey, SecondaryModifiers, SecondaryMouseAction);
         }
 
@@ -116,10 +120,25 @@ namespace ModularAudience.Forms.ControlsConfig
 
             if (mods != ModifierKey.None)
             {
-                if (mods.HasFlag(ModifierKey.Control)) parts.Add("Ctrl");
-                if (mods.HasFlag(ModifierKey.Shift)) parts.Add("Shift");
-                if (mods.HasFlag(ModifierKey.Alt)) parts.Add("Alt");
-                if (mods.HasFlag(ModifierKey.Win)) parts.Add("Win");
+                if (mods.HasFlag(ModifierKey.Control))
+                {
+                    parts.Add("Ctrl");
+                }
+
+                if (mods.HasFlag(ModifierKey.Shift))
+                {
+                    parts.Add("Shift");
+                }
+
+                if (mods.HasFlag(ModifierKey.Alt))
+                {
+                    parts.Add("Alt");
+                }
+
+                if (mods.HasFlag(ModifierKey.Win))
+                {
+                    parts.Add("Win");
+                }
             }
 
             string gesture = input switch

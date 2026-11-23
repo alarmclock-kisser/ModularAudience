@@ -122,7 +122,10 @@ internal sealed class SoundboardEditorPage : ContentPage
     private VocalAudioData CreateEditedAudio()
     {
         if (this.source == null)
+        {
             throw new InvalidOperationException("The sample has not finished loading.");
+        }
+
         AudioEditMode mode = this.modePicker.SelectedIndex switch
         {
             1 => AudioEditMode.Varispeed,
@@ -149,7 +152,9 @@ internal sealed class SoundboardEditorPage : ContentPage
         int trailingMilliseconds)
     {
         if (leadingMilliseconds == 0 && trailingMilliseconds == 0)
+        {
             return source;
+        }
 
         int channels = source.Channels;
         int sourceFrames = source.Data.Length / channels;
@@ -174,9 +179,13 @@ internal sealed class SoundboardEditorPage : ContentPage
         if (this.trimStart.Value >= this.trimEnd.Value - 0.01)
         {
             if (this.trimStart.IsFocused)
+            {
                 this.trimStart.Value = Math.Max(0, this.trimEnd.Value - 0.01);
+            }
             else
+            {
                 this.trimEnd.Value = Math.Min(1, this.trimStart.Value + 0.01);
+            }
         }
     }
 
@@ -225,7 +234,10 @@ internal sealed class SoundboardEditorPage : ContentPage
             canvas.FillColor = Color.FromArgb("#282828");
             canvas.FillRectangle(dirtyRect);
             if (this.samples.Length == 0)
+            {
                 return;
+            }
+
             canvas.StrokeColor = Color.FromArgb("#64d8cb");
             canvas.StrokeSize = 1;
             int frames = this.samples.Length / this.channels;

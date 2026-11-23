@@ -31,7 +31,9 @@ public sealed partial class LocalMatrixQuantumSimulatorClient(IOptions<LocalQuan
         if (request.ClassicalRegister != "c" || statements.Length < 5 ||
             !prefix.Select(RemoveWhitespace).SequenceEqual(statements.Take(4).Select(RemoveWhitespace)) ||
             RemoveWhitespace(statements[^1]) != (version2 ? "measureq->c" : "c=measureq"))
+        {
             throw new NotSupportedException("The local simulator requires the builder's QASM 2/3 registers and one final full-register measurement.");
+        }
 
         var amplitudes = new double[1 << request.QubitCount];
         amplitudes[0] = 1;
@@ -39,22 +41,41 @@ public sealed partial class LocalMatrixQuantumSimulatorClient(IOptions<LocalQuan
         {
             token.ThrowIfCancellationRequested();
             Match match = Gate().Match(statement);
-            if (!match.Success) throw new NotSupportedException("The local simulator only supports H, X, CX and finite numeric Ry gates.");
+            if (!match.Success)
+            {
+                throw new NotSupportedException("The local simulator only supports H, X, CX and finite numeric Ry gates.");
+            }
+
             string gate = match.Groups["gate"].Value;
             if (!int.TryParse(match.Groups["first"].Value, CultureInfo.InvariantCulture, out int first) || first >= request.QubitCount)
+            {
                 throw new ArgumentException("A gate references a qubit outside the circuit.");
+            }
+
             bool hasSecond = match.Groups["second"].Success;
             bool hasAngle = match.Groups["theta"].Success;
             if ((gate == "cx") != hasSecond || (gate == "ry") != hasAngle)
+            {
                 throw new ArgumentException("A local gate has an invalid number of arguments.");
+            }
+
             int second = 0;
             if (hasSecond && (!int.TryParse(match.Groups["second"].Value, CultureInfo.InvariantCulture, out second) ||
                 second >= request.QubitCount || second == first))
+            {
                 throw new ArgumentException("CNOT requires two distinct qubits inside the circuit.");
+            }
+
             double theta = 0;
             if (hasAngle && (!double.TryParse(match.Groups["theta"].Value, NumberStyles.Float, CultureInfo.InvariantCulture, out theta) || !double.IsFinite(theta)))
+            {
                 throw new ArgumentException("Ry angles must be finite numeric radians.");
-            if (gate == "cx") ApplyCnot(amplitudes, first, second, token);
+            }
+
+            if (gate == "cx")
+            {
+                ApplyCnot(amplitudes, first, second, token);
+            }
             else
             {
                 double cosine = Math.Cos(theta / 2), sine = Math.Sin(theta / 2), h = Math.Sqrt(0.5);
@@ -71,7 +92,11 @@ public sealed partial class LocalMatrixQuantumSimulatorClient(IOptions<LocalQuan
         double total = 0;
         for (int i = 0; i < amplitudes.Length; i++)
         {
-            if ((i & 4095) == 0) token.ThrowIfCancellationRequested();
+            if ((i & 4095) == 0)
+            {
+                token.ThrowIfCancellationRequested();
+            }
+
             total += amplitudes[i] * amplitudes[i];
             amplitudes[i] = total;
         }
@@ -79,14 +104,24 @@ public sealed partial class LocalMatrixQuantumSimulatorClient(IOptions<LocalQuan
         var counts = new Dictionary<string, int>(StringComparer.Ordinal);
         for (int shot = 0; shot < request.Shots; shot++)
         {
-            if ((shot & 255) == 0) token.ThrowIfCancellationRequested();
+            if ((shot & 255) == 0)
+            {
+                token.ThrowIfCancellationRequested();
+            }
+
             double draw = random.NextDouble() * total;
             int low = 0, high = amplitudes.Length - 1;
             while (low < high)
             {
                 int middle = low + (high - low) / 2;
-                if (draw < amplitudes[middle]) high = middle;
-                else low = middle + 1;
+                if (draw < amplitudes[middle])
+                {
+                    high = middle;
+                }
+                else
+                {
+                    low = middle + 1;
+                }
             }
             string bits = Convert.ToString(low, 2).PadLeft(request.QubitCount, '0');
             counts[bits] = counts.GetValueOrDefault(bits) + 1;
@@ -102,8 +137,16 @@ public sealed partial class LocalMatrixQuantumSimulatorClient(IOptions<LocalQuan
         int mask = 1 << qubit;
         for (int i = 0; i < state.Length; i++)
         {
-            if ((i & 4095) == 0) token.ThrowIfCancellationRequested();
-            if ((i & mask) != 0) continue;
+            if ((i & 4095) == 0)
+            {
+                token.ThrowIfCancellationRequested();
+            }
+
+            if ((i & mask) != 0)
+            {
+                continue;
+            }
+
             int other = i | mask;
             (state[i], state[other]) = (a * state[i] + b * state[other], c * state[i] + d * state[other]);
         }
@@ -114,8 +157,16 @@ public sealed partial class LocalMatrixQuantumSimulatorClient(IOptions<LocalQuan
         int controlMask = 1 << control, targetMask = 1 << target;
         for (int i = 0; i < state.Length; i++)
         {
-            if ((i & 4095) == 0) token.ThrowIfCancellationRequested();
-            if ((i & controlMask) == 0 || (i & targetMask) != 0) continue;
+            if ((i & 4095) == 0)
+            {
+                token.ThrowIfCancellationRequested();
+            }
+
+            if ((i & controlMask) == 0 || (i & targetMask) != 0)
+            {
+                continue;
+            }
+
             int other = i | targetMask;
             (state[i], state[other]) = (state[other], state[i]);
         }

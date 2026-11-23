@@ -91,7 +91,11 @@ public sealed class MixRevisionUiTests
                 stretch.SetConfigurationTempo(100, 120); SetChunk(stretch, 1024);
                 typeof(TimeStretchDialog).GetMethod("SaveConfirmedSettings", Private)!.Invoke(stretch, [true]);
             }
-            else Click(form.Controls.OfType<FlowLayoutPanel>().Single().Controls.OfType<Button>().Single(button => button.Text == "Time-stretch"));
+            else
+            {
+                Click(form.Controls.OfType<FlowLayoutPanel>().Single().Controls.OfType<Button>().Single(button => button.Text == "Time-stretch"));
+            }
+
             return Task.FromResult(DialogResult.OK);
         };
         try
@@ -217,10 +221,21 @@ public sealed class MixRevisionUiTests
         using var audio = new AudioObj { Data = new float[4410], Channels = 1, SampleRate = 44100, Bpm = 120 };
         using var collection = new AudioCollectionView([audio]); using var view = new TrackView(audio, collection.AudioC);
         using var mix = new MixTrackView(); mix.Join(view); Assert.IsFalse(view.Visible);
-        if (removeSource) collection.AudioC.Audios.Remove(audio);
-        if (!collectionAlive) collection.Close();
+        if (removeSource)
+        {
+            collection.AudioC.Audios.Remove(audio);
+        }
+
+        if (!collectionAlive)
+        {
+            collection.Close();
+        }
+
         mix.Dispose();
-        if (collectionAlive && !removeSource) Assert.IsTrue(view.Visible);
+        if (collectionAlive && !removeSource)
+        {
+            Assert.IsTrue(view.Visible);
+        }
         else
         {
             Assert.IsFalse(view.Visible);

@@ -15,9 +15,14 @@ namespace ModularAudience.Audio.Processors_V4
             CancellationToken token)
         {
             if (source.Channels != 2)
+            {
                 throw new ArgumentException("ILRMA requires exactly two input channels.", nameof(source));
+            }
+
             if (selected.Length > 2)
+            {
                 throw new ArgumentException("ILRMA supports at most two output sources.", nameof(selected));
+            }
 
             int winSize = settings.WindowSize;
             int hopSize = settings.HopSize;
@@ -28,7 +33,10 @@ namespace ModularAudience.Audio.Processors_V4
 
             // Step 1: Train ILRMA spatial model on representative frames.
             IlrmaTrainingData data = IlrmaTrainingData.Read(source, settings, progress, token);
-            if (data.IsSilent) return;
+            if (data.IsSilent)
+            {
+                return;
+            }
 
             progress?.Report(new(0.15, "Training ILRMA spatial model"));
             IlrmaMatrix[] demixing = IlrmaSpatialModel.Train(data, source.SampleRate, settings, progress, token);
@@ -38,12 +46,19 @@ namespace ModularAudience.Audio.Processors_V4
             double[] norm = new double[normLen];
             for (int s = 0; s < normLen; s++)
             {
-                if ((s & 4095) == 0) token.ThrowIfCancellationRequested();
+                if ((s & 4095) == 0)
+                {
+                    token.ThrowIfCancellationRequested();
+                }
+
                 int center = s / hopSize;
                 for (int fr = Math.Max(0, center - 2); fr <= Math.Min(center + 2, totalFrames - 1); fr++)
                 {
                     long pos = s - (long)fr * hopSize + winSize / 2;
-                    if (pos >= 0 && pos < winSize) norm[s] += window[(int)pos] * window[(int)pos];
+                    if (pos >= 0 && pos < winSize)
+                    {
+                        norm[s] += window[(int)pos] * window[(int)pos];
+                    }
                 }
             }
 
@@ -91,7 +106,9 @@ namespace ModularAudience.Audio.Processors_V4
                     }
                     // Conjugate symmetry for negative frequencies.
                     for (int bin = bins; bin < winSize; bin++)
+                    {
                         oSpec[bin] = Complex.Conjugate(oSpec[winSize - bin]);
+                    }
 
                     // Inverse FFT.
                     IlrmaNumerics.Transform(oSpec, true, token);
@@ -100,7 +117,11 @@ namespace ModularAudience.Audio.Processors_V4
                     for (int i = 0; i < winSize; i++)
                     {
                         int idx = (int)(off + i);
-                        if (idx < 0 || idx * 2 + 1 >= buf.Length) continue;
+                        if (idx < 0 || idx * 2 + 1 >= buf.Length)
+                        {
+                            continue;
+                        }
+
                         double v = oSpec[i].Real * window[i];
                         buf[idx * 2] += (float)v;
                         buf[idx * 2 + 1] += (float)v;

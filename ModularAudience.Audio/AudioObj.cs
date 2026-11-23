@@ -558,7 +558,11 @@ namespace ModularAudience.Audio
             snapshot.LoopEnabled = this.LoopEnabled; snapshot.LoopFraction = this.LoopFraction;
             snapshot.loopFractionStartSamples = this.loopFractionStartSamples; snapshot.loopFractionEndSamples = this.loopFractionEndSamples;
             snapshot.SetPosition(this.Position);
-            foreach (var pair in this.Metrics) snapshot.Metrics[pair.Key] = pair.Value;
+            foreach (var pair in this.Metrics)
+            {
+                snapshot.Metrics[pair.Key] = pair.Value;
+            }
+
             return snapshot;
         }
 
@@ -588,7 +592,11 @@ namespace ModularAudience.Audio
                 this.SelectionStart = source.SelectionStart; this.SelectionEnd = source.SelectionEnd;
                 this.ScrollOffset = source.ScrollOffset; this.StartingOffset = source.StartingOffset;
                 this.DrawBeatGrid = source.DrawBeatGrid; this.BeatGrid = (bool[])source.BeatGrid.Clone();
-                this.Metrics.Clear(); foreach (var pair in source.Metrics) this.Metrics[pair.Key] = pair.Value;
+                this.Metrics.Clear(); foreach (var pair in source.Metrics)
+                {
+                    this.Metrics[pair.Key] = pair.Value;
+                }
+
                 this.UpdateLoopFraction(source.loopFractionStartSamples, source.loopFractionEndSamples,
                     source.loopFractionEndSamples - source.loopFractionStartSamples, source.LoopEnabled, adjustPosition: false);
                 this.LoopFraction = source.LoopFraction;
@@ -641,7 +649,11 @@ namespace ModularAudience.Audio
             }
 
             // Reset playback state
-            if (this.Playing) GlobalPlayingChanged?.Invoke();
+            if (this.Playing)
+            {
+                GlobalPlayingChanged?.Invoke();
+            }
+
             this.Playing = false;
             this.Paused = false;
             this.positionOriginBytes = 0;

@@ -33,7 +33,11 @@ public partial class TrackView
     private async void OpenEffect(AudioEffectKind effect)
     {
         if (effect == AudioEffectKind.AutoTune) { this.OpenAutoTune(this, EventArgs.Empty); return; }
-        if (this.closeCleanupStarted || this.IsDisposed || this.effectActionBusy) return;
+        if (this.closeCleanupStarted || this.IsDisposed || this.effectActionBusy)
+        {
+            return;
+        }
+
         if (this.effectDialogs.TryGetValue(effect, out Form? existing) && !existing.IsDisposed) { existing.Activate(); return; }
         try
         {
@@ -57,7 +61,7 @@ public partial class TrackView
                 () => this.StopPlaybackAsync(preserveManualRate: true), () => (this.OriginalAudio.Bpm, this.OriginalAudio.ScannedBpm));
             Form dialog = this.CreateEffectDialog(context);
             this.effectDialogs[effect] = dialog;
-            dialog.FormClosed += (_, _) => { if (this.effectDialogs.GetValueOrDefault(effect) == dialog) this.effectDialogs.Remove(effect); };
+            dialog.FormClosed += (_, _) => { if (this.effectDialogs.GetValueOrDefault(effect) == dialog) { this.effectDialogs.Remove(effect); } };
             dialog.Show(this);
         }
         catch (OperationCanceledException) { }
@@ -65,23 +69,37 @@ public partial class TrackView
         {
             LogManager.Log("Opening/applying effect failed.", error);
             if (!this.closeCleanupStarted && !this.IsDisposed)
+            {
                 this.toolTip_trackView.Show(error.Message, this.pictureBox_waveform, 0, this.pictureBox_waveform.Height, 6000);
+            }
         }
     }
 
     private async Task ApplyEffectResultAsync(AudioEffectEditSession session, AudioEffectResult result, string name, CancellationToken token)
     {
         token.ThrowIfCancellationRequested();
-        if (this.closeCleanupStarted || this.IsDisposed) throw new OperationCanceledException(token);
+        if (this.closeCleanupStarted || this.IsDisposed)
+        {
+            throw new OperationCanceledException(token);
+        }
+
         long position = this.OriginalAudio.Position, offset = this.offsetFrames, click = this.lastClickFrame;
         await this.StopPlaybackAsync(preserveManualRate: true);
         token.ThrowIfCancellationRequested();
-        if (this.closeCleanupStarted || this.IsDisposed) throw new OperationCanceledException(token);
+        if (this.closeCleanupStarted || this.IsDisposed)
+        {
+            throw new OperationCanceledException(token);
+        }
+
         this.CancelPendingRender();
         // Stop resets the playback cursor. Restore it before snapshot/commit so
         // the ripple map and undo history both see the user's actual position.
         this.OriginalAudio.SetPosition(position);
-        if (!session.Apply(this.OriginalAudio, result)) return;
+        if (!session.Apply(this.OriginalAudio, result))
+        {
+            return;
+        }
+
         int renderedFrames = result.Samples.Length / result.Channels;
         this.offsetFrames = session.MapFrame(offset, renderedFrames); this.lastClickFrame = session.MapFrame(click, renderedFrames);
         this.SynchronizeEffectSelectionMarkers();
@@ -102,17 +120,29 @@ public partial class TrackView
 
     private void CloseEffectWindows()
     {
-        if (this.effectWindowsClosed) return;
+        if (this.effectWindowsClosed)
+        {
+            return;
+        }
+
         this.effectWindowsClosed = true; this.effectsLifetime.Cancel();
         this.autoTuneDialog?.Close();
-        foreach (Form dialog in this.effectDialogs.Values.ToArray()) dialog.Close();
+        foreach (Form dialog in this.effectDialogs.Values.ToArray())
+        {
+            dialog.Close();
+        }
+
         this.effectDialogs.Clear();
         this.effectsLifetime.Dispose();
     }
 
     private void OpenAutoTune(object? sender, EventArgs e)
     {
-        if (this.closeCleanupStarted || this.IsDisposed) return;
+        if (this.closeCleanupStarted || this.IsDisposed)
+        {
+            return;
+        }
+
         if (this.autoTuneDialog is { IsDisposed: false }) { this.autoTuneDialog.Activate(); return; }
         try
         {
@@ -129,7 +159,7 @@ public partial class TrackView
                 ReadTrackTempo: () => (this.OriginalAudio.Bpm, this.OriginalAudio.ScannedBpm));
             var dialog = this.CreateAutoTuneDialog(context);
             this.autoTuneDialog = dialog;
-            dialog.FormClosed += (_, _) => { if (ReferenceEquals(this.autoTuneDialog, dialog)) this.autoTuneDialog = null; };
+            dialog.FormClosed += (_, _) => { if (ReferenceEquals(this.autoTuneDialog, dialog)) { this.autoTuneDialog = null; } };
             dialog.Show(this); // Parameter effects are intentionally MODELESS.
         }
         catch (Exception error) when (error is ArgumentException or InvalidOperationException or IOException)

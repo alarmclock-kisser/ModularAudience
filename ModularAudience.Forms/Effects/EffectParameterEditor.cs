@@ -66,7 +66,11 @@ internal sealed class EffectParameterEditor : UserControl
             }
             control.Name = parameter.Key; this.fields.Add(parameter.Key, control); this.tips.SetToolTip(control, parameter.Description);
             var field = new FlowLayoutPanel { Width = 430, Height = 116, FlowDirection = FlowDirection.TopDown, WrapContents = false, Margin = new Padding(6) };
-            if (parameter.Kind != EffectParameterKind.Boolean) field.Controls.Add(new Label { Text = parameter.Label, Width = 420, Height = 30 });
+            if (parameter.Kind != EffectParameterKind.Boolean)
+            {
+                field.Controls.Add(new Label { Text = parameter.Label, Width = 420, Height = 30 });
+            }
+
             field.Controls.Add(control); panel.Controls.Add(field);
             EffectCurveTarget? target = targets.FirstOrDefault(target => target.Key == parameter.Key);
             if (target is not null)
@@ -83,7 +87,10 @@ internal sealed class EffectParameterEditor : UserControl
     {
         var values = new Dictionary<string, double>(StringComparer.Ordinal);
         foreach (var (key, control) in this.fields)
+        {
             values[key] = control switch { NumericUpDown number => (double)number.Value, ComboBox combo => combo.SelectedIndex, CheckBox check => check.Checked ? 1 : 0, _ => 0 };
+        }
+
         var bindings = this.curves.Where(pair => pair.Value.CaptureSettings() is not null).ToDictionary(pair => pair.Key, pair => pair.Value.CaptureSettings()!, StringComparer.Ordinal);
         EffectCurveTiming clock = this.timing.CaptureSettings();
         var settings = new AudioEffectSettings { Effect = this.definition.Kind, Parameters = values,
@@ -94,20 +101,31 @@ internal sealed class EffectParameterEditor : UserControl
     internal void ApplySettings(AudioEffectSettings settings)
     {
         settings.Validate();
-        if (settings.Effect != this.definition.Kind) throw new ArgumentException("The settings belong to another effect.");
+        if (settings.Effect != this.definition.Kind)
+        {
+            throw new ArgumentException("The settings belong to another effect.");
+        }
+
         this.syncing = true;
         try
         {
             this.hadAutomation = settings.Automation is not null;
             this.timing.Apply(settings.Automation?.Timing ?? new());
-            foreach (var (key, curve) in this.curves) curve.Apply(settings.Automation?.Parameters.GetValueOrDefault(key));
+            foreach (var (key, curve) in this.curves)
+            {
+                curve.Apply(settings.Automation?.Parameters.GetValueOrDefault(key));
+            }
+
             foreach (var (key, control) in this.fields)
+            {
                 switch (control)
                 {
                     case NumericUpDown number: number.Value = (decimal)settings[key]; break;
                     case ComboBox combo: combo.SelectedIndex = settings.Choice(key); break;
                     case CheckBox check: check.Checked = settings.Flag(key); break;
                 }
+            }
+
             if (this.sourceTempo is not null)
             {
                 var tempo = this.readTempo?.Invoke() ?? default;
@@ -123,7 +141,11 @@ internal sealed class EffectParameterEditor : UserControl
 
     private void Changed(object? sender, EventArgs e)
     {
-        if (this.syncing) return;
+        if (this.syncing)
+        {
+            return;
+        }
+
         if (sender is Control { Name: "Factor" or "Speed" })
         {
             this.syncing = true; try { this.UpdateTargetTempo(); } finally { this.syncing = false; }
@@ -146,7 +168,11 @@ internal sealed class EffectParameterEditor : UserControl
     }
     private void TempoChanged(object? sender, EventArgs e)
     {
-        if (this.syncing || this.sourceTempo is null || this.targetTempo is null) return;
+        if (this.syncing || this.sourceTempo is null || this.targetTempo is null)
+        {
+            return;
+        }
+
         this.syncing = true;
         try
         {
@@ -164,5 +190,5 @@ internal sealed class EffectParameterEditor : UserControl
         while (places < 6 && Math.Abs(step - Math.Round(step)) > 1e-8) { places++; step *= 10; }
         return places;
     }
-    protected override void Dispose(bool disposing) { if (disposing) this.tips.Dispose(); base.Dispose(disposing); }
+    protected override void Dispose(bool disposing) { if (disposing) { this.tips.Dispose(); } base.Dispose(disposing); }
 }

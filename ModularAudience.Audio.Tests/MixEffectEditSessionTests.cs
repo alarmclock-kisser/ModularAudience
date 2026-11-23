@@ -192,7 +192,11 @@ public sealed class MixEffectEditSessionTests
         using AudioObj before = await MixRenderer.RenderAsync(arrangement, normalizeOutput: false);
         using var session = await MixEffectEditSession.CaptureAsync(arrangement, [new(lane.Id, 0.1, 0.2, new HashSet<Guid> { clip.Id })]);
         Assert.AreEqual(4410 * 2, session.Inputs[0].Samples.Length);
-        for (int frame = 0; frame < 4410; frame++) Assert.AreEqual(before.Data[(frame + 4410) * 2] / lane.Gain, session.Inputs[0].Samples.Span[frame * 2], 0.000002);
+        for (int frame = 0; frame < 4410; frame++)
+        {
+            Assert.AreEqual(before.Data[(frame + 4410) * 2] / lane.Gain, session.Inputs[0].Samples.Span[frame * 2], 0.000002);
+        }
+
         float[] processed = session.Inputs[0].Samples.ToArray().Select(value => value * 0.5f).ToArray();
         session.Apply(arrangement, [new(processed, 2)], "Gain");
         Assert.IsTrue(arrangement.Lanes[0].Clips.All(value => value.TempoMode == ClipTempoMode.Original));

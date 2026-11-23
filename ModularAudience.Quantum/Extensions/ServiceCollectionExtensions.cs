@@ -25,7 +25,11 @@ public static class ServiceCollectionExtensions
         Action<LocalQuantumSimulatorOptions>? configure = null)
     {
         services.AddQuantumPatterns();
-        if (configure is not null) services.Configure(configure);
+        if (configure is not null)
+        {
+            services.Configure(configure);
+        }
+
         services.Replace(ServiceDescriptor.Singleton<IQuantumClient, LocalMatrixQuantumSimulatorClient>());
         return services;
     }

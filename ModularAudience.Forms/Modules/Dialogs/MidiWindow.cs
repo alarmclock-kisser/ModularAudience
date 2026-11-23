@@ -15,7 +15,11 @@ namespace ModularAudience.Forms.Modules.Dialogs
         private sealed class CollectionSnapshot : IDisposable
         {
             public List<AudioObj> Samples { get; } = [];
-            public void Dispose() { foreach (var sample in Samples) sample.Dispose(); }
+            public void Dispose() { foreach (var sample in Samples)
+                {
+                    sample.Dispose();
+                }
+            }
         }
         private CollectionSnapshot CaptureCustomCollection()
         {
@@ -23,9 +27,16 @@ namespace ModularAudience.Forms.Modules.Dialogs
             try
             {
                 if (this.SelectedInstrument == MidiInstrument.CustomCollection && this.customCollection is { IsDisposed: false } view)
+                {
                     foreach (var sample in view.AudioC.Audios)
+                    {
                         if (sample.Channels > 0 && sample.SampleRate > 0 && sample.Data.Length >= sample.Channels)
+                        {
                             snapshot.Samples.Add(sample.Clone());
+                        }
+                    }
+                }
+
                 return snapshot;
             }
             catch { snapshot.Dispose(); throw; }
@@ -79,7 +90,10 @@ namespace ModularAudience.Forms.Modules.Dialogs
                 else
                 {
                     this.mergedTrackIndices.Clear();
-                    foreach (int idx in this.midiFile.Tracks.Select(t => t.Index)) this.mergedTrackIndices.Add(idx);
+                    foreach (int idx in this.midiFile.Tracks.Select(t => t.Index))
+                    {
+                        this.mergedTrackIndices.Add(idx);
+                    }
                 }
                 this.previewCts?.Cancel();
                 this.RefreshMidiPages((int)this.numericUpDown_track.Value);
@@ -110,7 +124,11 @@ namespace ModularAudience.Forms.Modules.Dialogs
         {
             e.Graphics.SmoothingMode = SmoothingMode.HighQuality;
             e.Graphics.Clear(Color.FromArgb(24, 24, 28));
-            if (this.tracks.Count == 0) return;
+            if (this.tracks.Count == 0)
+            {
+                return;
+            }
+
             MidiTrackData track = this.SelectedTrack;
             int left = 38;
             int top = 12;
@@ -309,7 +327,11 @@ namespace ModularAudience.Forms.Modules.Dialogs
             // Keep the menu alive through WinForms' item-click/close processing.
             // The form's component container owns it and disposes it with the window.
             ContextMenuStrip menu = this.customInstrumentMenu;
-            while (menu.Items.Count > 0) menu.Items[0].Dispose();
+            while (menu.Items.Count > 0)
+            {
+                menu.Items[0].Dispose();
+            }
+
             if (this.SelectedInstrument == MidiInstrument.CustomCollection)
             {
                 foreach (var view in WindowMain.CollectionViews.Where(view => !view.IsDisposed))
@@ -321,7 +343,11 @@ namespace ModularAudience.Forms.Modules.Dialogs
                         this.label_status.Text = $"Custom collection: {selected.Text}";
                     }) { Enabled = view.AudioC.Audios.Any(s => s.Channels > 0 && s.SampleRate > 0 && s.Data.Length >= s.Channels) });
                 }
-                if (menu.Items.Count == 0) menu.Items.Add(new ToolStripMenuItem("No audio collections are currently open") { Enabled = false });
+                if (menu.Items.Count == 0)
+                {
+                    menu.Items.Add(new ToolStripMenuItem("No audio collections are currently open") { Enabled = false });
+                }
+
                 menu.Show(this.button_customInstrument, 0, this.button_customInstrument.Height);
                 return;
             }
@@ -349,7 +375,10 @@ namespace ModularAudience.Forms.Modules.Dialogs
                 return;
             }
 
-            if (this.tracks.Count == 0) return;
+            if (this.tracks.Count == 0)
+            {
+                return;
+            }
 
             CancellationTokenSource? runCts = null;
             ProgressDialog? progressDialog = null;
@@ -390,7 +419,9 @@ namespace ModularAudience.Forms.Modules.Dialogs
             {
                 LogManager.Log($"MIDI preview failed: {ex}");
                 if (!this.IsDisposed && !this.closingMidiWindow)
+                {
                     ModularAudience.Forms.Helpers.WindowMainStaticHelpers.ShowErrorWithCopyButton(this, "MIDI preview failed", ex);
+                }
             }
             finally
             {
@@ -416,7 +447,11 @@ namespace ModularAudience.Forms.Modules.Dialogs
 
         private async Task SaveAudioAsync(bool currentPageOnly)
         {
-            if (!this.button_save.Enabled || this.closingMidiWindow || this.tracks.Count == 0) return;
+            if (!this.button_save.Enabled || this.closingMidiWindow || this.tracks.Count == 0)
+            {
+                return;
+            }
+
             ProgressDialog? progressDialog = null;
             CancellationTokenSource? renderCts = null;
             try
@@ -455,7 +490,9 @@ namespace ModularAudience.Forms.Modules.Dialogs
             {
                 LogManager.Log($"MIDI render failed: {ex}");
                 if (!this.IsDisposed && !this.closingMidiWindow)
+                {
                     ModularAudience.Forms.Helpers.WindowMainStaticHelpers.ShowErrorWithCopyButton(this, "MIDI rendering failed", ex);
+                }
             }
             finally
             {
@@ -465,20 +502,32 @@ namespace ModularAudience.Forms.Modules.Dialogs
                     progressDialog.Dispose();
                 }
 
-                if (ReferenceEquals(this.saveRenderCts, renderCts)) this.saveRenderCts = null;
+                if (ReferenceEquals(this.saveRenderCts, renderCts))
+                {
+                    this.saveRenderCts = null;
+                }
+
                 renderCts?.Dispose();
-                if (!this.IsDisposed) this.button_save.Enabled = true;
+                if (!this.IsDisposed)
+                {
+                    this.button_save.Enabled = true;
+                }
             }
         }
 
         public async Task StopPreviewAsync()
         {
             this.previewCts?.Cancel();
-            if (this.previewAudio != null) await this.previewAudio.StopAsync();
+            if (this.previewAudio != null)
+            {
+                await this.previewAudio.StopAsync();
+            }
             // The render/preview owner disposes its CTS in finally, after its progress
             // dialog is gone. Stop must not dispose a source still used by that dialog.
             if (this.previewCts != null && !this.IsDisposed)
+            {
                 this.label_status.Text = "Cancelling; waiting for the current V1 operation to finish…";
+            }
         }
 
         public async Task PreviewMidiAsync(MidiFileData midi, int trackIndex)
@@ -486,8 +535,15 @@ namespace ModularAudience.Forms.Modules.Dialogs
             var previous = this.previewCts;
             await this.StopPreviewAsync();
             while (previous != null && ReferenceEquals(this.previewCts, previous) && !this.IsDisposed)
+            {
                 await Task.Delay(10);
-            if (this.IsDisposed || this.closingMidiWindow) return;
+            }
+
+            if (this.IsDisposed || this.closingMidiWindow)
+            {
+                return;
+            }
+
             MidiInstrument instrument = this.SelectedInstrument;
             double bpm = (double)this.numericUpDown_bpm.Value;
             using AudioObj? customSample = this.customSample?.Clone();
@@ -522,7 +578,11 @@ namespace ModularAudience.Forms.Modules.Dialogs
 
         private void ResetPreviewState()
         {
-            if (this.IsDisposed) return;
+            if (this.IsDisposed)
+            {
+                return;
+            }
+
             this.timer_previewCaret.Stop();
             this.previewCts = null;
             this.previewAudio?.Dispose();
@@ -538,9 +598,17 @@ namespace ModularAudience.Forms.Modules.Dialogs
 
         private async void MidiWindow_FormClosing(object? sender, FormClosingEventArgs e)
         {
-            if (this.allowMidiClose) return;
+            if (this.allowMidiClose)
+            {
+                return;
+            }
+
             e.Cancel = true;
-            if (this.closingMidiWindow) return;
+            if (this.closingMidiWindow)
+            {
+                return;
+            }
+
             this.closingMidiWindow = true;
             this.saveRenderCts?.Cancel();
             await this.StopPreviewAsync();
@@ -550,7 +618,10 @@ namespace ModularAudience.Forms.Modules.Dialogs
             // Let render continuations release progress windows and sources first.
             await Task.Yield();
             this.allowMidiClose = true;
-            if (!this.IsDisposed) this.Close();
+            if (!this.IsDisposed)
+            {
+                this.Close();
+            }
         }
 
         public void ApplyEdit(MidiFileData midiFileData)
@@ -578,7 +649,11 @@ namespace ModularAudience.Forms.Modules.Dialogs
 
         private async Task ExportMidiAsync(bool currentPageOnly, bool merge = false)
         {
-            if (!this.button_export.Enabled || this.closingMidiWindow || this.tracks.Count == 0) return;
+            if (!this.button_export.Enabled || this.closingMidiWindow || this.tracks.Count == 0)
+            {
+                return;
+            }
+
             MidiFileData midi = this.CreateOutputMidi(currentPageOnly, merge);
             string suffix = currentPageOnly ? $"_page_{this.numericUpDown_track.Value}" : merge ? "_merged" : "_exported";
             using SaveFileDialog sfd = new()
@@ -597,7 +672,11 @@ namespace ModularAudience.Forms.Modules.Dialogs
                     this.button_export.Enabled = false;
                     this.label_status.Text = "Exporting MIDI...";
                     string? exportedPath = await midi.ExportAsync(sfd.FileName);
-                    if (exportedPath == null) throw new IOException("The MIDI file could not be exported. See the log for details.");
+                    if (exportedPath == null)
+                    {
+                        throw new IOException("The MIDI file could not be exported. See the log for details.");
+                    }
+
                     this.label_status.Text = $"MIDI exported to {exportedPath}";
                 }
                 catch (Exception ex)
@@ -607,7 +686,10 @@ namespace ModularAudience.Forms.Modules.Dialogs
                 }
                 finally
                 {
-                    if (!this.IsDisposed) this.button_export.Enabled = true;
+                    if (!this.IsDisposed)
+                    {
+                        this.button_export.Enabled = true;
+                    }
                 }
             }
         }

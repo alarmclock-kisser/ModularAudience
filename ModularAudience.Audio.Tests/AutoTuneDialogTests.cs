@@ -448,7 +448,10 @@ public sealed class AutoTuneDialogTests
         foreach (Control control in parent.Controls)
         {
             yield return control;
-            foreach (Control child in Descendants(control)) yield return child;
+            foreach (Control child in Descendants(control))
+            {
+                yield return child;
+            }
         }
     }
 

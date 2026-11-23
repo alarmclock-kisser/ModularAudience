@@ -1011,6 +1011,7 @@ namespace ModularAudience.Generators
                 .Select(TransformKey).Distinct().ToArray();
             var sampleHashes = new Dictionary<int, string>();
             if (renderCache != null)
+            {
                 foreach (int track in unique.Select(n => n.TrackIndex).Distinct())
                 {
                     cancellationToken.ThrowIfCancellationRequested();
@@ -1019,6 +1020,8 @@ namespace ModularAudience.Generators
                         System.Runtime.InteropServices.MemoryMarshal.AsBytes(sample.Data.AsSpan())))
                         + $":{sample.SampleRate}:{sample.Channels}";
                 }
+            }
+
             try
             {
                 await Parallel.ForEachAsync(unique.Select(n => n.TrackIndex).Distinct(),
@@ -1062,30 +1065,45 @@ namespace ModularAudience.Generators
                         { renderedClips[note] = cached; return; }
                         var transformed = await RenderClipAsync(note).ConfigureAwait(false);
                         token.ThrowIfCancellationRequested();
-                        if (key != null) renderCache!.Store(key, transformed);
+                        if (key != null)
+                        {
+                            renderCache!.Store(key, transformed);
+                        }
+
                         renderedClips[note] = transformed;
                     }).ConfigureAwait(false);
 
             foreach (BreakbeatPatternNote note in notes)
             {
                 cancellationToken.ThrowIfCancellationRequested();
-                if (!renderedClips.TryGetValue(TransformKey(note), out var transformed) || transformed.Data.Length == 0) continue;
-                float[] clipData = transformed.Data;
+                if (!renderedClips.TryGetValue(TransformKey(note), out var transformed) || transformed.Data.Length == 0)
+                    {
+                        continue;
+                    }
+
+                    float[] clipData = transformed.Data;
                 int sourceChannels = transformed.Channels;
                 int clipFrames = clipData.Length / sourceChannels;
                 int startFrame = Math.Max(0, (int)Math.Round(note.StartTick / (double)PatternTicksPerBar * secondsPerBar * outputSampleRate));
                 int stepIndex = (int)Math.Round(note.StartTick / (double)ticksPerStep);
                 if (swing > 0 && stepIndex % 2 == 1)
-                    startFrame += Math.Max(0, (int)Math.Round(secondsPerStep * swing * outputSampleRate));
-                if (startFrame >= initialFrames)
+                    {
+                        startFrame += Math.Max(0, (int)Math.Round(secondsPerStep * swing * outputSampleRate));
+                    }
+
+                    if (startFrame >= initialFrames)
                 {
                     continue;
                 }
 
                 clipFrames = Math.Min(clipFrames, initialFrames - startFrame);
                 float volume = samples[note.TrackIndex].Volume;
-                if (volume <= 0f || !float.IsFinite(volume)) volume = 1f;
-                volume = Math.Clamp(volume, 0f, 1f);
+                if (volume <= 0f || !float.IsFinite(volume))
+                    {
+                        volume = 1f;
+                    }
+
+                    volume = Math.Clamp(volume, 0f, 1f);
                 float noteVolume = float.IsFinite(note.VolumePercent) ? Math.Clamp(note.VolumePercent, 0f, 250f) / 100f : 1f;
                 var trackDefault = trackSettings != null && note.TrackIndex < trackSettings.Count ? trackSettings[note.TrackIndex] : null;
                 float trackVolume = trackDefault != null && float.IsFinite(trackDefault.DefaultVolumePercent)
@@ -1094,17 +1112,26 @@ namespace ModularAudience.Generators
                 // Deterministic note-order summation: parallel transforms never race on the mix.
                 for (int frame = 0; frame < clipFrames; frame++)
                 {
-                    if ((frame & 8191) == 0) cancellationToken.ThrowIfCancellationRequested();
-                    int mixIndex = (startFrame + frame) * outputChannels;
+                    if ((frame & 8191) == 0)
+                        {
+                            cancellationToken.ThrowIfCancellationRequested();
+                        }
+
+                        int mixIndex = (startFrame + frame) * outputChannels;
                     int sourceIndex = frame * sourceChannels;
                     for (int channel = 0; channel < outputChannels; channel++)
-                        mixBuffer[mixIndex + channel] += clipData[sourceIndex + (channel % sourceChannels)] * volume;
-                }
+                        {
+                            mixBuffer[mixIndex + channel] += clipData[sourceIndex + (channel % sourceChannels)] * volume;
+                        }
+                    }
             }
             }
             finally
             {
-                foreach (var clip in prepared) clip?.Dispose();
+                foreach (var clip in prepared)
+                {
+                    clip?.Dispose();
+                }
             }
 
             async Task<(float[] Data, int Channels)> RenderClipAsync(BreakbeatPatternNote note)
@@ -1382,7 +1409,11 @@ namespace ModularAudience.Generators
             var random = new Random(seed ^ 0x50495443);
             var notes = CreatePatternNotesFromGrid(pattern, samples, resolution, bpm, resolution)
                 .OrderBy(n => n.StartTick).ThenBy(n => n.TrackIndex).ToList();
-            if (interleaved) notes = notes.GroupBy(n => n.StartTick).Select(g => g.First()).ToList();
+            if (interleaved)
+            {
+                notes = notes.GroupBy(n => n.StartTick).Select(g => g.First()).ToList();
+            }
+
             for (int i = 0; i < notes.Count; i++)
             {
                 var note = notes[i];
@@ -1404,7 +1435,11 @@ namespace ModularAudience.Generators
         public static Task<AudioObj> RenderBreakbeatAsync(List<bool[]> breakbeat, IEnumerable<AudioObj> samples, float bpm, int resolution, float swing, string? patternName = null, bool interleaved = false,
             float pitchRangeSemitones = 0, int pitchChancePercent = 0, int pitchSeed = 0)
         {
-            if (breakbeat == null || samples == null) return Task.FromResult<AudioObj>(null!);
+            if (breakbeat == null || samples == null)
+            {
+                return Task.FromResult<AudioObj>(null!);
+            }
+
             var sampleSnapshot = samples.ToArray();
             var patternSnapshot = breakbeat.Select(row => row.ToArray()).ToList();
             return Task.Run(() => RenderBreakbeatCore(patternSnapshot, sampleSnapshot, bpm, resolution, swing, patternName, interleaved,
@@ -1419,8 +1454,16 @@ namespace ModularAudience.Generators
                 return null!;
             }
 
-            if (!float.IsFinite(bpm) || bpm <= 0) throw new ArgumentOutOfRangeException(nameof(bpm));
-            if (resolution <= 0) throw new ArgumentOutOfRangeException(nameof(resolution));
+            if (!float.IsFinite(bpm) || bpm <= 0)
+            {
+                throw new ArgumentOutOfRangeException(nameof(bpm));
+            }
+
+            if (resolution <= 0)
+            {
+                throw new ArgumentOutOfRangeException(nameof(resolution));
+            }
+
             swing = float.IsFinite(swing) ? Math.Clamp(swing, 0, 0.5f) : 0;
             int numTracks = Math.Min(breakbeat.Count, samples.Count);
             int steps = breakbeat[0].Length;
@@ -1436,20 +1479,30 @@ namespace ModularAudience.Generators
             var pitches = pitchNotes.ToDictionary(n => (n.TrackIndex, (int)Math.Round(n.StartTick * resolution / (double)PatternTicksPerBar)), n => n.PitchSemitones);
             var hits = new List<(int Track, int Frame, float Pitch)>();
             for (int step = 0; step < steps; step++)
+            {
                 for (int track = 0; track < numTracks; track++)
+                {
                     if (step < breakbeat[track].Length && breakbeat[track][step]
                         && samples[track].Data.Length > 0)
                     {
                         int frame = (int)Math.Round((step + (step % 2 == 1 ? swing : 0)) * secondsPerStep * sampleRate);
                         hits.Add((track, frame, pitches.GetValueOrDefault((track, step))));
-                        if (interleaved) break; // Also enforce exclusivity for imported/preset matrices.
+                        if (interleaved)
+                        {
+                            break; // Also enforce exclusivity for imported/preset matrices.
+                        }
                     }
+                }
+            }
+
             var nextHit = new Dictionary<int, int>();
             if (interleaved)
             {
                 int[] starts = hits.Select(hit => hit.Frame).Distinct().Order().ToArray();
                 for (int i = 0; i < starts.Length; i++)
+                {
                     nextHit[starts[i]] = i + 1 < starts.Length ? starts[i + 1] : totalSamples;
+                }
             }
 
             for (int trackIdx = 0; trackIdx < numTracks; trackIdx++)
@@ -1480,9 +1533,17 @@ namespace ModularAudience.Generators
                 {
                     int stepStart = hit.Frame;
                     float[] hitData = hit.Pitch == 0 ? audioData : pitched[hit.Pitch];
-                    if (stepStart >= totalSamples) continue;
+                    if (stepStart >= totalSamples)
+                    {
+                        continue;
+                    }
+
                     int frames = Math.Min(hitData.Length / audioChannels, totalSamples - stepStart);
-                    if (interleaved) frames = Math.Min(frames, nextHit[stepStart] - stepStart);
+                    if (interleaved)
+                    {
+                        frames = Math.Min(frames, nextHit[stepStart] - stepStart);
+                    }
+
                     int fade = interleaved ? Math.Min(Math.Max(1, sampleRate / 1000), frames / 2) : 0;
 
                     for (int n = 0; n < frames; n++)
@@ -1557,14 +1618,22 @@ namespace ModularAudience.Generators
         }
         private static float[] ResampleBreakbeatSample(float[] data, int sourceRate, int targetRate, int channels)
         {
-            if (sourceRate == targetRate) return data;
+            if (sourceRate == targetRate)
+            {
+                return data;
+            }
+
             var resampler = new NAudio.Wave.SampleProviders.WdlResamplingSampleProvider(new BreakbeatSampleProvider(data, sourceRate, channels), targetRate);
             var result = new float[checked((int)Math.Round(data.Length / (double)channels * targetRate / sourceRate) * channels)];
             int position = 0;
             while (position < result.Length)
             {
                 int read = resampler.Read(result.AsSpan(position));
-                if (read == 0) break;
+                if (read == 0)
+                {
+                    break;
+                }
+
                 position += read;
             }
             return result;

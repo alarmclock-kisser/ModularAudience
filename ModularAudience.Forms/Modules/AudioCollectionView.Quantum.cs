@@ -14,7 +14,11 @@ public partial class AudioCollectionView
         if (this.quantumBeatEngineDialog is { IsDisposed: false })
         { this.quantumBeatEngineDialog.Show(); this.quantumBeatEngineDialog.BringToFront(); return; }
         var selected = this.GetContextAudios();
-        if (selected.Count < 2) return;
+        if (selected.Count < 2)
+        {
+            return;
+        }
+
         if (selected.Count > 32 || selected.Sum(audio => (long)audio.Data.Length) > 67_108_864)
         {
             QuantumHelpDialog.ShowMessage(this, "Quantum sample selection", "Select 2 to 32 samples containing no more than 256 MiB of combined source PCM. Use shorter slices for large loops.");

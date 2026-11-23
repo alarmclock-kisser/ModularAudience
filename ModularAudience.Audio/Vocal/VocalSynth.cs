@@ -15,14 +15,20 @@ public static partial class VocalSynthEngine
         internal void Add(float sample)
         {
             if (position >= samples.Length)
+            {
                 throw new InvalidOperationException("Vocal synthesis exceeded its planned output size.");
+            }
+
             samples[position++] = sample;
         }
 
         internal void AddRange(ReadOnlySpan<float> values)
         {
             if (values.Length > samples.Length - position)
+            {
                 throw new InvalidOperationException("Vocal synthesis exceeded its planned output size.");
+            }
+
             values.CopyTo(samples.AsSpan(position));
             position += values.Length;
         }
@@ -30,7 +36,10 @@ public static partial class VocalSynthEngine
         internal float[] ToArray()
         {
             if (position != samples.Length)
+            {
                 throw new InvalidOperationException("Vocal synthesis did not fill its planned output size.");
+            }
+
             return samples;
         }
     }
@@ -71,10 +80,15 @@ public static partial class VocalSynthEngine
             snapshot.Language, snapshot.Text, snapshot.EmphasisSyntax,
             tokens, snapshot.CustomSampleMappings, snapshot.Singing, cancellationToken);
         if (snapshot.Singing && snapshot.SingingMidiFile is not null)
+        {
             return CreateMidiPlaybackTimeline(snapshot, tokens, cancellationToken);
+        }
+
         if (snapshot.UseWindowsSpeech)
+        {
             throw new PlatformNotSupportedException(
                 "Windows speech playback timing is available only in the Windows desktop application.");
+        }
 
         IReadOnlyList<VocalSingingSyllable> syllables =
             VocalSinging.CreateSyllables(snapshot.Language, tokens, cancellationToken).Syllables;
@@ -95,18 +109,28 @@ public static partial class VocalSynthEngine
         foreach (VocalSyllableTextRange textRange in textRanges)
         {
             cancellationToken.ThrowIfCancellationRequested();
-            if (textRange.Index < 0 || textRange.Index >= syllables.Count) continue;
+            if (textRange.Index < 0 || textRange.Index >= syllables.Count)
+            {
+                continue;
+            }
+
             int startFrame = int.MaxValue;
             int endFrame = 0;
             foreach (VocalToken token in syllables[textRange.Index].Tokens)
             {
-                if (!tokenFrames.TryGetValue(token, out var tokenRange)) continue;
+                if (!tokenFrames.TryGetValue(token, out var tokenRange))
+                {
+                    continue;
+                }
+
                 startFrame = Math.Min(startFrame, tokenRange.StartFrame);
                 endFrame = Math.Max(endFrame, tokenRange.EndFrame);
             }
             if (startFrame < endFrame)
+            {
                 result.Add(new VocalPlaybackTextRange(
                     textRange.Start, textRange.Length, startFrame, endFrame));
+            }
         }
         return result;
     }
@@ -125,10 +149,17 @@ public static partial class VocalSynthEngine
         foreach (VocalMidiScheduledNote note in plan.Notes)
         {
             cancellationToken.ThrowIfCancellationRequested();
-            if (note.SyllableIndex < 0 || note.SyllableIndex >= startFrames.Length) continue;
+            if (note.SyllableIndex < 0 || note.SyllableIndex >= startFrames.Length)
+            {
+                continue;
+            }
+
             int audibleStartFrame = checked(note.StartFrame + note.PreSyllableSilenceFrames);
             if (note.PreSyllableSilenceFrames < note.DurationFrames)
+            {
                 startFrames[note.SyllableIndex] = Math.Min(startFrames[note.SyllableIndex], audibleStartFrame);
+            }
+
             endFrames[note.SyllableIndex] = Math.Max(
                 endFrames[note.SyllableIndex], checked(note.StartFrame + note.DurationFrames));
         }
@@ -140,7 +171,10 @@ public static partial class VocalSynthEngine
             int syllableIndex = textRange.Index;
             if (syllableIndex < 0 || syllableIndex >= startFrames.Length
                 || startFrames[syllableIndex] >= endFrames[syllableIndex])
+            {
                 continue;
+            }
+
             result.Add(new VocalPlaybackTextRange(
                 textRange.Start, textRange.Length,
                 startFrames[syllableIndex], endFrames[syllableIndex]));
@@ -154,13 +188,19 @@ public static partial class VocalSynthEngine
         cancellationToken.ThrowIfCancellationRequested();
         var s = settings.Clone();
         if (s.UseWindowsSpeech)
+        {
             throw new PlatformNotSupportedException("Windows speech is available only in the Windows desktop application.");
+        }
+
         IReadOnlyList<VocalToken> tokens = VocalTextParser.Parse(
             s.Language, s.Text, s.EmphasisSyntax, cancellationToken);
         tokens = VocalCustomSampleMapper.Apply(
             s.Language, s.Text, s.EmphasisSyntax, tokens, s.CustomSampleMappings, s.Singing, cancellationToken);
         if (s.Singing && s.SingingMidiFile is not null)
+        {
             return RenderMidi(s, tokens, cancellationToken);
+        }
+
         var plan = CreateRenderPlan(tokens, s, cancellationToken, out int sampleCount);
         var pcm = new PcmBuffer(sampleCount);
         var random = new Random(StableSeed(s));
@@ -187,9 +227,14 @@ public static partial class VocalSynthEngine
                 if (phoneme.Symbol == "unsupported")
                 {
                     if (s.BeepForUnsupportedSounds)
+                    {
                         RenderUnsupportedBeep(pcm, unit.Frames, s, state, cancellationToken);
+                    }
                     else
+                    {
                         AppendSilence(pcm, unit.Frames, s.Channels, cancellationToken);
+                    }
+
                     state.Frame += unit.Frames;
                     continue;
                 }
@@ -216,7 +261,11 @@ public static partial class VocalSynthEngine
         VocalSynthSettings settings, CancellationToken cancellationToken = default)
     {
         ArgumentNullException.ThrowIfNull(settings);
-        if (!settings.Singing || settings.SingingMidiFile is null) return null;
+        if (!settings.Singing || settings.SingingMidiFile is null)
+        {
+            return null;
+        }
+
         settings.Validate();
         IReadOnlyList<VocalToken> tokens = VocalTextParser.Parse(
             settings.Language, settings.Text, settings.EmphasisSyntax, cancellationToken);
@@ -225,11 +274,17 @@ public static partial class VocalSynthEngine
             tokens, settings.CustomSampleMappings, settings.Singing, cancellationToken);
         VocalMidiSingingPlan plan = VocalMidiSinging.CreatePlan(settings, tokens, cancellationToken);
         if (plan.RepeatedSyllables > 0)
+        {
             return $"{plan.RepeatedSyllables} extra text syllable{(plan.RepeatedSyllables == 1 ? string.Empty : "s")} "
                 + $"reuse{(plan.RepeatedSyllables == 1 ? "s" : string.Empty)} the last MIDI pitch.";
+        }
+
         if (plan.UnusedMidiGroups > 0)
+        {
             return $"{plan.UnusedMidiGroups} extra MIDI note group{(plan.UnusedMidiGroups == 1 ? string.Empty : "s")} "
                 + "will remain unplayed.";
+        }
+
         return null;
     }
 
@@ -243,7 +298,9 @@ public static partial class VocalSynthEngine
             : 0;
         float peak = GetAudioPeak(data, parallelizeMidi, chunkCount, cancellationToken);
         if (peak > 0.95f)
+        {
             ScaleAudio(data, 0.95f / peak, parallelizeMidi, chunkCount, cancellationToken);
+        }
 
         var result = new VocalAudioData
         {
@@ -269,9 +326,16 @@ public static partial class VocalSynthEngine
             float peak = 0;
             for (int i = 0; i < data.Length; i++)
             {
-                if ((i & 4095) == 0) cancellationToken.ThrowIfCancellationRequested();
+                if ((i & 4095) == 0)
+                {
+                    cancellationToken.ThrowIfCancellationRequested();
+                }
+
                 if (!float.IsFinite(data[i]))
+                {
                     throw new InvalidOperationException("Vocal synthesis produced an invalid audio sample.");
+                }
+
                 peak = Math.Max(peak, Math.Abs(data[i]));
             }
             return peak;
@@ -285,9 +349,16 @@ public static partial class VocalSynthEngine
             float chunkPeak = 0;
             for (int i = start; i < end; i++)
             {
-                if (((i - start) & 4095) == 0) cancellationToken.ThrowIfCancellationRequested();
+                if (((i - start) & 4095) == 0)
+                {
+                    cancellationToken.ThrowIfCancellationRequested();
+                }
+
                 if (!float.IsFinite(data[i]))
+                {
                     throw new InvalidOperationException("Vocal synthesis produced an invalid audio sample.");
+                }
+
                 chunkPeak = Math.Max(chunkPeak, Math.Abs(data[i]));
             }
             chunkPeaks[chunkIndex] = chunkPeak;
@@ -295,7 +366,10 @@ public static partial class VocalSynthEngine
 
         float peakResult = 0;
         foreach (float chunkPeak in chunkPeaks)
+        {
             peakResult = Math.Max(peakResult, chunkPeak);
+        }
+
         return peakResult;
     }
 
@@ -311,7 +385,11 @@ public static partial class VocalSynthEngine
                 int end = Math.Min(data.Length, start + MidiAudioChunkSize);
                 for (int i = start; i < end; i++)
                 {
-                    if (((i - start) & 4095) == 0) cancellationToken.ThrowIfCancellationRequested();
+                    if (((i - start) & 4095) == 0)
+                    {
+                        cancellationToken.ThrowIfCancellationRequested();
+                    }
+
                     data[i] *= scale;
                 }
             });
@@ -320,7 +398,11 @@ public static partial class VocalSynthEngine
 
         for (int i = 0; i < data.Length; i++)
         {
-            if ((i & 4095) == 0) cancellationToken.ThrowIfCancellationRequested();
+            if ((i & 4095) == 0)
+            {
+                cancellationToken.ThrowIfCancellationRequested();
+            }
+
             data[i] *= scale;
         }
     }
@@ -346,7 +428,10 @@ public static partial class VocalSynthEngine
             else if (token is VocalPhonemeToken phoneme)
             {
                 if (!VocalPhonemeInventory.Contains(phoneme.Phoneme))
+                {
                     throw new InvalidOperationException($"Unknown vocal phoneme: {phoneme.Phoneme}");
+                }
+
                 var definition = VocalPhonemeInventory.Get(phoneme.Phoneme);
                 if (phoneme.Phoneme == "unsupported")
                 {
@@ -359,10 +444,16 @@ public static partial class VocalSynthEngine
                     bool beat = IsBeat(phoneme.Phoneme);
                     if (settings.Singing && (beat || definition.IsVowel
                         && (settings.Language == VocalLanguage.AnimalCrossing || phoneme.Phoneme != previousSymbol)))
+                    {
                         noteIndex++;
+                    }
+
                     milliseconds = definition.DurationMs * (beat ? 1 : DurationMultiplier(phoneme));
                     if (settings.Singing && definition.IsVowel)
+                    {
                         milliseconds *= settings.Language == VocalLanguage.AnimalCrossing ? 1.35 : 1.75;
+                    }
+
                     minimumFrames = 4;
                     previousSymbol = phoneme.Phoneme;
                 }
@@ -371,24 +462,43 @@ public static partial class VocalSynthEngine
             {
                 milliseconds = sample.DurationMilliseconds;
                 minimumFrames = 1;
-                if (settings.Singing && sample.HasNucleus) noteIndex++;
+                if (settings.Singing && sample.HasNucleus)
+                {
+                    noteIndex++;
+                }
+
                 previousSymbol = null;
             }
-            else throw new InvalidOperationException("Unknown vocal synthesis token.");
+            else
+            {
+                throw new InvalidOperationException("Unknown vocal synthesis token.");
+            }
 
             if (!double.IsFinite(milliseconds) || milliseconds < 0)
+            {
                 throw new ArgumentOutOfRangeException(nameof(tokens), "A vocal token has an invalid duration.");
+            }
+
             double frames = milliseconds * settings.SampleRate / (1000 * settings.Speed);
             if (!double.IsFinite(frames) || frames > MaxOutputSamples / settings.Channels)
+            {
                 throw new InvalidOperationException("The vocal synthesis output would exceed the supported size.");
+            }
+
             int frameCount = Math.Max(minimumFrames, (int)Math.Round(frames));
             samples += (long)frameCount * settings.Channels;
             if (samples > MaxOutputSamples)
+            {
                 throw new InvalidOperationException("The vocal synthesis output would exceed the supported size.");
+            }
+
             plan.Add(new RenderUnit(token, frameCount, settings.Singing ? VocalSinging.Note(noteIndex) : 0));
         }
         if (plan.Count == 0)
+        {
             throw new ArgumentException("Text contains no pronounceable characters or speech markers.", nameof(settings));
+        }
+
         if (samples == 0)
         {
             int silenceFrames = Math.Max(1, settings.SampleRate / 1000);
@@ -408,12 +518,19 @@ public static partial class VocalSynthEngine
         int releaseFrames = Math.Max(1, settings.SampleRate / 100);
         for (int i = 0; i < frames; i++)
         {
-            if ((i & 127) == 0) cancellationToken.ThrowIfCancellationRequested();
+            if ((i & 127) == 0)
+            {
+                cancellationToken.ThrowIfCancellationRequested();
+            }
+
             double envelope = Math.Min(1, i / (double)attackFrames);
             envelope = Math.Min(envelope, (frames - 1 - i) / (double)releaseFrames);
             float sample = (float)(0.6 * Math.Max(0, envelope)
                 * Math.Sin(2 * Math.PI * 100 * (state.Frame + i) / settings.SampleRate));
-            for (int channel = 0; channel < settings.Channels; channel++) pcm.Add(sample);
+            for (int channel = 0; channel < settings.Channels; channel++)
+            {
+                pcm.Add(sample);
+            }
         }
     }
 
@@ -443,7 +560,11 @@ public static partial class VocalSynthEngine
             int end = read + 1;
             while (end < plan.Count && plan[end].Token is VocalPhonemeToken next && next.Phoneme == first.Phoneme)
             {
-                if ((end & 255) == 0) cancellationToken.ThrowIfCancellationRequested();
+                if ((end & 255) == 0)
+                {
+                    cancellationToken.ThrowIfCancellationRequested();
+                }
+
                 end++;
             }
             if (end == read + 2 && plan[read + 1].Token is VocalPhonemeToken second
@@ -466,12 +587,19 @@ public static partial class VocalSynthEngine
             {
                 while (read < end)
                 {
-                    if ((read & 255) == 0) cancellationToken.ThrowIfCancellationRequested();
+                    if ((read & 255) == 0)
+                    {
+                        cancellationToken.ThrowIfCancellationRequested();
+                    }
+
                     plan[write++] = plan[read++];
                 }
             }
         }
-        if (write < plan.Count) plan.RemoveRange(write, plan.Count - write);
+        if (write < plan.Count)
+        {
+            plan.RemoveRange(write, plan.Count - write);
+        }
     }
 
     internal static double DurationMultiplier(VocalPhonemeToken token)
@@ -489,7 +617,11 @@ public static partial class VocalSynthEngine
     {
         for (int i = 0; i < frames * channels; i++)
         {
-            if ((i & 4095) == 0) cancellationToken.ThrowIfCancellationRequested();
+            if ((i & 4095) == 0)
+            {
+                cancellationToken.ThrowIfCancellationRequested();
+            }
+
             pcm.Add(0f);
         }
     }
@@ -512,15 +644,33 @@ public static partial class VocalSynthEngine
         int fadeIn = connectedBefore ? 0 : Math.Max(1, Math.Min(frames / 4, (int)(s.SampleRate * 0.006)));
         int fadeOut = connectedAfter ? 0 : Math.Max(1, Math.Min(frames / 4, (int)(s.SampleRate * 0.008)));
         var (pitchMultiplier, gainMultiplier, voicingMultiplier, breathExtra) = EmphasisParameters(token.Emphasis);
-        if (token.Question && token.Emphasis != VocalEmphasis.PitchUp) pitchMultiplier *= 1.08;
-        if (token.Stressed && !s.Singing) pitchMultiplier *= 1.035;
+        if (token.Question && token.Emphasis != VocalEmphasis.PitchUp)
+        {
+            pitchMultiplier *= 1.08;
+        }
+
+        if (token.Stressed && !s.Singing)
+        {
+            pitchMultiplier *= 1.035;
+        }
+
         if (token.Capitalized)
         {
             gainMultiplier *= 1.4;
-            if (token.Emphasis != VocalEmphasis.Whisper) pitchMultiplier *= 1.03;
+            if (token.Emphasis != VocalEmphasis.Whisper)
+            {
+                pitchMultiplier *= 1.03;
+            }
         }
-        if (s.Singing) pitchMultiplier *= Math.Pow(2, note / 12.0);
-        if (animal) pitchMultiplier *= AnimalPitch(ph.Symbol);
+        if (s.Singing)
+        {
+            pitchMultiplier *= Math.Pow(2, note / 12.0);
+        }
+
+        if (animal)
+        {
+            pitchMultiplier *= AnimalPitch(ph.Symbol);
+        }
 
         double maxFrequency = Math.Min(6000, s.SampleRate * 0.45);
         var weights = new double[(int)(maxFrequency / (s.BasePitchHz * 0.7)) + 3];
@@ -534,16 +684,27 @@ public static partial class VocalSynthEngine
 
         for (int i = 0; i < frames; i++)
         {
-            if ((i & 127) == 0) cancellationToken.ThrowIfCancellationRequested();
+            if ((i & 127) == 0)
+            {
+                cancellationToken.ThrowIfCancellationRequested();
+            }
+
             double progress = i / (double)Math.Max(1, frames - 1);
             double time = state.Frame / (double)s.SampleRate;
             double pitch = s.BasePitchHz * pitchMultiplier;
             if (ph.Symbol is "beat-b" or "beat-bz")
+            {
                 pitch *= 0.72 + 0.85 * Math.Exp(-i / (s.SampleRate * 0.035));
+            }
             else if (animal)
+            {
                 pitch *= 1.05 - 0.10 * progress;
+            }
             else if (!s.Singing)
+            {
                 pitch *= 1.015 - 0.03 * progress;
+            }
+
             if (ph.Voiced && token.Tone is >= 1 and <= 4)
             {
                 double toneProgress = token.ToneStart + (token.ToneEnd - token.ToneStart) * progress;
@@ -551,7 +712,10 @@ public static partial class VocalSynthEngine
                 pitch *= s.Singing ? Math.Pow(tonePitch, 0.35) : tonePitch;
             }
             if (token.Emphasis == VocalEmphasis.PitchUp || token.Question)
+            {
                 pitch *= 0.98 + 0.08 * progress;
+            }
+
             if (s.VibratoCents > 0 && token.Emphasis != VocalEmphasis.Whisper)
             {
                 double vibrato = s.VibratoCents * Math.Min(1, i / (s.SampleRate * 0.2))
@@ -559,21 +723,28 @@ public static partial class VocalSynthEngine
                 pitch *= Math.Pow(2, vibrato / 1200);
             }
             if (s.Roughness > 0)
+            {
                 pitch *= 1 + 0.02 * s.Roughness * Math.Sin(2 * Math.PI * 17 * time);
+            }
 
             if ((i & 63) == 0 && ph.Voiced)
             {
                 UpdateFormants(ph, previous, next, connectedBefore, connectedAfter, progress, s.FormantScale, formants);
                 harmonicCount = UpdateHarmonics(weights, formants, ph.FormantAmplitudes, pitch, maxFrequency);
                 for (int f = 0; f < formants.Length; f++)
+                {
                     breathFilters[f].Configure(formants[f], 110 + f * 65, s.SampleRate);
+                }
             }
 
             double source = 0;
             if (ph.Voiced)
             {
                 for (int h = 1; h <= harmonicCount; h++)
+                {
                     source += weights[h] * Math.Sin(phase * h);
+                }
+
                 source *= 0.7 * ph.Voicing * s.Voicing * voicingMultiplier * whisperReduction;
             }
 
@@ -586,7 +757,11 @@ public static partial class VocalSynthEngine
             double voiceGate = 1;
             double noiseGate = 1;
             ShapeConsonant(ph.Symbol, progress, frames / (double)s.SampleRate, ref voiceGate, ref noiseGate);
-            if (beat) ShapeBeat(ph.Symbol, i / (double)s.SampleRate, ref voiceGate, ref noiseGate);
+            if (beat)
+            {
+                ShapeBeat(ph.Symbol, i / (double)s.SampleRate, ref voiceGate, ref noiseGate);
+            }
+
             if (trill)
             {
                 double rate = ph.Symbol == "de-r-trill" ? 22 : 22;
@@ -618,20 +793,40 @@ public static partial class VocalSynthEngine
             {
                 double breath = 0;
                 for (int f = 0; f < breathFilters.Length; f++)
+                {
                     breath += breathFilters[f].Process(white) * ph.FormantAmplitudes[f];
+                }
+
                 value += breath * breathiness * 0.85 * voiceGate;
             }
             if (ph.Symbol == "animal-dot")
+            {
                 value += bandNoise * s.Noise * 0.8 * Math.Exp(-i / (s.SampleRate * 0.006));
+            }
 
             double envelope = 1;
-            if (fadeIn > 0 && i < fadeIn) envelope *= i / (double)fadeIn;
-            if (fadeOut > 0 && i >= frames - fadeOut) envelope *= (frames - 1 - i) / (double)fadeOut;
+            if (fadeIn > 0 && i < fadeIn)
+            {
+                envelope *= i / (double)fadeIn;
+            }
+
+            if (fadeOut > 0 && i >= frames - fadeOut)
+            {
+                envelope *= (frames - 1 - i) / (double)fadeOut;
+            }
+
             float sample = (float)(value * envelope * gainMultiplier);
-            for (int channel = 0; channel < s.Channels; channel++) pcm.Add(sample);
+            for (int channel = 0; channel < s.Channels; channel++)
+            {
+                pcm.Add(sample);
+            }
 
             phase += 2 * Math.PI * pitch / s.SampleRate;
-            if (phase >= 2 * Math.PI) phase -= 2 * Math.PI * Math.Floor(phase / (2 * Math.PI));
+            if (phase >= 2 * Math.PI)
+            {
+                phase -= 2 * Math.PI * Math.Floor(phase / (2 * Math.PI));
+            }
+
             state.Frame++;
         }
         state.Phase = phase;
@@ -677,8 +872,15 @@ public static partial class VocalSynthEngine
 
     private static void ShapeBeat(string symbol, double time, ref double voice, ref double noise)
     {
-        if (symbol == "beat-b") voice *= Math.Exp(-time * 13);
-        else if (symbol is "beat-bz" or "beat-kz") voice *= Math.Exp(-time * 9);
+        if (symbol == "beat-b")
+        {
+            voice *= Math.Exp(-time * 13);
+        }
+        else if (symbol is "beat-bz" or "beat-kz")
+        {
+            voice *= Math.Exp(-time * 9);
+        }
+
         if (symbol == "beat-tr")
         {
             double pulse = 0.25 + 0.75 * Math.Pow(0.5 + 0.5 * Math.Sin(2 * Math.PI * 24 * time), 2);
@@ -699,7 +901,11 @@ public static partial class VocalSynthEngine
         bool stop = symbol is "p" or "b" or "t" or "d" or "k" or "g" or "arab-q"
             || germanFinalT;
         bool affricate = symbol is "ts" or "tsh" or "j" or "dz";
-        if (!stop && !affricate) return;
+        if (!stop && !affricate)
+        {
+            return;
+        }
+
         double closure = germanFinalT ? 0.55 : stop ? 0.48 : 0.25;
         double releaseTime = Math.Max(0, (progress - closure) * duration);
         voice = 0.15 + 0.85 * Math.Min(1, releaseTime / 0.004);
@@ -728,9 +934,13 @@ public static partial class VocalSynthEngine
                 double previousEnd = previous.EndFormants.Length > f ? previous.EndFormants[f] : previous.Formants[f];
                 double boundary = (previousEnd + start) * 0.5;
                 if (ph.Symbol == "de-r-glide" && previous.IsVowel)
+                {
                     value = boundary + (value - boundary) * glide;
+                }
                 else if (progress < 0.25)
+                {
                     value = boundary + (value - boundary) * progress / 0.25;
+                }
             }
             if (connectedAfter && next is not null && next.Formants.Length > f && progress > 0.75)
             {
@@ -783,7 +993,10 @@ public static partial class VocalSynthEngine
     {
         uint hash = 2166136261;
         foreach (char c in settings.VoiceName + "\0" + settings.Text)
+        {
             hash = unchecked((hash ^ c) * 16777619);
+        }
+
         hash = unchecked((hash ^ (uint)settings.Language) * 16777619);
         return unchecked((int)hash);
     }

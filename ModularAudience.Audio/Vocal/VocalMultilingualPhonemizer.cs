@@ -49,7 +49,10 @@ internal static class VocalMultilingualPhonemizer
     {
         cancellationToken.ThrowIfCancellationRequested();
         if (word.Length > 4096)
+        {
             throw new ArgumentException("A word or unbroken text segment exceeds the 4096-character pronunciation limit.", nameof(word));
+        }
+
         string normalized = word.Normalize(NormalizationForm.FormKC).Replace('’', '\'');
         normalized = language == VocalLanguage.Turkish
             ? normalized.Replace('I', 'ı').Replace('İ', 'i').ToLowerInvariant()
@@ -69,7 +72,10 @@ internal static class VocalMultilingualPhonemizer
         };
         cancellationToken.ThrowIfCancellationRequested();
         if (phones.Count == 0)
+        {
             throw Unsupported($"No pronunciation was found for '{word}' in {language.DisplayName()}.");
+        }
+
         return phones;
     }
 
@@ -82,7 +88,11 @@ internal static class VocalMultilingualPhonemizer
 
         void FlushSegment()
         {
-            if (segment.Length == 0) return;
+            if (segment.Length == 0)
+            {
+                return;
+            }
+
             string value = segment.ToString();
             segment.Clear();
             AppendScriptSegment(result, language, current, value, cancellationToken);
@@ -92,7 +102,11 @@ internal static class VocalMultilingualPhonemizer
         {
             cancellationToken.ThrowIfCancellationRequested();
             ScriptGroup next = Classify(rune, current);
-            if (next != current) FlushSegment();
+            if (next != current)
+            {
+                FlushSegment();
+            }
+
             if (next == ScriptGroup.Other)
             {
                 AppendUnknownRune(result, rune, cancellationToken);
@@ -128,10 +142,15 @@ internal static class VocalMultilingualPhonemizer
         try
         {
             if (Supports(sourceLanguage))
+            {
                 output.AddRange(PhonemizeWordCore(sourceLanguage, text, cancellationToken));
+            }
             else
+            {
                 output.AddRange(VocalPhonemizer.Phonemize(sourceLanguage, text, cancellationToken)
                     .Select(phone => new VocalPronunciationPhone(phone)));
+            }
+
             return;
         }
         catch (VocalUnsupportedPronunciationException)
@@ -140,7 +159,9 @@ internal static class VocalMultilingualPhonemizer
             {
                 cancellationToken.ThrowIfCancellationRequested();
                 if (!TryAppendRune(output, sourceLanguage, script, rune, cancellationToken))
+                {
                     output.Add(new VocalPronunciationPhone("unsupported"));
+                }
             }
         }
     }
@@ -159,16 +180,22 @@ internal static class VocalMultilingualPhonemizer
         try
         {
             if (Supports(sourceLanguage))
+            {
                 output.AddRange(PhonemizeWordCore(sourceLanguage, rune.ToString(), cancellationToken));
+            }
             else
+            {
                 output.AddRange(VocalPhonemizer.Phonemize(sourceLanguage, rune.ToString(), cancellationToken)
                     .Select(phone => new VocalPronunciationPhone(phone)));
+            }
         }
         catch (VocalUnsupportedPronunciationException)
         {
             if (script == ScriptGroup.Latin && sourceLanguage != VocalLanguage.English)
+            {
                 output.AddRange(VocalPhonemizer.Phonemize(VocalLanguage.English, rune.ToString(), cancellationToken)
                     .Select(phone => new VocalPronunciationPhone(phone)));
+            }
         }
         return output.Count > start;
     }
@@ -178,9 +205,13 @@ internal static class VocalMultilingualPhonemizer
     {
         cancellationToken.ThrowIfCancellationRequested();
         if (VocalIpa.IsIpaSpecificCharacter(rune.Value))
+        {
             VocalIpa.Append(output, rune.ToString(), cancellationToken);
+        }
         else
+        {
             output.Add(new VocalPronunciationPhone("unsupported"));
+        }
     }
 
     private static ScriptGroup Classify(Rune rune, ScriptGroup previous)
@@ -189,15 +220,41 @@ internal static class VocalMultilingualPhonemizer
         if (VocalIpa.IsIpaSpecificCharacter(value)
             || Rune.GetUnicodeCategory(rune) is UnicodeCategory.NonSpacingMark or UnicodeCategory.SpacingCombiningMark
                 && previous == ScriptGroup.Ipa)
+        {
             return ScriptGroup.Ipa;
-        if (value is >= 0x0600 and <= 0x08ff) return ScriptGroup.Arabic;
-        if (value is >= 0x0400 and <= 0x052f) return ScriptGroup.Cyrillic;
-        if (value is >= 0x3040 and <= 0x30ff or >= 0x31f0 and <= 0x31ff) return ScriptGroup.Kana;
-        if (value is >= 0x3400 and <= 0x9fff or >= 0x20000 and <= 0x2fa1f) return ScriptGroup.Han;
+        }
+
+        if (value is >= 0x0600 and <= 0x08ff)
+        {
+            return ScriptGroup.Arabic;
+        }
+
+        if (value is >= 0x0400 and <= 0x052f)
+        {
+            return ScriptGroup.Cyrillic;
+        }
+
+        if (value is >= 0x3040 and <= 0x30ff or >= 0x31f0 and <= 0x31ff)
+        {
+            return ScriptGroup.Kana;
+        }
+
+        if (value is >= 0x3400 and <= 0x9fff or >= 0x20000 and <= 0x2fa1f)
+        {
+            return ScriptGroup.Han;
+        }
+
         if (value <= char.MaxValue
-            && (IsLatin((char)value) || char.IsAsciiLetter((char)value))) return ScriptGroup.Latin;
+            && (IsLatin((char)value) || char.IsAsciiLetter((char)value)))
+        {
+            return ScriptGroup.Latin;
+        }
+
         if (Rune.GetUnicodeCategory(rune) is UnicodeCategory.NonSpacingMark or UnicodeCategory.SpacingCombiningMark)
+        {
             return previous == ScriptGroup.None ? ScriptGroup.Other : previous;
+        }
+
         return ScriptGroup.Other;
     }
 
@@ -230,7 +287,11 @@ internal static class VocalMultilingualPhonemizer
     {
         foreach (char c in word)
         {
-            if (allowed.Contains(c, StringComparison.Ordinal) || c == '\'') continue;
+            if (allowed.Contains(c, StringComparison.Ordinal) || c == '\'')
+            {
+                continue;
+            }
+
             throw Unsupported(c.ToString(), language);
         }
     }
@@ -244,23 +305,36 @@ internal static class VocalMultilingualPhonemizer
     internal static void SetStress(List<VocalPronunciationPhone> phones, int index)
     {
         if (index >= 0 && index < phones.Count)
+        {
             phones[index] = phones[index] with { Stressed = true };
+        }
     }
 
     internal static void SetSyllableTone(List<VocalPronunciationPhone> phones, int start, int tone)
     {
-        if (tone is < 1 or > 5) return;
+        if (tone is < 1 or > 5)
+        {
+            return;
+        }
+
         double duration = 0;
         for (int i = start; i < phones.Count; i++)
         {
             var definition = VocalPhonemeInventory.Get(phones[i].Symbol);
-            if (definition.Voiced) duration += definition.DurationMs;
+            if (definition.Voiced)
+            {
+                duration += definition.DurationMs;
+            }
         }
         double position = 0;
         for (int i = start; i < phones.Count && duration > 0; i++)
         {
             var definition = VocalPhonemeInventory.Get(phones[i].Symbol);
-            if (!definition.Voiced) continue;
+            if (!definition.Voiced)
+            {
+                continue;
+            }
+
             double next = position + definition.DurationMs / duration;
             phones[i] = phones[i] with { Tone = tone, ToneStart = position, ToneEnd = next };
             position = next;

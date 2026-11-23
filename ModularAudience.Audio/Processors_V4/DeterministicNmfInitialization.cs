@@ -15,8 +15,16 @@ namespace ModularAudience.Audio.Processors_V4
                 options.CancellationToken.ThrowIfCancellationRequested();
                 selected[seed] = true;
                 double sum = 0;
-                for (int bin = 0; bin < bins; bin++) sum += Math.Max(floor, power[seed][bin]);
-                for (int bin = 0; bin < bins; bin++) dictionary[bin][component] = Math.Max(floor, power[seed][bin]) / sum;
+                for (int bin = 0; bin < bins; bin++)
+                {
+                    sum += Math.Max(floor, power[seed][bin]);
+                }
+
+                for (int bin = 0; bin < bins; bin++)
+                {
+                    dictionary[bin][component] = Math.Max(floor, power[seed][bin]) / sum;
+                }
+
                 int current = component;
                 Parallel.For(0, power.Length, options, frame =>
                     UpdateDistance(power[frame], energy[frame], dictionary, current, nearest, frame, options.CancellationToken));
@@ -33,7 +41,11 @@ namespace ModularAudience.Audio.Processors_V4
             {
                 for (int bin = 0; bin < spectrum.Length; bin++)
                 {
-                    if ((bin & 255) == 0) token.ThrowIfCancellationRequested();
+                    if ((bin & 255) == 0)
+                    {
+                        token.ThrowIfCancellationRequested();
+                    }
+
                     affinity += Math.Sqrt(spectrum[bin] / energy * dictionary[bin][component]);
                 }
             }
@@ -46,9 +58,17 @@ namespace ModularAudience.Audio.Processors_V4
             double best = double.NegativeInfinity;
             for (int frame = 0; frame < nearest.Length; frame++)
             {
-                if (selected[frame] || energy[frame] <= 0) continue;
+                if (selected[frame] || energy[frame] <= 0)
+                {
+                    continue;
+                }
+
                 double distance = 1 - nearest[frame];
-                if (distance <= best) continue;
+                if (distance <= best)
+                {
+                    continue;
+                }
+
                 best = distance;
                 next = frame;
             }
@@ -63,12 +83,19 @@ namespace ModularAudience.Audio.Processors_V4
             double[] norms = new double[rank];
             foreach (double[] row in dictionary)
             {
-                for (int component = 0; component < rank; component++) norms[component] += row[component] * row[component];
+                for (int component = 0; component < rank; component++)
+                {
+                    norms[component] += row[component] * row[component];
+                }
             }
             double[][] activations = DeterministicSpectrogram.Allocate(power.Length, rank);
             Parallel.For(0, power.Length, options, frame =>
                 Project(power[frame], dictionary, norms, floor, activations[frame], options.CancellationToken));
-            if (warm) WarmStart(power, activations, options.CancellationToken);
+            if (warm)
+            {
+                WarmStart(power, activations, options.CancellationToken);
+            }
+
             return activations;
         }
 
@@ -78,7 +105,11 @@ namespace ModularAudience.Audio.Processors_V4
             double energy = 0;
             for (int bin = 0; bin < power.Length; bin++)
             {
-                if ((bin & 255) == 0) token.ThrowIfCancellationRequested();
+                if ((bin & 255) == 0)
+                {
+                    token.ThrowIfCancellationRequested();
+                }
+
                 double value = Math.Max(floor, power[bin]);
                 energy += value;
                 for (int component = 0; component < activation.Length; component++)

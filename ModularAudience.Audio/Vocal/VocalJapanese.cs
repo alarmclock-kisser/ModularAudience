@@ -15,10 +15,15 @@ internal static class VocalJapanese
         foreach (char c in text)
         {
             cancellationToken.ThrowIfCancellationRequested();
-            if (IsJapanese(c)) hasJapanese = true;
+            if (IsJapanese(c))
+            {
+                hasJapanese = true;
+            }
             else if (!VocalMultilingualPhonemizer.IsLatin(c) && c != '\''
                 && !VocalMultilingualPhonemizer.IsCombiningMark(c))
+            {
                 throw VocalMultilingualPhonemizer.Unsupported(c.ToString(), VocalLanguage.Japanese);
+            }
         }
         if (!hasJapanese)
         {
@@ -40,11 +45,16 @@ internal static class VocalJapanese
             if (pronounced is null)
             {
                 if (original.Any(IsKanji))
+                {
                     throw VocalMultilingualPhonemizer.Unsupported(original, VocalLanguage.Japanese);
+                }
+
                 pronounced = original;
             }
             if (pronounced.Any(IsJapanese))
+            {
                 kana.Append(pronounced);
+            }
             else
             {
                 if (kana.Length > 0) { AppendKana(result, kana.ToString(), cancellationToken); kana.Clear(); }
@@ -52,7 +62,11 @@ internal static class VocalJapanese
             }
         }
         tokenizer.End();
-        if (kana.Length > 0) AppendKana(result, kana.ToString(), cancellationToken);
+        if (kana.Length > 0)
+        {
+            AppendKana(result, kana.ToString(), cancellationToken);
+        }
+
         return result;
     }
 
@@ -64,21 +78,36 @@ internal static class VocalJapanese
     {
         var katakana = new StringBuilder(kana.Length);
         foreach (char c in kana)
+        {
             katakana.Append(c is >= '\u3041' and <= '\u3096' ? (char)(c + 0x60) : c);
+        }
 
         int start = 0;
         for (int i = 0; i <= katakana.Length; i++)
         {
             cancellationToken.ThrowIfCancellationRequested();
-            if (i < katakana.Length && katakana[i] is not ('ー' or 'ッ')) continue;
+            if (i < katakana.Length && katakana[i] is not ('ー' or 'ッ'))
+            {
+                continue;
+            }
+
             if (i > start)
+            {
                 AppendRomaji(result, ToStringUtil.GetRomanization(katakana.ToString(start, i - start)), cancellationToken);
+            }
+
             if (i < katakana.Length && katakana[i] == 'ッ')
+            {
                 result.Add(new("sil"));
+            }
             else if (i < katakana.Length)
             {
                 int vowel = result.FindLastIndex(p => VocalPhonemeInventory.Get(p.Symbol).IsVowel);
-                if (vowel < 0) throw VocalMultilingualPhonemizer.Unsupported("ー", VocalLanguage.Japanese);
+                if (vowel < 0)
+                {
+                    throw VocalMultilingualPhonemizer.Unsupported("ー", VocalLanguage.Japanese);
+                }
+
                 result.Add(result[vowel] with { Stressed = false });
             }
             start = i + 1;
@@ -94,11 +123,18 @@ internal static class VocalJapanese
             cancellationToken.ThrowIfCancellationRequested();
             char c = word[i];
             char next = i + 1 < word.Length ? word[i + 1] : '\0';
-            if (c == '\'') continue;
+            if (c == '\'')
+            {
+                continue;
+            }
+
             if (c == '\u0304')
             {
                 if (result.Count == 0 || !VocalPhonemeInventory.Get(result[^1].Symbol).IsVowel)
+                {
                     throw VocalMultilingualPhonemizer.Unsupported(text, VocalLanguage.Japanese);
+                }
+
                 result.Add(result[^1] with { Stressed = false });
                 continue;
             }
@@ -123,12 +159,16 @@ internal static class VocalJapanese
                 _ => throw VocalMultilingualPhonemizer.Unsupported(c.ToString(), VocalLanguage.Japanese),
             };
             if (next == c && c is 'k' or 'p' or 't' or 's')
+            {
                 result.Add(new("sil"));
+            }
             else
+            {
                 result.Add(new(sound)
                 {
                     SourceRepetitionLength = VocalPhonemizer.CappedRepetitionLength(word, i) == 3 ? 3 : 0,
                 });
+            }
         }
     }
 }

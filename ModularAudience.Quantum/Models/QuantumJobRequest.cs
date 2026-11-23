@@ -11,8 +11,13 @@ public record QuantumJobRequest(string CircuitQasm, int QubitCount, int Shots, s
         ArgumentException.ThrowIfNullOrWhiteSpace(this.CircuitQasm);
         ArgumentException.ThrowIfNullOrWhiteSpace(this.ClassicalRegister);
         if (this.QubitCount is < 4 or > 16)
+        {
             throw new ArgumentOutOfRangeException(nameof(this.QubitCount), "The circuit must measure between 4 and 16 qubits.");
+        }
+
         if (this.Shots is < 1 or > 1_000_000)
+        {
             throw new ArgumentOutOfRangeException(nameof(this.Shots), "Shots must be between 1 and 1,000,000.");
+        }
     }
 }

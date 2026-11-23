@@ -33,7 +33,11 @@ public partial class QuantumBeatEngineDialog
 
     private void ConnectionChanged()
     {
-        if (this.loading || this.closing || this.released) return;
+        if (this.loading || this.closing || this.released)
+        {
+            return;
+        }
+
         this.session.Disconnect(); this.checks["AllowCloudJobs"].Checked = false; this.connectionDirty = true;
         this.SetStatus("Connection settings changed. Test / Connect again before submitting an IBM job.");
         this.ScheduleSave(); this.UpdateAvailability();
@@ -43,7 +47,10 @@ public partial class QuantumBeatEngineDialog
     {
         var settings = this.CaptureConnection();
         if (settings.Secret.Length == 0 || settings.ServiceCrn.Length == 0)
+        {
             throw new ArgumentException("Enter an API key or IAM bearer token and an instance CRN.");
+        }
+
         this.SetStatus("Checking IBM authentication and reading accessible backends. No job is being submitted...");
         var backends = await this.session.ConnectAsync(settings.ToOptions(), token);
         token.ThrowIfCancellationRequested();
@@ -61,14 +68,22 @@ public partial class QuantumBeatEngineDialog
 
     private void Disconnect()
     {
-        if (this.busy) return;
+        if (this.busy)
+        {
+            return;
+        }
+
         this.session.Disconnect(); this.checks["AllowCloudJobs"].Checked = false; this.UpdateAvailability();
         this.SetStatus("Disconnected. Saved encrypted profiles were kept. Local simulation remains available.");
     }
 
     private void SaveConnection()
     {
-        if (this.busy) return;
+        if (this.busy)
+        {
+            return;
+        }
+
         try
         {
             this.connectionDirty = true; this.SaveConnectionIfChanged();
@@ -78,7 +93,11 @@ public partial class QuantumBeatEngineDialog
     }
     private void SaveConnectionIfChanged()
     {
-        if (!this.connectionDirty) return;
+        if (!this.connectionDirty)
+        {
+            return;
+        }
+
         this.store.SaveConnection(this.CaptureConnection()); this.connectionDirty = false; this.RefreshConnectionProfileNames();
     }
     private void RefreshConnectionProfileNames()
@@ -90,7 +109,11 @@ public partial class QuantumBeatEngineDialog
     }
     private void LoadSelectedConnection()
     {
-        if (this.busy) return;
+        if (this.busy)
+        {
+            return;
+        }
+
         try
         {
             this.session.Disconnect(); this.ApplyConnection(this.store.LoadConnection(this.connectionProfileCombo.Text.Trim()));
@@ -101,7 +124,11 @@ public partial class QuantumBeatEngineDialog
     }
     private void ForgetConnection()
     {
-        if (this.busy) return;
+        if (this.busy)
+        {
+            return;
+        }
+
         try
         {
             this.store.DeleteConnection(this.connectionProfileCombo.Text.Trim()); this.session.Disconnect();

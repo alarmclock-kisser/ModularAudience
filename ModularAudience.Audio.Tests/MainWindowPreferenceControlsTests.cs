@@ -67,7 +67,11 @@ public sealed class MainWindowPreferenceControlsTests
             Assert.AreEqual(256, restoredBits.SelectedItem);
             Assert.AreEqual(9f, saved.LogFontSize);
         }
-        finally { if (Directory.Exists(directory)) Directory.Delete(directory, recursive: true); }
+        finally { if (Directory.Exists(directory))
+            {
+                Directory.Delete(directory, recursive: true);
+            }
+        }
     }
 
     [STATestMethod]

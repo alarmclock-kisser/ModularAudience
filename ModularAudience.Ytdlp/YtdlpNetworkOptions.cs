@@ -25,7 +25,10 @@ public sealed record YtdlpNetworkOptions
         if (this.ProxyUrl is { } proxy)
         {
             handler.UseProxy = proxy.Length > 0;
-            if (proxy.Length > 0) handler.Proxy = new WebProxy(proxy);
+            if (proxy.Length > 0)
+            {
+                handler.Proxy = new WebProxy(proxy);
+            }
         }
         if (this.IpVersion != YtdlpIpVersion.Automatic)
         {
@@ -34,7 +37,11 @@ public sealed record YtdlpNetworkOptions
             handler.ConnectCallback = async (context, token) =>
             {
                 var addresses = await Dns.GetHostAddressesAsync(context.DnsEndPoint.Host, family, token);
-                if (addresses.Length == 0) throw new SocketException((int)SocketError.HostNotFound);
+                if (addresses.Length == 0)
+                {
+                    throw new SocketException((int)SocketError.HostNotFound);
+                }
+
                 var socket = new Socket(family, SocketType.Stream, ProtocolType.Tcp);
                 try
                 {
@@ -49,17 +56,39 @@ public sealed record YtdlpNetworkOptions
 
     internal void AddArguments(List<string> arguments)
     {
-        if (!Enum.IsDefined(IpVersion)) throw new ArgumentException("Invalid IP version.");
-        if (UseSystemCertificateTrust) arguments.AddRange(["--compat-options", "no-certifi"]);
+        if (!Enum.IsDefined(IpVersion))
+        {
+            throw new ArgumentException("Invalid IP version.");
+        }
+
+        if (UseSystemCertificateTrust)
+        {
+            arguments.AddRange(["--compat-options", "no-certifi"]);
+        }
+
         if (IpVersion != YtdlpIpVersion.Automatic)
+        {
             arguments.Add(IpVersion == YtdlpIpVersion.IPv4 ? "--force-ipv4" : "--force-ipv6");
-        if (ProxyUrl is null) return;
-        if (ProxyUrl.Length > 2048 || ProxyUrl.Any(char.IsControl)) throw new ArgumentException("Invalid proxy URL.");
+        }
+
+        if (ProxyUrl is null)
+        {
+            return;
+        }
+
+        if (ProxyUrl.Length > 2048 || ProxyUrl.Any(char.IsControl))
+        {
+            throw new ArgumentException("Invalid proxy URL.");
+        }
+
         if (ProxyUrl.Length > 0 && (!Uri.TryCreate(ProxyUrl, UriKind.Absolute, out var proxy) ||
             proxy.Scheme is not ("http" or "https") || string.IsNullOrEmpty(proxy.Host) ||
             !string.IsNullOrEmpty(proxy.UserInfo) || !string.IsNullOrEmpty(proxy.Query) ||
             !string.IsNullOrEmpty(proxy.Fragment) || proxy.AbsolutePath != "/"))
+        {
             throw new ArgumentException("Use an HTTP(S) proxy URL without credentials, path, query or fragment.");
+        }
+
         arguments.AddRange(["--proxy", ProxyUrl]);
     }
 }

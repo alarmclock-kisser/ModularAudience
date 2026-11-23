@@ -14,7 +14,11 @@ public static class MixTempoOrigins
         double scale = 1; var visited = new HashSet<Guid>();
         while (source.TempoOriginId is Guid id)
         {
-            if (!visited.Add(source.Id) || !mix.Sources.TryGetValue(id, out MixSource? origin)) throw new InvalidDataException("Missing or cyclic tempo origin.");
+            if (!visited.Add(source.Id) || !mix.Sources.TryGetValue(id, out MixSource? origin))
+            {
+                throw new InvalidDataException("Missing or cyclic tempo origin.");
+            }
+
             scale *= source.TempoOriginScale; source = origin;
         }
         return (source, scale);
@@ -28,9 +32,17 @@ public static class MixTempoOrigins
         ClipTempoMode mode, PlaylistStretchSettings? settings, CancellationToken token, HashSet<Guid> path)
     {
         token.ThrowIfCancellationRequested();
-        if (!double.IsFinite(targetBpm) || targetBpm is < 10 or > 400) throw new ArgumentOutOfRangeException(nameof(targetBpm));
+        if (!double.IsFinite(targetBpm) || targetBpm is < 10 or > 400)
+        {
+            throw new ArgumentOutOfRangeException(nameof(targetBpm));
+        }
+
         var (origin, _) = Resolve(mix, source);
-        if (!path.Add(origin.Id)) throw new InvalidDataException("Cyclic audio rendering recipes.");
+        if (!path.Add(origin.Id))
+        {
+            throw new InvalidDataException("Cyclic audio rendering recipes.");
+        }
+
         try
         {
             if (origin.TempoRecipe is MixTempoRecipe recipe)
@@ -46,7 +58,11 @@ public static class MixTempoOrigins
             }
             double baseBpm = float.IsFinite(origin.Bpm) && origin.Bpm > 0 ? origin.Bpm :
                 float.IsFinite(source.TempoOriginBpm) && source.TempoOriginBpm > 0 ? source.TempoOriginBpm : fallbackBpm;
-            if (!double.IsFinite(baseBpm) || baseBpm <= 0) throw new ArgumentException("The original audio needs a valid base tempo.");
+            if (!double.IsFinite(baseBpm) || baseBpm <= 0)
+            {
+                throw new ArgumentException("The original audio needs a valid base tempo.");
+            }
+
             var input = new MixSource { Id = origin.Id, Name = origin.Name, Data = origin.Data, SampleRate = origin.SampleRate,
                 Channels = origin.Channels, Bpm = (float)baseBpm };
             MixSource rendered = Math.Abs(baseBpm - targetBpm) < 1e-9 ? input :
@@ -63,7 +79,11 @@ public static class MixTempoOrigins
     {
         recipe.Validate(mix.Sources); token.ThrowIfCancellationRequested();
         using var snapshot = new MixArrangement { Bpm = targetBpm };
-        foreach (var pair in mix.Sources) snapshot.Sources.Add(pair.Key, pair.Value);
+        foreach (var pair in mix.Sources)
+        {
+            snapshot.Sources.Add(pair.Key, pair.Value);
+        }
+
         MixLane lane = JsonSerializer.Deserialize<MixLane>(JsonSerializer.Serialize(recipe.Lane))!;
         snapshot.Lanes.Add(lane);
         var replacements = new Dictionary<Guid, MixSource>();
@@ -96,11 +116,22 @@ public static class MixTempoOrigins
         MixClip[] selected = lane.Clips.Where(clip => recipe.ClipIds.Contains(clip.Id)).ToArray();
         if (selected.Length > 0)
         {
-            if (Math.Abs(recipe.Start - originalSelected.Min(clip => clip.Start)) < 0.5 / MixEffectEditSession.SampleRate) start = selected.Min(clip => clip.Start);
+            if (Math.Abs(recipe.Start - originalSelected.Min(clip => clip.Start)) < 0.5 / MixEffectEditSession.SampleRate)
+            {
+                start = selected.Min(clip => clip.Start);
+            }
+
             double originalEnd = originalSelected.Max(clip => clip.Start + ClipDuration(mix, recipe.Bpm, clip));
-            if (Math.Abs(recipe.End - originalEnd) < 0.5 / MixEffectEditSession.SampleRate) end = selected.Max(clip => clip.Start + snapshot.ClipDuration(clip));
+            if (Math.Abs(recipe.End - originalEnd) < 0.5 / MixEffectEditSession.SampleRate)
+            {
+                end = selected.Max(clip => clip.Start + snapshot.ClipDuration(clip));
+            }
         }
-        if (end <= start) end = start + 1d / MixEffectEditSession.SampleRate;
+        if (end <= start)
+        {
+            end = start + 1d / MixEffectEditSession.SampleRate;
+        }
+
         using MixEffectEditSession session = await MixEffectEditSession.CaptureAsync(snapshot,
             [new MixEffectRegion(lane.Id, start, end, recipe.ClipIds.ToHashSet())], token).ConfigureAwait(false);
         MixEffectInput input = session.Inputs.Single();
@@ -108,7 +139,10 @@ public static class MixTempoOrigins
         var automation = recipe.Effect?.Automation ?? recipe.AutoTune?.Automation;
         if (automation?.HasEnabledCurves == true)
         {
-            if (recipe.CurveScope is null) execution = execution with { CurveScope = session.CreateCurveScope(0, automation.Timing, token) };
+            if (recipe.CurveScope is null)
+            {
+                execution = execution with { CurveScope = session.CreateCurveScope(0, automation.Timing, token) };
+            }
             else
             {
                 int frames = input.Samples.Length / input.Channels;
@@ -134,11 +168,19 @@ public static class MixTempoOrigins
 
     private static AudioEffectResult SliceRecipeOutput(MixTempoRecipe recipe, AudioEffectResult result)
     {
-        if (recipe.OutputStartFraction == 0 && recipe.OutputEndFraction == 1) return result;
+        if (recipe.OutputStartFraction == 0 && recipe.OutputEndFraction == 1)
+        {
+            return result;
+        }
+
         int frames = result.Samples.Length / result.Channels;
         int start = Math.Clamp((int)Math.Round(frames * recipe.OutputStartFraction), 0, frames);
         int end = Math.Clamp((int)Math.Round(frames * recipe.OutputEndFraction), start, frames);
-        if (end <= start) throw new InvalidDataException("The tempo recipe produced an empty effect segment.");
+        if (end <= start)
+        {
+            throw new InvalidDataException("The tempo recipe produced an empty effect segment.");
+        }
+
         return result with
         {
             Samples = result.Samples.AsSpan(checked(start * result.Channels), checked((end - start) * result.Channels)).ToArray(),

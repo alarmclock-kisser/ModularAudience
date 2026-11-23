@@ -701,7 +701,10 @@ namespace ModularAudience.Forms.Modules
             if (this.CurrentTrackView != null)
             {
                 int index = this.FindPlaylistTrackIndex(this.CurrentTrackView.OriginalAudio.Id);
-                if (index >= 0) this.checkedListBox_playlistTracks.SelectedIndex = index;
+                if (index >= 0)
+                {
+                    this.checkedListBox_playlistTracks.SelectedIndex = index;
+                }
             }
         }
 
@@ -1624,7 +1627,10 @@ namespace ModularAudience.Forms.Modules
 
             // SampleRateFactor is the rate currently applied by the live varispeed pipeline.
             double rateFactor = audio.SampleRateFactor;
-            if (Math.Abs(rateFactor - 1.0) < 0.0005) rateFactor = 1.0;
+            if (Math.Abs(rateFactor - 1.0) < 0.0005)
+            {
+                rateFactor = 1.0;
+            }
 
             // JumpSamples ist in Frames gerechnet (SampleRate * ms / 1000),
             // skaliert mit dem Loop-Multiplier, damit die Sprungdistanz proportional
@@ -1778,13 +1784,19 @@ namespace ModularAudience.Forms.Modules
         /// </summary>
         private async Task<float[]?> ResampleAndExtractAsync(AudioObj audio, long startSample, long endSample, int targetChannels)
         {
-            if (audio.Data == null || audio.Data.Length == 0) return null;
+            if (audio.Data == null || audio.Data.Length == 0)
+            {
+                return null;
+            }
 
             int channels = audio.Channels;
             long loopStart = startSample;
             long loopEnd = endSample;
 
-            if (loopStart >= loopEnd) return null;
+            if (loopStart >= loopEnd)
+            {
+                return null;
+            }
 
             // Clamp to data bounds
             long totalSamples = audio.Data.LongLength;
@@ -1792,7 +1804,10 @@ namespace ModularAudience.Forms.Modules
             loopEnd = Math.Max(loopStart, Math.Min(loopEnd, totalSamples));
 
             long loopLengthSamples = loopEnd - loopStart;
-            if (loopLengthSamples <= 0) return null;
+            if (loopLengthSamples <= 0)
+            {
+                return null;
+            }
 
             // The loop range is stored in original sample indices. When a track plays
             // at a custom rate (e.g. +50%), the looped region sounds faster and higher
@@ -1810,7 +1825,10 @@ namespace ModularAudience.Forms.Modules
         {
             int channels = audio.Channels;
             long loopLengthSamples = endSample - startSample;
-            if (loopLengthSamples <= 0) return null;
+            if (loopLengthSamples <= 0)
+            {
+                return null;
+            }
 
             if (targetChannels == channels)
             {
@@ -1861,7 +1879,10 @@ namespace ModularAudience.Forms.Modules
         private float[] ConvertChannels(float[] data, int fromChannels, int toChannels)
         {
             int frames = data.Length / fromChannels;
-            if (toChannels == fromChannels) return data;
+            if (toChannels == fromChannels)
+            {
+                return data;
+            }
 
             if (fromChannels == 1 && toChannels == 2)
             {
@@ -1937,7 +1958,10 @@ namespace ModularAudience.Forms.Modules
         /// </summary>
         private async Task<AudioObj?> MergeLoopedTracksAsync(IReadOnlyList<AudioObj> audios)
         {
-            if (audios.Count == 0) return null;
+            if (audios.Count == 0)
+            {
+                return null;
+            }
 
             // Determine target channel count: stereo if any track is stereo, else mono
             int targetChannels = audios.Any(a => a.Channels == 2) ? 2 : 1;
@@ -1970,7 +1994,10 @@ namespace ModularAudience.Forms.Modules
                 // SampleRateFactor is the rate currently applied by the live
                 // varispeed pipeline. Manual and sync factors are already folded into it.
                 double rateFactor = Math.Clamp(audio.SampleRateFactor, 0.01, float.MaxValue);
-                if (Math.Abs(rateFactor - 1.0) < 0.0005) rateFactor = 1.0;
+                if (Math.Abs(rateFactor - 1.0) < 0.0005)
+                {
+                    rateFactor = 1.0;
+                }
 
                 long captureStartFrame = Math.Clamp(audio.Position, 0L, totalFrames - 1);
                 long loopStartFrame = -1;
@@ -2002,7 +2029,10 @@ namespace ModularAudience.Forms.Modules
                 trackInfos.Add((audio, captureStartFrame, loopStartFrame, loopEndFrame, rateFactor, wrapsLoop));
             }
 
-            if (trackInfos.Count == 0) return null;
+            if (trackInfos.Count == 0)
+            {
+                return null;
+            }
 
             bool captureBeforeClick = maxLoopDurationSeconds <= 0.0;
             if (captureBeforeClick)
@@ -2017,7 +2047,10 @@ namespace ModularAudience.Forms.Modules
                 }
             }
 
-            if (maxLoopDurationSeconds <= 0.0) return null;
+            if (maxLoopDurationSeconds <= 0.0)
+            {
+                return null;
+            }
 
             int outputSampleRate = Math.Max(1, trackInfos[0].audio.SampleRate);
             long maxEffectiveLengthFrames = Math.Max(1L,
@@ -2036,7 +2069,10 @@ namespace ModularAudience.Forms.Modules
 
             // Find the longest extracted data to determine output length
             int maxLen = extractedData.Max(d => d?.Length ?? 0);
-            if (maxLen == 0) return null;
+            if (maxLen == 0)
+            {
+                return null;
+            }
 
             // Add all extracted samples together (additive merge),
             // scaling each track by its playback volume (Volume is 0-100, 100 = full).
@@ -2220,11 +2256,18 @@ namespace ModularAudience.Forms.Modules
                 if (wrapsLoop && loopLength > 0)
                 {
                     long relative = (sourceFrame - loopStartFrame) % loopLength;
-                    if (relative < 0) relative += loopLength;
+                    if (relative < 0)
+                    {
+                        relative += loopLength;
+                    }
+
                     sourceFrame = loopStartFrame + relative;
                 }
 
-                if (sourceFrame < 0 || sourceFrame >= totalFrames) continue;
+                if (sourceFrame < 0 || sourceFrame >= totalFrames)
+                {
+                    continue;
+                }
 
                 int sourceOffset = checked((int)(sourceFrame * channels));
                 Array.Copy(audio.Data, sourceOffset, result, frame * channels, channels);

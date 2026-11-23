@@ -4637,7 +4637,10 @@ namespace ModularAudience.Forms.Modules.BeatclickerGame
                 // Fade out over the popup lifetime
                 float alpha = (float)(255 * (1f - age / ComboPopupDuration));
                 int a = Math.Clamp((int)alpha, 0, 255);
-                if (a <= 0) continue;
+                if (a <= 0)
+                {
+                    continue;
+                }
 
                 // Slight upward drift for a "pop" feel
                 float y = cp.Y - 40f - age * 30f;
@@ -4662,7 +4665,10 @@ namespace ModularAudience.Forms.Modules.BeatclickerGame
 
                 float alpha = (float)(255 * (1f - age / FailEffectDuration));
                 int a = Math.Clamp((int)alpha, 0, 255);
-                if (a <= 0) continue;
+                if (a <= 0)
+                {
+                    continue;
+                }
 
                 // Draw a red X with a white border at the fail position
                 int size = 30;

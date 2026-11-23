@@ -89,7 +89,10 @@ public sealed class SoundboardPage : ContentPage
             async () =>
             {
                 if (this.lockSwitch.IsToggled)
+                {
                     return;
+                }
+
                 string action = await this.DisplayActionSheetAsync(
                     $"Collection: {groupName}", "Cancel", null, "Rename collection", "Delete collection");
                 if (action == "Rename collection")
@@ -133,9 +136,13 @@ public sealed class SoundboardPage : ContentPage
                 async () =>
                 {
                     if (this.lockSwitch.IsToggled)
+                    {
                         await this.PlayWhileHeldAsync(item);
+                    }
                     else
+                    {
                         await this.ShowItemActionsAsync(item);
+                    }
                 },
                 () => this.PlayAsync(item));
             buttons.Children.Add(button);
@@ -160,7 +167,10 @@ public sealed class SoundboardPage : ContentPage
                 {
                     await Task.Delay(500, token);
                     if (token.IsCancellationRequested)
+                    {
                         return;
+                    }
+
                     longPressTriggered = true;
                     await MainThread.InvokeOnMainThreadAsync(onLongPress);
                 }
@@ -301,7 +311,10 @@ public sealed class SoundboardPage : ContentPage
                 }),
             });
             if (file == null)
+            {
                 return;
+            }
+
             await using Stream input = await file.OpenReadAsync();
             WaveAudioData wave = WaveAudioReader.Read(input);
             var audio = new VocalAudioData
@@ -341,7 +354,9 @@ public sealed class SoundboardPage : ContentPage
         {
             VocalAudioData audio = await this.store.ReadAudioAsync(item, cancellation.Token);
             while (!cancellation.IsCancellationRequested)
+            {
                 await this.player.PlayAsync(audio, cancellation.Token);
+            }
         }
         catch (OperationCanceledException) when (cancellation.IsCancellationRequested)
         {

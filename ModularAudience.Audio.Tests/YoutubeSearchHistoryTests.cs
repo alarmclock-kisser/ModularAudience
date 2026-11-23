@@ -13,7 +13,10 @@ public sealed class YoutubeSearchHistoryTests
     public async Task InstalledClientCanLoadRealSearchResults()
     {
         if (Environment.GetEnvironmentVariable("MODULARAUDIENCE_YOUTUBE_LIVE_TEST") != "1")
+        {
             Assert.Inconclusive("Enable MODULARAUDIENCE_YOUTUBE_LIVE_TEST for the live YouTube request.");
+        }
+
         var client = new YtdlpClient();
         var progress = new List<string>();
         client.ProgressChanged += (_, text) => { progress.Add(text); Console.WriteLine(text); };
@@ -80,7 +83,11 @@ public sealed class YoutubeSearchHistoryTests
                 type.GetMethod("ShowSearchHistory", flags)!.Invoke(window, null);
                 var menu = (ContextMenuStrip)type.GetField("searchHistoryMenu", flags)!.GetValue(window)!;
                 Assert.HasCount(2, menu.Items);
-                if (previous != null) Assert.AreSame(previous, menu);
+                if (previous != null)
+                {
+                    Assert.AreSame(previous, menu);
+                }
+
                 menu.Close(ToolStripDropDownCloseReason.Keyboard);
                 Application.DoEvents();
                 Assert.IsFalse(menu.IsDisposed, "Dismissal must not dispose a ToolStrip inside its close callback.");
@@ -99,7 +106,11 @@ public sealed class YoutubeSearchHistoryTests
         try
         {
             var history = new YoutubeSearchHistory(path);
-            for (int i = 0; i < 40; i++) history.Add("Query " + i);
+            for (int i = 0; i < 40; i++)
+            {
+                history.Add("Query " + i);
+            }
+
             history.Add(" query 12 ");
             var loaded = new YoutubeSearchHistory(path);
             Assert.HasCount(32, loaded.Entries);

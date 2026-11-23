@@ -23,10 +23,18 @@ public sealed class YtdlpPipelineRetryTests
             {
                 lock (sync) { network++; peak = Math.Max(peak, network); }
                 await Task.Delay(20, token);
-                lock (sync) network--;
+                lock (sync)
+                {
+                    network--;
+                }
+
                 release();
                 release(); // Releasing twice must be harmless.
-                if (Interlocked.Increment(ref waiting) == total) allWaiting.SetResult();
+                if (Interlocked.Increment(ref waiting) == total)
+                {
+                    allWaiting.SetResult();
+                }
+
                 await finish.Task.WaitAsync(token);
             }, cancellation.Token);
         try
@@ -52,11 +60,23 @@ public sealed class YtdlpPipelineRetryTests
         Task run = YtdlpBatchRunner.RunPipelineQueueAsync(queue, 1, async (item, release, token) =>
         {
             release();
-            if (item == 0) firstWaiting.SetResult(); else secondStarted.SetResult();
+            if (item == 0)
+            {
+                firstWaiting.SetResult();
+            }
+            else
+            {
+                secondStarted.SetResult();
+            }
+
             try { await Task.Delay(Timeout.InfiniteTimeSpan, token); }
             finally
             {
-                if (Interlocked.Increment(ref cleanups) == 2) cleaning.SetResult();
+                if (Interlocked.Increment(ref cleanups) == 2)
+                {
+                    cleaning.SetResult();
+                }
+
                 await releaseCleanup.Task;
             }
         }, cancellation.Token, changed);

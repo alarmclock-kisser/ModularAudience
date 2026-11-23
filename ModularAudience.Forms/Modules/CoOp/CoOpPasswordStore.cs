@@ -11,7 +11,9 @@ internal sealed class CoOpPasswordStore(string path)
     internal string Load()
     {
         if (!File.Exists(this.path))
+        {
             return string.Empty;
+        }
 
         byte[] protectedBytes = Convert.FromBase64String(File.ReadAllText(this.path));
         byte[] passwordBytes = ProtectedData.Unprotect(

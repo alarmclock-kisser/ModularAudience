@@ -41,11 +41,19 @@ internal static class EffectDialogHost
     {
         // Restore the last used settings for this effect type (in-RAM, instance-wide) if available.
         AudioEffectSettings? stored = EffectSettingsStore.Get(context.Defaults.Effect);
-        if (stored is not null) context = context with { Defaults = stored };
+        if (stored is not null)
+        {
+            context = context with { Defaults = stored };
+        }
+
         EffectOptionsEditor? editor = null;
         var accepted = () =>
         {
-            if (editor is not null) EffectSettingsStore.Set(context.Defaults.Effect, editor.CurrentSettings);
+            if (editor is not null)
+            {
+                EffectSettingsStore.Set(context.Defaults.Effect, editor.CurrentSettings);
+            }
+
             form.DialogResult = DialogResult.OK; form.Close();
         };
         editor = new EffectOptionsEditor(context, accepted, form.Close, store, preview);
@@ -133,7 +141,11 @@ internal sealed class EffectOptionsEditor : UserControl
         this.maxThreads.ValueChanged += (_, _) => this.InvalidateResult();
         this.presets.Presets.SelectedIndexChanged += (_, _) =>
         {
-            if (!this.refreshing) this.PresetAction(this.LoadSelectedPreset);
+            if (!this.refreshing)
+            {
+                this.PresetAction(this.LoadSelectedPreset);
+            }
+
             this.UpdateButtons();
         };
         this.presets.Presets.DropDown += (_, _) => this.PresetAction(() => this.RefreshPresets(this.presets.Presets.SelectedItem as EffectPreset));
@@ -146,7 +158,7 @@ internal sealed class EffectOptionsEditor : UserControl
         this.ApplyButton.Click += async (_, _) => await this.AcceptEffectAsync();
         this.CancelButton.Click += (_, _) => cancel();
         this.dry.CheckedChanged += (_, _) => this.StopPreview(); this.loop.CheckedChanged += (_, _) => this.StopPreview();
-        this.playbackTimer.Tick += (_, _) => { if (!this.preview.IsPlaying) this.StopPreview(); };
+        this.playbackTimer.Tick += (_, _) => { if (!this.preview.IsPlaying) { this.StopPreview(); } };
         this.PresetAction(() => this.RefreshPresets(null)); this.UpdateButtons();
     }
 
@@ -157,16 +169,27 @@ internal sealed class EffectOptionsEditor : UserControl
     {
         this.revision++; this.rendered = null; this.renderedSettings = null;
         this.active?.Cancel(); this.StopPreview();
-        if (!this.disposed) this.status.Text = "Parameters changed. Prehear or apply to render the new settings.";
+        if (!this.disposed)
+        {
+            this.status.Text = "Parameters changed. Prehear or apply to render the new settings.";
+        }
     }
 
     private async Task<AudioEffectResult?> RenderAsync()
     {
-        if (this.active is not null || this.disposed) return null;
+        if (this.active is not null || this.disposed)
+        {
+            return null;
+        }
+
         AudioEffectSettings settings;
         try { this.ValidateChildren(); settings = this.CurrentSettings; }
         catch (Exception error) when (IsEffectError(error)) { this.ShowError(error); return null; }
-        if (this.rendered is not null && settings.SoundEquals(this.renderedSettings)) return this.rendered;
+        if (this.rendered is not null && settings.SoundEquals(this.renderedSettings))
+        {
+            return this.rendered;
+        }
+
         int generation = this.revision;
         using var cancellation = CancellationTokenSource.CreateLinkedTokenSource(this.lifetime.Token);
         this.active = cancellation; this.UpdateButtons(); this.progress.Value = 0;
@@ -174,35 +197,56 @@ internal sealed class EffectOptionsEditor : UserControl
         var report = new Progress<double>(value =>
         {
             if (!this.disposed && generation == this.revision && double.IsFinite(value))
+            {
                 this.progress.Value = (int)Math.Round(Math.Clamp(value, 0, 1) * this.progress.Maximum);
+            }
         });
         try
         {
             AudioEffectResult result = await this.render(settings, report, cancellation.Token);
             cancellation.Token.ThrowIfCancellationRequested();
-            if (this.disposed || generation != this.revision) return null;
+            if (this.disposed || generation != this.revision)
+            {
+                return null;
+            }
+
             if (result.Channels <= 0 || result.Samples.Length == 0 || result.Samples.Length % result.Channels != 0 || result.Samples.Any(sample => !float.IsFinite(sample)))
+            {
                 throw new InvalidOperationException("The effect must return finite, complete audio frames.");
+            }
+
             this.rendered = result; this.renderedSettings = settings.Copy(); this.progress.Value = this.progress.Maximum;
             double duration = result.Samples.Length / (double)result.Channels / this.context.Session.SampleRate;
             this.status.Text = $"Ready: {duration:F3}s / {result.Channels} ch. OK creates one undo step; Cancel leaves the audio unchanged.";
             return result;
         }
-        catch (OperationCanceledException) { if (!this.disposed) this.status.Text = "Rendering cancelled; audio unchanged."; return null; }
+        catch (OperationCanceledException) { if (!this.disposed) { this.status.Text = "Rendering cancelled; audio unchanged."; } return null; }
         catch (Exception error) when (IsEffectError(error)) { this.ShowError(error); return null; }
-        finally { if (ReferenceEquals(this.active, cancellation)) this.active = null; this.UpdateButtons(); }
+        finally { if (ReferenceEquals(this.active, cancellation)) { this.active = null; } this.UpdateButtons(); }
     }
 
     internal async Task PrehearAsync()
     {
         if (this.preview.IsPlaying) { this.StopPreview(); return; }
         AudioEffectResult? result = this.dry.Checked ? new(this.context.Session.Input.ToArray(), this.context.Session.Channels) : await this.RenderAsync();
-        if (result is null || this.disposed) return;
+        if (result is null || this.disposed)
+        {
+            return;
+        }
+
         int generation = this.revision;
         try
         {
-            if (this.context.BeforePreviewAsync is not null) await this.context.BeforePreviewAsync();
-            if (this.disposed || generation != this.revision) return;
+            if (this.context.BeforePreviewAsync is not null)
+            {
+                await this.context.BeforePreviewAsync();
+            }
+
+            if (this.disposed || generation != this.revision)
+            {
+                return;
+            }
+
             this.preview.Play(result.Samples, this.context.Session.SampleRate, result.Channels, this.loop.Checked);
             this.prehear.Text = "Stop prehear"; this.playbackTimer.Start();
         }
@@ -211,24 +255,43 @@ internal sealed class EffectOptionsEditor : UserControl
 
     internal async Task AcceptEffectAsync()
     {
-        if (this.committing || this.disposed) return;
+        if (this.committing || this.disposed)
+        {
+            return;
+        }
+
         this.StopPreview(); AudioEffectResult? result = await this.RenderAsync();
-        if (result is null || this.disposed) return;
+        if (result is null || this.disposed)
+        {
+            return;
+        }
+
         using var cancellation = CancellationTokenSource.CreateLinkedTokenSource(this.lifetime.Token);
         this.active = cancellation; this.committing = true; this.UpdateButtons();
         try
         {
             await this.context.ApplyAsync(result, cancellation.Token);
-            if (!this.disposed) this.accepted();
+            if (!this.disposed)
+            {
+                this.accepted();
+            }
         }
-        catch (OperationCanceledException) { if (!this.disposed) this.status.Text = "Apply cancelled."; }
+        catch (OperationCanceledException) { if (!this.disposed)
+            {
+                this.status.Text = "Apply cancelled.";
+            }
+        }
         catch (Exception error) when (IsEffectError(error)) { this.ShowError(error); }
-        finally { if (ReferenceEquals(this.active, cancellation)) this.active = null; this.committing = false; this.UpdateButtons(); }
+        finally { if (ReferenceEquals(this.active, cancellation)) { this.active = null; } this.committing = false; this.UpdateButtons(); }
     }
 
     internal void LoadSelectedPreset()
     {
-        if (this.presets.Presets.SelectedItem is not EffectPreset selected) return;
+        if (this.presets.Presets.SelectedItem is not EffectPreset selected)
+        {
+            return;
+        }
+
         EffectPreset loaded = selected.IsBuiltIn ? selected : this.store.Load(selected.Name);
         this.presets.PresetName.Text = loaded.IsBuiltIn ? string.Empty : loaded.Name;
         this.parameters.ApplySettings(loaded.Parameters);
@@ -243,14 +306,22 @@ internal sealed class EffectOptionsEditor : UserControl
 
     internal void RenamePreset()
     {
-        if (this.presets.Presets.SelectedItem is not EffectPreset { IsBuiltIn: false } selected) return;
+        if (this.presets.Presets.SelectedItem is not EffectPreset { IsBuiltIn: false } selected)
+        {
+            return;
+        }
+
         EffectPreset renamed = this.store.Rename(selected.Name, this.presets.PresetName.Text);
         this.presets.PresetName.Text = renamed.Name; this.RefreshPresets(renamed); this.status.Text = "Renamed: " + renamed.Name;
     }
 
     internal void DeletePreset()
     {
-        if (this.presets.Presets.SelectedItem is not EffectPreset { IsBuiltIn: false } selected) return;
+        if (this.presets.Presets.SelectedItem is not EffectPreset { IsBuiltIn: false } selected)
+        {
+            return;
+        }
+
         this.store.Delete(selected.Name); this.RefreshPresets(null); this.presets.PresetName.Clear();
         this.parameters.ApplySettings(this.context.Defaults); this.status.Text = "Preset deleted; parameters reset to defaults.";
     }
@@ -278,10 +349,14 @@ internal sealed class EffectOptionsEditor : UserControl
     }
 
     private void PresetAction(Action action) { try { action(); } catch (Exception error) when (IsEffectError(error)) { this.ShowError(error); } }
-    private void ShowError(Exception error) { if (!this.disposed) this.status.Text = error.Message; LogManager.Log("Effect failed.", error); }
+    private void ShowError(Exception error) { if (!this.disposed) { this.status.Text = error.Message; } LogManager.Log("Effect failed.", error); }
     private void UpdateButtons()
     {
-        if (this.disposed) return;
+        if (this.disposed)
+        {
+            return;
+        }
+
         bool busy = this.active is not null;
         this.ApplyButton.Enabled = this.prehear.Enabled = !busy;
         this.presets.UpdateState(busy, this.presets.Presets.SelectedItem is EffectPreset, this.presets.Presets.SelectedItem is EffectPreset { IsBuiltIn: false });
@@ -290,8 +365,15 @@ internal sealed class EffectOptionsEditor : UserControl
     private void StopPreview()
     {
         this.playbackTimer.Stop();
-        try { this.preview.Stop(); } catch (Exception error) when (IsEffectError(error)) { if (!this.disposed) this.status.Text = error.Message; }
-        if (!this.disposed) this.prehear.Text = "Prehear";
+        try { this.preview.Stop(); } catch (Exception error) when (IsEffectError(error)) { if (!this.disposed)
+            {
+                this.status.Text = error.Message;
+            }
+        }
+        if (!this.disposed)
+        {
+            this.prehear.Text = "Prehear";
+        }
     }
     internal void CancelWork() { this.lifetime.Cancel(); this.active?.Cancel(); this.StopPreview(); }
     internal static bool IsEffectError(Exception error) => error is ArgumentException or InvalidOperationException or ArithmeticException or

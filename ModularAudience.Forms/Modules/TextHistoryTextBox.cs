@@ -15,7 +15,11 @@ internal sealed class TextHistoryTextBox : TextBox
 
     protected override bool ProcessCmdKey(ref Message message, Keys keyData)
     {
-        if (ProcessHistoryCommand(keyData)) return true;
+        if (ProcessHistoryCommand(keyData))
+        {
+            return true;
+        }
+
         return base.ProcessCmdKey(ref message, keyData);
     }
 
@@ -36,7 +40,11 @@ internal sealed class TextHistoryTextBox : TextBox
 
     protected override void Dispose(bool disposing)
     {
-        if (disposing) history.Dispose();
+        if (disposing)
+        {
+            history.Dispose();
+        }
+
         base.Dispose(disposing);
     }
 }
@@ -67,7 +75,11 @@ internal sealed class TextHistoryRichTextBox : RichTextBox
 
     protected override bool ProcessCmdKey(ref Message message, Keys keyData)
     {
-        if (ProcessHistoryCommand(keyData)) return true;
+        if (ProcessHistoryCommand(keyData))
+        {
+            return true;
+        }
+
         if (keyData == Keys.Enter && !ReadOnly)
         {
             SelectedText = "\n";
@@ -78,7 +90,11 @@ internal sealed class TextHistoryRichTextBox : RichTextBox
 
     protected override void Dispose(bool disposing)
     {
-        if (disposing) history.Dispose();
+        if (disposing)
+        {
+            history.Dispose();
+        }
+
         base.Dispose(disposing);
     }
 }
@@ -129,7 +145,11 @@ internal sealed class TextEditHistory : IDisposable
     public bool Undo()
     {
         ThrowIfDisposed();
-        if (undo.Last is not { } last) return false;
+        if (undo.Last is not { } last)
+        {
+            return false;
+        }
+
         undo.RemoveLast();
         Apply(last.Value, undoing: true);
         redo.Push(last.Value);
@@ -139,7 +159,11 @@ internal sealed class TextEditHistory : IDisposable
     public bool Redo()
     {
         ThrowIfDisposed();
-        if (redo.Count == 0) return false;
+        if (redo.Count == 0)
+        {
+            return false;
+        }
+
         TextEdit edit = redo.Pop();
         Apply(edit, undoing: false);
         undo.AddLast(edit);
@@ -171,18 +195,27 @@ internal sealed class TextEditHistory : IDisposable
             return;
         }
 
-        if (currentText == previousText) return;
+        if (currentText == previousText)
+        {
+            return;
+        }
+
         TextEdit edit = pendingKeyboardEdit
             && TryCreateKeyboardEdit(previousText, currentText, out TextEdit keyboardEdit)
                 ? keyboardEdit
                 : CreateEdit(previousText, currentText);
         previousText = currentText;
         if (CanMerge(undo.Last?.Value, edit))
+        {
             undo.Last!.Value = Merge(undo.Last.Value, edit);
+        }
         else
         {
             undo.AddLast(edit);
-            if (undo.Count > MaxUndoSteps) undo.RemoveFirst();
+            if (undo.Count > MaxUndoSteps)
+            {
+                undo.RemoveFirst();
+            }
         }
         redo.Clear();
         pendingKey = Keys.None;
@@ -223,7 +256,10 @@ internal sealed class TextEditHistory : IDisposable
     {
         int start = 0;
         int sharedLength = Math.Min(oldText.Length, newText.Length);
-        while (start < sharedLength && oldText[start] == newText[start]) start++;
+        while (start < sharedLength && oldText[start] == newText[start])
+        {
+            start++;
+        }
 
         int oldEnd = oldText.Length;
         int newEnd = newText.Length;
@@ -256,7 +292,9 @@ internal sealed class TextEditHistory : IDisposable
     {
         if (previous is null || !previous.CanGroup || !current.CanGroup
             || current.ChangedAt - previous.ChangedAt > GroupDelayMilliseconds)
+        {
             return false;
+        }
 
         return current.Kind switch
         {
@@ -330,7 +368,11 @@ internal sealed class TextEditHistory : IDisposable
 
     public void Dispose()
     {
-        if (disposed) return;
+        if (disposed)
+        {
+            return;
+        }
+
         disposed = true;
         editor.TextChanged -= HandleTextChanged;
         editor.KeyDown -= HandleKeyDown;

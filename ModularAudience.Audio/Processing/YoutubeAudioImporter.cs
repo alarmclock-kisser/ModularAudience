@@ -18,21 +18,32 @@ namespace ModularAudience.Audio.Processing
         {
             ArgumentException.ThrowIfNullOrWhiteSpace(filePath);
             if (maximumWait < TimeSpan.Zero || maximumWait > TimeSpan.FromSeconds(300))
+            {
                 throw new ArgumentOutOfRangeException(nameof(maximumWait));
+            }
+
             var clock = System.Diagnostics.Stopwatch.StartNew();
             while (true)
             {
                 cancellationToken.ThrowIfCancellationRequested();
                 float? bpm = await Task.Run(() => ReadSharedBpmTag(filePath), cancellationToken).ConfigureAwait(false);
                 cancellationToken.ThrowIfCancellationRequested();
-                if (bpm is > 0 && float.IsFinite(bpm.Value)) return bpm;
+                if (bpm is > 0 && float.IsFinite(bpm.Value))
+                {
+                    return bpm;
+                }
+
                 if (maximumWait == TimeSpan.Zero)
                 {
                     await Task.Delay(TimeSpan.FromMilliseconds(250), cancellationToken).ConfigureAwait(false);
                     continue;
                 }
                 var remaining = maximumWait - clock.Elapsed;
-                if (remaining <= TimeSpan.Zero) return null;
+                if (remaining <= TimeSpan.Zero)
+                {
+                    return null;
+                }
+
                 await Task.Delay(remaining < TimeSpan.FromMilliseconds(250) ? remaining : TimeSpan.FromMilliseconds(250),
                     cancellationToken).ConfigureAwait(false);
             }
@@ -51,11 +62,18 @@ namespace ModularAudience.Audio.Processing
                         TagLib.Id3v2.TextInformationFrame.Get(id3, "TBPM", false)?.Text.FirstOrDefault(),
                         TagLib.Id3v2.UserTextInformationFrame.Get(id3, "BPM", false)?.Text.FirstOrDefault()
                     })
+                    {
                         if (float.TryParse(text?.Replace(',', '.'), System.Globalization.NumberStyles.Float,
                             System.Globalization.CultureInfo.InvariantCulture, out float bpm) && float.IsFinite(bpm) && bpm > 0)
+                        {
                             return bpm;
+                        }
+                    }
                 }
-                if (file.Tag.BeatsPerMinute > 0) return file.Tag.BeatsPerMinute;
+                if (file.Tag.BeatsPerMinute > 0)
+                {
+                    return file.Tag.BeatsPerMinute;
+                }
             }
             // Partial tags and temporary write locks are expected while the external tagger saves.
             catch (Exception error) when (error is IOException or UnauthorizedAccessException or TagLib.CorruptFileException or TagLib.UnsupportedFormatException) { }
@@ -81,7 +99,11 @@ namespace ModularAudience.Audio.Processing
             CancellationToken cancellationToken, float? taggedBpm = null)
         {
             ValidateArguments(filePath, title, cooldown, stretchSettings);
-            if (taggedBpm is { } value && !IsValidBpm(value)) throw new ArgumentOutOfRangeException(nameof(taggedBpm));
+            if (taggedBpm is { } value && !IsValidBpm(value))
+            {
+                throw new ArgumentOutOfRangeException(nameof(taggedBpm));
+            }
+
             cancellationToken.ThrowIfCancellationRequested();
             progress?.Report("Waiting for the import cooldown.");
             await Task.Delay(cooldown, cancellationToken).ConfigureAwait(false);
@@ -98,12 +120,20 @@ namespace ModularAudience.Audio.Processing
                     throw new InvalidDataException("The local audio file could not be loaded.");
                 }
 
-                if (temporary) audio.FilePath = string.Empty;
+                if (temporary)
+                {
+                    audio.FilePath = string.Empty;
+                }
+
                 cancellationToken.ThrowIfCancellationRequested();
                 RequireAudioData(audio);
                 // Keep the exact value observed before import, even if an external tagger
                 // is replacing the file's metadata while AudioObj reads it again.
-                if (taggedBpm is { } observed) audio.Bpm = observed;
+                if (taggedBpm is { } observed)
+                {
+                    audio.Bpm = observed;
+                }
+
                 audio.Rename(title);
                 if (stretchSettings != null)
                 {
@@ -167,8 +197,15 @@ namespace ModularAudience.Audio.Processing
             AudioObj audio, IProgress<string>? progress, CancellationToken cancellationToken)
         {
             cancellationToken.ThrowIfCancellationRequested();
-            if (IsValidBpm(audio.Bpm)) return audio.Bpm;
-            if (IsValidBpm(audio.ScannedBpm)) return audio.ScannedBpm;
+            if (IsValidBpm(audio.Bpm))
+            {
+                return audio.Bpm;
+            }
+
+            if (IsValidBpm(audio.ScannedBpm))
+            {
+                return audio.ScannedBpm;
+            }
 
             progress?.Report("Scanning source BPM.");
             cancellationToken.ThrowIfCancellationRequested();

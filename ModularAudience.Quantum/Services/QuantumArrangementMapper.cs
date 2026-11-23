@@ -12,16 +12,28 @@ public sealed class QuantumArrangementMapper
         ArgumentNullException.ThrowIfNull(response);
         ArgumentNullException.ThrowIfNull(options);
         options.Validate(qubits, tracks);
-        if (response.ExecutionLatency < TimeSpan.Zero) throw new ArgumentException("Execution latency cannot be negative.");
+        if (response.ExecutionLatency < TimeSpan.Zero)
+        {
+            throw new ArgumentException("Execution latency cannot be negative.");
+        }
+
         var counts = QuantumCounts.Snapshot(response.Counts, qubits);
         var trackSnapshot = Array.AsReadOnly(tracks.ToArray());
         var notes = new List<QuantumBeatNote>();
         cancellationToken.ThrowIfCancellationRequested();
-        if (counts.Count == 0) return new(circuitQasm, notes.AsReadOnly(), counts, response.ExecutionLatency, options, trackSnapshot, qubits);
+        if (counts.Count == 0)
+        {
+            return new(circuitQasm, notes.AsReadOnly(), counts, response.ExecutionLatency, options, trackSnapshot, qubits);
+        }
+
         var states = counts.OrderBy(pair => pair.Key, StringComparer.Ordinal).ToArray();
         long total = states.Sum(state => (long)state.Value);
         var cdf = new long[states.Length];
-        for (int i = 0; i < states.Length; i++) cdf[i] = states[i].Value + (i == 0 ? 0 : cdf[i - 1]);
+        for (int i = 0; i < states.Length; i++)
+        {
+            cdf[i] = states[i].Value + (i == 0 ? 0 : cdf[i - 1]);
+        }
+
         var random = new Random(options.Seed);
         int stepCount = options.Bars * options.StepsPerBar;
         int phraseLength = options.Arrangement switch
@@ -38,7 +50,14 @@ public sealed class QuantumArrangementMapper
             while (low < high)
             {
                 int middle = low + (high - low) / 2;
-                if (draw < cdf[middle]) high = middle; else low = middle + 1;
+                if (draw < cdf[middle])
+                {
+                    high = middle;
+                }
+                else
+                {
+                    low = middle + 1;
+                }
             }
             phrase[step] = low;
         }
@@ -53,16 +72,28 @@ public sealed class QuantumArrangementMapper
             for (int trackIndex = 0; trackIndex < tracks.Count; trackIndex++)
             {
                 QuantumTrackMapping track = tracks[trackIndex];
-                if (!track.Enabled || track.Gain == 0) continue;
+                if (!track.Enabled || track.Gain == 0)
+                {
+                    continue;
+                }
+
                 bool measured = ((bits & (1 << track.TriggerQubit)) != 0) ^ track.InvertTrigger;
                 var laneRandom = new Random(unchecked(options.Seed * 397 ^ phraseStep * 7919 ^ trackIndex * 104729));
                 bool ghost = !measured && options.GhostNotes && laneRandom.NextDouble() < options.GhostChance;
-                if ((!measured && !ghost) || laneRandom.NextDouble() >= Math.Min(1, options.Density * track.DensityScale)) continue;
+                if ((!measured && !ghost) || laneRandom.NextDouble() >= Math.Min(1, options.Density * track.DensityScale))
+                {
+                    continue;
+                }
+
                 double velocity = options.QuantumVelocity
                     ? Lerp(options.MinimumVelocity, options.MaximumVelocity, state.Value / (double)total) : options.MaximumVelocity;
                 velocity *= track.Gain * (ghost ? options.GhostVelocityScale : 1);
                 double start = ((step + track.StepOffset) % stepCount + stepCount) % stepCount;
-                if (((int)start & 1) != 0) start += options.Swing;
+                if (((int)start & 1) != 0)
+                {
+                    start += options.Swing;
+                }
+
                 double pitch = options.PitchEnabled ? Lerp(options.MinimumPitchCents, options.MaximumPitchCents, Code(0)) : 0;
                 pitch = Math.Round(pitch / options.PitchStepCents, MidpointRounding.AwayFromZero) * options.PitchStepCents;
                 pitch = Math.Clamp(pitch, options.MinimumPitchCents, options.MaximumPitchCents);

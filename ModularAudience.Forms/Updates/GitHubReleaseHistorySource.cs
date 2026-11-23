@@ -27,7 +27,11 @@ internal sealed class GitHubReleaseHistorySource
     internal async Task<ReleaseCommitHistory> GetAsync(long installedRelease, long offeredRelease, CancellationToken token)
     {
         ArgumentOutOfRangeException.ThrowIfNegativeOrZero(installedRelease);
-        if (offeredRelease <= installedRelease) throw new ArgumentOutOfRangeException(nameof(offeredRelease));
+        if (offeredRelease <= installedRelease)
+        {
+            throw new ArgumentOutOfRangeException(nameof(offeredRelease));
+        }
+
         token.ThrowIfCancellationRequested();
         long releaseRange = offeredRelease - installedRelease;
         int pageSize = (int)(releaseRange > 100L - ReleaseCommitHistory.MaximumHistoricalReleases
@@ -66,7 +70,11 @@ internal sealed class GitHubReleaseHistorySource
             .ThenBy(release => release.Number <= installedRelease ? installedRelease - release.Number : release.Number))
         {
             token.ThrowIfCancellationRequested();
-            if (entries.ContainsKey(release.Number)) continue;
+            if (entries.ContainsKey(release.Number))
+            {
+                continue;
+            }
+
             if (fallbackAllowed && fallbackCount < MaximumCommitFallbacks)
             {
                 fallbackCount++;
@@ -75,16 +83,26 @@ internal sealed class GitHubReleaseHistorySource
                     using JsonDocument document = await ReadAsync("/commits/" + Uri.EscapeDataString(release.Tag) + "?per_page=1", token).ConfigureAwait(false);
                     JsonElement root = document.RootElement;
                     if (root.ValueKind != JsonValueKind.Object || !root.TryGetProperty("commit", out JsonElement commit))
+                    {
                         throw new InvalidDataException("GitHub did not return commit metadata for the release tag.");
+                    }
+
                     ReleaseCommitHistoryEntry? entry = ParseCommit(release.Number, String(root, "sha"), commit, "committer", "date");
-                    if (entry is null) throw new InvalidDataException("GitHub did not return a valid commit message for the release tag.");
+                    if (entry is null)
+                    {
+                        throw new InvalidDataException("GitHub did not return a valid commit message for the release tag.");
+                    }
+
                     entries[release.Number] = entry;
                     continue;
                 }
                 catch (Exception error) when (IsMetadataError(error))
                 {
                     warnings.Add($"Build {release.Number}: commit details could not be loaded. {error.Message}");
-                    if (IsRateLimit(error)) fallbackAllowed = false;
+                    if (IsRateLimit(error))
+                    {
+                        fallbackAllowed = false;
+                    }
                 }
             }
 
@@ -92,9 +110,12 @@ internal sealed class GitHubReleaseHistorySource
         }
 
         if (entries.Values.Any(entry => entry.Message is null))
+        {
             warnings.Add(workflowError is null
                 ? "Some commit messages are unavailable. You can still update, skip, or dismiss this release."
                 : $"GitHub build history is unavailable ({workflowError.Message}). You can still update, skip, or dismiss this release.");
+        }
+
         return new ReleaseCommitHistory(entries.Values.OrderBy(entry => entry.ReleaseNumber).ToList(), warnings);
     }
 
@@ -106,12 +127,24 @@ internal sealed class GitHubReleaseHistorySource
         {
             using JsonDocument document = await ReadAsync($"/releases?per_page={pageSize}&page={page}", token).ConfigureAwait(false);
             JsonElement root = document.RootElement;
-            if (root.ValueKind != JsonValueKind.Array) throw new InvalidDataException("GitHub returned an invalid release list.");
+            if (root.ValueKind != JsonValueKind.Array)
+            {
+                throw new InvalidDataException("GitHub returned an invalid release list.");
+            }
+
             foreach (JsonElement item in root.EnumerateArray())
             {
-                if (item.ValueKind != JsonValueKind.Object || True(item, "draft") || True(item, "prerelease")) continue;
+                if (item.ValueKind != JsonValueKind.Object || True(item, "draft") || True(item, "prerelease"))
+                {
+                    continue;
+                }
+
                 string? tag = String(item, "tag_name");
-                if (!ApplicationRelease.TryParseTag(tag, out long number)) continue;
+                if (!ApplicationRelease.TryParseTag(tag, out long number))
+                {
+                    continue;
+                }
+
                 string? target = String(item, "target_commitish");
                 var release = new ReleaseTag(number, tag!, IsCommitSha(target) ? target : null);
                 if (number <= installedRelease)
@@ -124,10 +157,16 @@ internal sealed class GitHubReleaseHistorySource
                     }
                     continue;
                 }
-                if (number <= offeredRelease) releases[number] = release;
+                if (number <= offeredRelease)
+                {
+                    releases[number] = release;
+                }
             }
             if (historicalReleasesAdded >= ReleaseCommitHistory.MaximumHistoricalReleases ||
-                root.GetArrayLength() < pageSize) return;
+                root.GetArrayLength() < pageSize)
+            {
+                return;
+            }
         }
         warnings.Add("The release-history pagination limit was reached; some older intermediate builds or previous releases may be missing.");
     }
@@ -141,23 +180,48 @@ internal sealed class GitHubReleaseHistorySource
             using JsonDocument document = await ReadAsync($"/actions/workflows/build.yml/runs?per_page={pageSize}&page={page}&exclude_pull_requests=true", token).ConfigureAwait(false);
             JsonElement root = document.RootElement;
             if (root.ValueKind != JsonValueKind.Object || !root.TryGetProperty("workflow_runs", out JsonElement runs) || runs.ValueKind != JsonValueKind.Array)
+            {
                 throw new InvalidDataException("GitHub returned an invalid build history.");
+            }
+
             long oldestRelease = releases.Keys.Min();
             bool reachedOldestRelease = false;
             foreach (JsonElement run in runs.EnumerateArray())
             {
                 if (run.ValueKind != JsonValueKind.Object || !run.TryGetProperty("run_number", out JsonElement version) ||
-                    version.ValueKind != JsonValueKind.Number || !version.TryGetInt64(out long number)) continue;
-                if (number <= oldestRelease) reachedOldestRelease = true;
+                    version.ValueKind != JsonValueKind.Number || !version.TryGetInt64(out long number))
+                {
+                    continue;
+                }
+
+                if (number <= oldestRelease)
+                {
+                    reachedOldestRelease = true;
+                }
+
                 if (!releases.TryGetValue(number, out ReleaseTag? release) || entries.ContainsKey(number) ||
-                    !run.TryGetProperty("head_commit", out JsonElement commit) || commit.ValueKind != JsonValueKind.Object) continue;
+                    !run.TryGetProperty("head_commit", out JsonElement commit) || commit.ValueKind != JsonValueKind.Object)
+                {
+                    continue;
+                }
+
                 string? sha = String(run, "head_sha");
                 if (!string.Equals(sha, String(commit, "id"), StringComparison.OrdinalIgnoreCase) ||
-                    (release.PinnedSha is not null && !string.Equals(sha, release.PinnedSha, StringComparison.OrdinalIgnoreCase))) continue;
+                    (release.PinnedSha is not null && !string.Equals(sha, release.PinnedSha, StringComparison.OrdinalIgnoreCase)))
+                {
+                    continue;
+                }
+
                 ReleaseCommitHistoryEntry? entry = ParseCommit(number, sha, commit, null, "timestamp");
-                if (entry is not null) entries[number] = entry;
+                if (entry is not null)
+                {
+                    entries[number] = entry;
+                }
             }
-            if (entries.Count == releases.Count || reachedOldestRelease || runs.GetArrayLength() < pageSize) return;
+            if (entries.Count == releases.Count || reachedOldestRelease || runs.GetArrayLength() < pageSize)
+            {
+                return;
+            }
         }
         warnings.Add("The build-history pagination limit was reached; older commit messages may require release-tag lookups.");
     }
@@ -165,10 +229,17 @@ internal sealed class GitHubReleaseHistorySource
     private static ReleaseCommitHistoryEntry? ParseCommit(long number, string? sha, JsonElement commit, string? dateObject, string dateProperty)
     {
         if (commit.ValueKind != JsonValueKind.Object || !IsCommitSha(sha) ||
-            !commit.TryGetProperty("message", out JsonElement message) || message.ValueKind != JsonValueKind.String) return null;
+            !commit.TryGetProperty("message", out JsonElement message) || message.ValueKind != JsonValueKind.String)
+        {
+            return null;
+        }
+
         JsonElement dateRoot = commit;
         if (dateObject is not null && (!commit.TryGetProperty(dateObject, out dateRoot) || dateRoot.ValueKind != JsonValueKind.Object))
+        {
             dateRoot = default;
+        }
+
         DateTimeOffset? date = DateTimeOffset.TryParse(String(dateRoot, dateProperty), CultureInfo.InvariantCulture,
             DateTimeStyles.AssumeUniversal, out DateTimeOffset value) ? value : null;
         return new(number, sha, message.GetString()!, date);
@@ -183,7 +254,10 @@ internal sealed class GitHubReleaseHistorySource
         using HttpResponseMessage response = await this.client.SendAsync(request, HttpCompletionOption.ResponseHeadersRead, token).ConfigureAwait(false);
         response.EnsureSuccessStatusCode();
         if (response.Content.Headers.ContentLength > MaximumResponseBytes)
+        {
             throw new InvalidDataException("The GitHub history response exceeds the allowed size.");
+        }
+
         await using Stream source = await response.Content.ReadAsStreamAsync(token).ConfigureAwait(false);
         using var bytes = new MemoryStream();
         byte[] buffer = new byte[81920];
@@ -191,7 +265,10 @@ internal sealed class GitHubReleaseHistorySource
         while ((count = await source.ReadAsync(buffer, token).ConfigureAwait(false)) > 0)
         {
             if (bytes.Length + count > MaximumResponseBytes)
+            {
                 throw new InvalidDataException("The GitHub history response exceeds the allowed size.");
+            }
+
             await bytes.WriteAsync(buffer.AsMemory(0, count), token).ConfigureAwait(false);
         }
         return JsonDocument.Parse(bytes.ToArray());

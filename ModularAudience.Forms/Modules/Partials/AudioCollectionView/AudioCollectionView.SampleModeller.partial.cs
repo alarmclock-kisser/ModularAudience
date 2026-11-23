@@ -12,7 +12,11 @@ public partial class AudioCollectionView
         sampleModellerItem.Click += (_, _) =>
         {
             var audio = this.GetSingleContextAudio();
-            if (audio == null) return;
+            if (audio == null)
+            {
+                return;
+            }
+
             new SampleWaveformModeller(this, audio).Show(this);
         };
     }

@@ -5,8 +5,16 @@ internal static class AutoTuneTempoResolver
 {
     internal static double Resolve(double bpm, double scannedBpm, double presetBpm = WorkingBpmResolver.DefaultBpm)
     {
-        if (IsUsable(bpm)) return bpm;
-        if (IsUsable(scannedBpm)) return scannedBpm;
+        if (IsUsable(bpm))
+        {
+            return bpm;
+        }
+
+        if (IsUsable(scannedBpm))
+        {
+            return scannedBpm;
+        }
+
         return IsUsable(presetBpm) ? presetBpm : WorkingBpmResolver.DefaultBpm;
     }
 

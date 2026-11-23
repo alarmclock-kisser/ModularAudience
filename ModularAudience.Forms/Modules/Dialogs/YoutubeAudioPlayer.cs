@@ -46,7 +46,11 @@ internal sealed class YoutubeAudioPlayer : IDisposable
             http = new YoutubeAudioStreamClient(networkOptions);
             response = await http.OpenAsync(streamUrl, cancellation.Token).ConfigureAwait(false);
             process = CreateFfmpegProcess(this.ffmpegPath());
-            if (!process.Start()) throw new InvalidOperationException("Unable to start FFmpeg for YouTube audio playback.");
+            if (!process.Start())
+            {
+                throw new InvalidOperationException("Unable to start FFmpeg for YouTube audio playback.");
+            }
+
             var waveFormat = WaveFormat.CreateIeeeFloatWaveFormat(44100, 2);
             var buffer = new BufferedWaveProvider(waveFormat)
             {
@@ -57,25 +61,43 @@ internal sealed class YoutubeAudioPlayer : IDisposable
             output.Init(buffer);
             output.Play();
             session = new Session(http, response, process, output, buffer, cancellation);
-            lock (this.gate) this.current = session;
+            lock (this.gate)
+            {
+                this.current = session;
+            }
+
             session.Completion = RunSessionAsync(session);
 
             await Task.WhenAny(session.FirstPcm.Task, session.Completion)
                 .WaitAsync(TimeSpan.FromSeconds(20), cancellation.Token).ConfigureAwait(false);
-            if (session.Completion.IsCompleted) await session.Completion.ConfigureAwait(false);
+            if (session.Completion.IsCompleted)
+            {
+                await session.Completion.ConfigureAwait(false);
+            }
+
             return session.Completion;
         }
         catch
         {
             if (session is not null)
+            {
                 await StopSessionAsync(session).ConfigureAwait(false);
+            }
             else
             {
                 cancellation.Cancel();
-                if (process is not null) Kill(process);
+                if (process is not null)
+                {
+                    Kill(process);
+                }
+
                 output?.Dispose();
                 process?.Dispose();
-                if (response is not null) await response.DisposeAsync().ConfigureAwait(false);
+                if (response is not null)
+                {
+                    await response.DisposeAsync().ConfigureAwait(false);
+                }
+
                 http?.Dispose();
                 cancellation.Dispose();
             }
@@ -91,7 +113,10 @@ internal sealed class YoutubeAudioPlayer : IDisposable
             session = this.current;
             this.current = null;
         }
-        if (session is not null) await StopSessionAsync(session).ConfigureAwait(false);
+        if (session is not null)
+        {
+            await StopSessionAsync(session).ConfigureAwait(false);
+        }
     }
 
     private static Process CreateFfmpegProcess(string executable)
@@ -110,7 +135,10 @@ internal sealed class YoutubeAudioPlayer : IDisposable
             "-vn", "-sn", "-dn", "-map", "0:a:0", "-f", "f32le", "-acodec", "pcm_f32le",
             "-ar", "44100", "-ac", "2", "pipe:1"
         })
+        {
             start.ArgumentList.Add(argument);
+        }
+
         return new Process { StartInfo = start };
     }
 
@@ -123,14 +151,21 @@ internal sealed class YoutubeAudioPlayer : IDisposable
             Task<string> errors = session.Process.StandardError.ReadToEndAsync();
             Task exit = session.Process.WaitForExitAsync(session.Token);
             foreach (Task task in new[] { input, output, errors, exit })
+            {
                 _ = task.ContinueWith(_ => Kill(session.Process), CancellationToken.None,
                     TaskContinuationOptions.NotOnRanToCompletion,
                     TaskScheduler.Default);
+            }
+
             await Task.WhenAll(input, output, errors, exit).ConfigureAwait(false);
             if (session.Process.ExitCode != 0)
             {
                 string details = (await errors.ConfigureAwait(false)).Trim();
-                if (details.Length > 1200) details = details[..1200];
+                if (details.Length > 1200)
+                {
+                    details = details[..1200];
+                }
+
                 throw new InvalidOperationException(
                     details.Length == 0 ? $"FFmpeg exited with code {session.Process.ExitCode}."
                         : $"FFmpeg could not decode the YouTube audio stream: {details}");
@@ -149,7 +184,12 @@ internal sealed class YoutubeAudioPlayer : IDisposable
             session.Process.Dispose();
             session.Cancellation.Dispose();
             lock (this.gate)
-                if (ReferenceEquals(this.current, session)) this.current = null;
+            {
+                if (ReferenceEquals(this.current, session))
+                {
+                    this.current = null;
+                }
+            }
         }
     }
 
@@ -169,20 +209,33 @@ internal sealed class YoutubeAudioPlayer : IDisposable
         {
             int read = await session.Process.StandardOutput.BaseStream.ReadAsync(bytes.AsMemory(remainder), session.Token)
                 .ConfigureAwait(false);
-            if (read == 0) break;
+            if (read == 0)
+            {
+                break;
+            }
+
             int available = remainder + read;
             int aligned = available - available % (sizeof(float) * 2);
             if (aligned > 0)
             {
                 while (session.Buffer.BufferedBytes > session.Buffer.BufferLength - aligned)
+                {
                     await Task.Delay(10, session.Token).ConfigureAwait(false);
+                }
+
                 session.Buffer.AddSamples(bytes, 0, aligned);
                 session.FirstPcm.TrySetResult();
             }
             remainder = available - aligned;
-            if (remainder > 0) Buffer.BlockCopy(bytes, aligned, bytes, 0, remainder);
+            if (remainder > 0)
+            {
+                Buffer.BlockCopy(bytes, aligned, bytes, 0, remainder);
+            }
         }
-        if (remainder != 0) throw new InvalidDataException("FFmpeg produced incomplete stereo audio samples.");
+        if (remainder != 0)
+        {
+            throw new InvalidDataException("FFmpeg produced incomplete stereo audio samples.");
+        }
     }
 
     private static async Task StopSessionAsync(Session session)
@@ -199,7 +252,10 @@ internal sealed class YoutubeAudioPlayer : IDisposable
     {
         try
         {
-            if (!process.HasExited) process.Kill(entireProcessTree: true);
+            if (!process.HasExited)
+            {
+                process.Kill(entireProcessTree: true);
+            }
         }
         catch (InvalidOperationException) { }
         catch (System.ComponentModel.Win32Exception) { }

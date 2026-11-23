@@ -52,12 +52,23 @@ internal sealed class AudioScanController : IDisposable
 
     internal void SetTarget(AudioObj? audio)
     {
-        if (this.disposed) return;
+        if (this.disposed)
+        {
+            return;
+        }
+
         if (!ReferenceEquals(this.target, audio))
         {
-            if (this.target != null) this.target.PropertyChanged -= this.TargetPropertyChanged;
+            if (this.target != null)
+            {
+                this.target.PropertyChanged -= this.TargetPropertyChanged;
+            }
+
             this.target = audio;
-            if (this.target != null) this.target.PropertyChanged += this.TargetPropertyChanged;
+            if (this.target != null)
+            {
+                this.target.PropertyChanged += this.TargetPropertyChanged;
+            }
             // A focus change cancels a numeric edit belonging to the previous audio.
             this.bpmResult.ReadOnly = true;
         }
@@ -71,7 +82,11 @@ internal sealed class AudioScanController : IDisposable
     private async Task<bool> ScanAsync<T>(string kind, Func<AudioObj, Task<T>> scanner, Action<AudioObj, T> apply)
     {
         AudioObj? audio = this.target;
-        if (this.disposed || audio == null || !this.scanning.Add(kind)) return false;
+        if (this.disposed || audio == null || !this.scanning.Add(kind))
+        {
+            return false;
+        }
+
         this.Refresh();
         try
         {
@@ -104,14 +119,21 @@ internal sealed class AudioScanController : IDisposable
 
     internal void Refresh()
     {
-        if (this.disposed) return;
+        if (this.disposed)
+        {
+            return;
+        }
+
         AudioObj? audio = this.target;
         this.bpmButton.Enabled = audio != null && !this.scanning.Contains("BPM");
         this.timingButton.Enabled = audio != null && !this.scanning.Contains("timing");
         this.keyButton.Enabled = audio != null && !this.scanning.Contains("key");
         if (this.bpmResult.ReadOnly)
+        {
             this.bpmResult.Text = audio != null && float.IsFinite(audio.ScannedBpm) && audio.ScannedBpm > 0
                 ? $"{audio.ScannedBpm:F3} BPM" : string.Empty;
+        }
+
         this.timingResult.Text = audio != null && float.IsFinite(audio.ScannedTiming) && audio.ScannedTiming > 0
             ? WindowMainFormatHelpers.GetTimingString(audio.ScannedTiming) : string.Empty;
         this.keyResult.Text = audio?.ScannedKey ?? string.Empty;
@@ -120,8 +142,15 @@ internal sealed class AudioScanController : IDisposable
     private void TargetPropertyChanged(object? sender, PropertyChangedEventArgs args)
     {
         if (args.PropertyName is not (null or "" or nameof(AudioObj.ScannedBpm) or nameof(AudioObj.ScannedTiming) or nameof(AudioObj.ScannedKey)))
+        {
             return;
-        if (this.disposed || !ReferenceEquals(sender, this.target)) return;
+        }
+
+        if (this.disposed || !ReferenceEquals(sender, this.target))
+        {
+            return;
+        }
+
         if (Environment.CurrentManagedThreadId == this.uiThreadId)
         {
             this.Refresh();
@@ -132,7 +161,10 @@ internal sealed class AudioScanController : IDisposable
             {
                 this.owner.BeginInvoke((Action)(() =>
                 {
-                    if (!this.disposed && ReferenceEquals(sender, this.target)) this.Refresh();
+                    if (!this.disposed && ReferenceEquals(sender, this.target))
+                    {
+                        this.Refresh();
+                    }
                 }));
             }
             catch (InvalidOperationException) when (this.owner.IsDisposed || !this.owner.IsHandleCreated) { }
@@ -141,18 +173,29 @@ internal sealed class AudioScanController : IDisposable
 
     private async Task OnUiAsync(Action action)
     {
-        if (this.disposed || this.owner.IsDisposed || this.owner.Disposing) return;
+        if (this.disposed || this.owner.IsDisposed || this.owner.Disposing)
+        {
+            return;
+        }
+
         if (Environment.CurrentManagedThreadId == this.uiThreadId)
         {
             action();
             return;
         }
-        if (!this.owner.IsHandleCreated) return;
+        if (!this.owner.IsHandleCreated)
+        {
+            return;
+        }
+
         try
         {
             await this.owner.InvokeAsync(() =>
             {
-                if (!this.disposed && !this.owner.IsDisposed && !this.owner.Disposing) action();
+                if (!this.disposed && !this.owner.IsDisposed && !this.owner.Disposing)
+                {
+                    action();
+                }
             }).ConfigureAwait(false);
         }
         catch (InvalidOperationException) when (this.owner.IsDisposed || !this.owner.IsHandleCreated) { }
@@ -161,7 +204,11 @@ internal sealed class AudioScanController : IDisposable
     public void Dispose()
     {
         this.disposed = true;
-        if (this.target != null) this.target.PropertyChanged -= this.TargetPropertyChanged;
+        if (this.target != null)
+        {
+            this.target.PropertyChanged -= this.TargetPropertyChanged;
+        }
+
         this.target = null;
     }
 }

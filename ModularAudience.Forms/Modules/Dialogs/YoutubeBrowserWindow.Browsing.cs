@@ -11,7 +11,11 @@ public partial class YoutubeBrowserWindow
 
     private void StartBrowseOperation(string message, Func<CancellationToken, Task> action)
     {
-        if (!CanBrowse) return;
+        if (!CanBrowse)
+        {
+            return;
+        }
+
         browseCancellation?.Cancel();
         var source = new CancellationTokenSource();
         source.CancelAfter(BrowseTimeout);
@@ -41,7 +45,9 @@ public partial class YoutubeBrowserWindow
                 source.Token.ThrowIfCancellationRequested();
                 bool succeeded = await ExecuteWithRecoveryAsync(action, source.Token);
                 if (ReferenceEquals(browseCancellation, source) && !closing && !resourcesReleased)
+                {
                     statusLabel.Text = succeeded ? "Ready." : "Browsing failed. See the activity log.";
+                }
             }
             catch (OperationCanceledException) when (source.IsCancellationRequested)
             {
@@ -51,7 +57,11 @@ public partial class YoutubeBrowserWindow
                     AppendLog("YouTube browsing stopped. A metadata request is limited to 90 seconds; use Search to retry.");
                 }
             }
-            catch (Exception error) { if (!closing) ReportError("YouTube browsing failed", error); }
+            catch (Exception error) { if (!closing)
+                {
+                    ReportError("YouTube browsing failed", error);
+                }
+            }
             finally
             {
                 if (ReferenceEquals(browseCancellation, source))
@@ -92,16 +102,31 @@ public partial class YoutubeBrowserWindow
 
     private void NavigateToChannel_Click(object? sender, EventArgs e)
     {
-        if (!CanBrowse || SelectedVideo() is not { } video) return;
-        if (video.IsPlaylist && string.IsNullOrWhiteSpace(video.ChannelUrl)) return;
+        if (!CanBrowse || SelectedVideo() is not { } video)
+        {
+            return;
+        }
+
+        if (video.IsPlaylist && string.IsNullOrWhiteSpace(video.ChannelUrl))
+        {
+            return;
+        }
+
         SetResultType(ModularAudience.Ytdlp.YtdlpResultType.All);
         StartBrowseOperation("Loading channel videos...", async token =>
         {
             var metadata = video;
             if (video.IsVideo && string.IsNullOrWhiteSpace(video.ChannelUrl))
+            {
                 metadata = await (channelMetadataProvider?.Invoke(video, token) ?? client.GetVideoMetadataAsync(video, token));
+            }
+
             string? url = metadata.IsChannel ? metadata.Url : metadata.ChannelUrl;
-            if (string.IsNullOrWhiteSpace(url)) throw new InvalidOperationException("YouTube did not provide a channel URL for this video.");
+            if (string.IsNullOrWhiteSpace(url))
+            {
+                throw new InvalidOperationException("YouTube did not provide a channel URL for this video.");
+            }
+
             url = ModularAudience.Ytdlp.YtdlpParser.ValidateYoutubeUrl(url).AbsoluteUri;
             string name = metadata.IsChannel ? metadata.Title : metadata.Uploader;
             await LoadChannelResultsAsync(new(url, name), ModularAudience.Ytdlp.YtdlpResultType.All, token);
@@ -124,7 +149,11 @@ public partial class YoutubeBrowserWindow
     private async Task LoadChannelResultsAsync(ChannelContext channel, ModularAudience.Ytdlp.YtdlpResultType type, CancellationToken token)
     {
         token.ThrowIfCancellationRequested();
-        if (closing || resourcesReleased) return;
+        if (closing || resourcesReleased)
+        {
+            return;
+        }
+
         int limit = (int)resultLimit.Value;
         string query = "Channel :: " + channel.Name;
         queryText.Text = query;

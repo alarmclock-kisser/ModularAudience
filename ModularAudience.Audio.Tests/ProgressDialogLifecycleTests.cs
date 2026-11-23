@@ -85,7 +85,11 @@ public sealed class ProgressDialogLifecycleTests
         using var dialog = new ProgressDialog(windowCloseDelay: 0, ct: source.Token, cancellationSource: source);
         dialog.Show();
         Task.Run(() => source.Cancel()).GetAwaiter().GetResult();
-        for (int i = 0; i < 20 && !dialog.IsDisposed; i++) Application.DoEvents();
+        for (int i = 0; i < 20 && !dialog.IsDisposed; i++)
+        {
+            Application.DoEvents();
+        }
+
         Assert.IsTrue(dialog.IsDisposed);
     }
 }

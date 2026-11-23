@@ -18,7 +18,11 @@ public partial class YoutubeBrowserWindow
 
     private void StartOperation(string message, Func<CancellationToken, Task> action, bool isBatch = false)
     {
-        if (busy || closing || IsDisposed || resourcesReleased) return;
+        if (busy || closing || IsDisposed || resourcesReleased)
+        {
+            return;
+        }
+
         try { client.NetworkOptions = CaptureNetworkOptions(); }
         catch (ArgumentException error) { ReportError("Invalid network settings", error); return; }
         busy = true;
@@ -31,7 +35,11 @@ public partial class YoutubeBrowserWindow
         var source = operationCancellation;
         currentProgress = new Progress<string>(text =>
         {
-            if (operationCancellation != source || isBatch || activeBatch is not null || closing || IsDisposed || resourcesReleased) return;
+            if (operationCancellation != source || isBatch || activeBatch is not null || closing || IsDisposed || resourcesReleased)
+            {
+                return;
+            }
+
             ShowProgress(text);
         });
         statusLabel.Text = message;
@@ -53,22 +61,38 @@ public partial class YoutubeBrowserWindow
         {
             source.Token.ThrowIfCancellationRequested();
             if (proxyModeCombo.SelectedIndex == 2 && string.IsNullOrWhiteSpace(proxyText.Text))
+            {
                 throw new ArgumentException("Enter an explicit proxy URL or choose another proxy mode.");
+            }
+
             client.NetworkOptions.Validate();
             bool succeeded = true;
-            if (isBatch) await action(source.Token);
-            else succeeded = await ExecuteWithRecoveryAsync(action, source.Token);
+            if (isBatch)
+            {
+                await action(source.Token);
+            }
+            else
+            {
+                succeeded = await ExecuteWithRecoveryAsync(action, source.Token);
+            }
+
             if (!IsDisposed && !resourcesReleased)
+            {
                 statusLabel.Text = !succeeded ? "Operation failed; recovery was not applied. See the diagnostics." :
                     activeBatch?.Jobs.Any(job => job.Error is not null) == true
                     ? "Batch finished with errors. See the activity log." : "Ready.";
+            }
         }
         catch (OperationCanceledException) when (source.IsCancellationRequested)
         {
             string message = activeBatch?.Jobs.Any(job => job.Error is not null) == true
                 ? "Batch cancelled; cleanup completed. Some jobs failed; see the activity log."
                 : "Operation cancelled; cleanup completed.";
-            if (!IsDisposed && !resourcesReleased) statusLabel.Text = message;
+            if (!IsDisposed && !resourcesReleased)
+            {
+                statusLabel.Text = message;
+            }
+
             AppendLog(message);
         }
         catch (Exception error)
@@ -76,13 +100,20 @@ public partial class YoutubeBrowserWindow
             operationClock.Stop();
             RefreshOperationTiming();
             if (!IsDisposed && !resourcesReleased)
+            {
                 statusLabel.Text = "Operation failed. See the activity log; retry when ready.";
+            }
+
             ReportError("YouTube operation failed", error);
         }
         finally
         {
             operationClock.Stop();
-            if (!resourcesReleased) progressTimer.Stop();
+            if (!resourcesReleased)
+            {
+                progressTimer.Stop();
+            }
+
             RefreshOperationTiming();
             currentProgress = null;
             operationCancellation = null;
@@ -99,7 +130,11 @@ public partial class YoutubeBrowserWindow
         var source = operationCancellation;
         var transferProgress = new Progress<YtdlpDownloadProgress>(transfer =>
         {
-            if (operationCancellation != source || closing || IsDisposed || resourcesReleased) return;
+            if (operationCancellation != source || closing || IsDisposed || resourcesReleased)
+            {
+                return;
+            }
+
             toolTransfer = transfer;
             operationProgress.Style = ProgressBarStyle.Continuous;
             operationProgress.Value = (int)((transfer.Percent ?? 0) * operationProgress.Maximum / 100);
@@ -118,7 +153,11 @@ public partial class YoutubeBrowserWindow
         long now = Environment.TickCount64;
         long previous = Interlocked.Read(ref lastProgressTick);
         if (now - previous < 300 && !text.StartsWith("Warning:", StringComparison.OrdinalIgnoreCase) &&
-            !text.StartsWith(YtdlpRetryPolicy.ProgressPrefix, StringComparison.Ordinal)) return;
+            !text.StartsWith(YtdlpRetryPolicy.ProgressPrefix, StringComparison.Ordinal))
+        {
+            return;
+        }
+
         Interlocked.Exchange(ref lastProgressTick, now);
         currentProgress?.Report(text);
         if (browsing && browseCancellation?.IsCancellationRequested == false && !closing && !resourcesReleased && IsHandleCreated)
@@ -129,7 +168,9 @@ public partial class YoutubeBrowserWindow
                 BeginInvoke((Action)(() =>
                 {
                     if (ReferenceEquals(browseCancellation, source) && !closing && !IsDisposed && !resourcesReleased)
+                    {
                         ShowProgress(text);
+                    }
                 }));
             }
             catch (InvalidOperationException) when (closing || IsDisposed || resourcesReleased) { }
@@ -139,7 +180,10 @@ public partial class YoutubeBrowserWindow
     private void ShowProgress(string text)
     {
         if (text.StartsWith(YtdlpRetryPolicy.ProgressPrefix, StringComparison.Ordinal))
+        {
             text = text[YtdlpRetryPolicy.ProgressPrefix.Length..];
+        }
+
         string line = text.Replace('\r', ' ').Replace('\n', ' ');
         statusLabel.Text = line.Length > 240 ? line[..240] : line;
         if (toolTransfer is not null && !line.StartsWith("Downloading ", StringComparison.Ordinal))
@@ -148,14 +192,23 @@ public partial class YoutubeBrowserWindow
             batchProgressLabel.Text = line;
         }
         if (!line.StartsWith("Downloading ", StringComparison.Ordinal))
+        {
             AppendLog(text);
+        }
+
         if (line.StartsWith("Warning:", StringComparison.OrdinalIgnoreCase))
+        {
             LogManager.LogWarning("YouTube browser: " + statusLabel.Text);
+        }
     }
 
     private void Search(bool requirePlaylistUrl, bool forceSearch = false)
     {
-        if (!CanBrowse) return;
+        if (!CanBrowse)
+        {
+            return;
+        }
+
         if (!requirePlaylistUrl && !forceSearch && displayedChannel is { } channel && queryText.Text.Trim() == "Channel :: " + channel.Name)
         {
             RefreshChannel(channel);
@@ -168,7 +221,11 @@ public partial class YoutubeBrowserWindow
         var resultType = (YtdlpResultType)Math.Max(0, resultTypeCombo.SelectedIndex);
         StartBrowseOperation("Loading YouTube metadata...", async token =>
         {
-            if (string.IsNullOrWhiteSpace(query)) throw new ArgumentException("Enter search words or a YouTube URL.");
+            if (string.IsNullOrWhiteSpace(query))
+            {
+                throw new ArgumentException("Enter search words or a YouTube URL.");
+            }
+
             bool isUrl = requirePlaylistUrl || (!forceSearch && LooksLikeUrl(query));
             AppendLog(isUrl ? "Opening YouTube URL..." : $"Searching YouTube for '{query}' (up to {limit} results)...");
             RememberSearch(query);
@@ -198,7 +255,10 @@ public partial class YoutubeBrowserWindow
     {
         var rows = videos.ToList();
         if (activePlaybackVideo is { } playing && rows.All(video => video.Id != playing.Id))
+        {
             rows.Add(playing);
+        }
+
         resultsList.BeginUpdate();
         try
         {
@@ -207,7 +267,11 @@ public partial class YoutubeBrowserWindow
             foreach (var video in rows)
             {
                 var row = CreateResultRow(video);
-                if (IsPlayingVideo(video)) row.Text = FormatResultTitle(video, true);
+                if (IsPlayingVideo(video))
+                {
+                    row.Text = FormatResultTitle(video, true);
+                }
+
                 resultsList.Items.Add(row);
                 originalResultOrder[row] = originalResultOrder.Count;
             }
@@ -221,7 +285,10 @@ public partial class YoutubeBrowserWindow
     private static string FormatDuration(double? seconds)
     {
         if (seconds is not { } value || !double.IsFinite(value) || value < 0 || value > 86400000)
+        {
             return "Unknown / live";
+        }
+
         var duration = TimeSpan.FromSeconds(value);
         return duration.TotalHours >= 1 ? $"{(int)duration.TotalHours}:{duration.Minutes:00}:{duration.Seconds:00}"
             : $"{duration.Minutes}:{duration.Seconds:00}";
@@ -238,18 +305,30 @@ public partial class YoutubeBrowserWindow
 
     private void DownloadEnqueue_Click(object? sender, EventArgs e)
     {
-        if (!CanEnqueueDownloads) return;
+        if (!CanEnqueueDownloads)
+        {
+            return;
+        }
+
         DownloadSelected(showDownloads: false);
     }
 
     private void EnqueueDownloadVideos(DownloadBatch batch, YtdlpVideo[] videos)
     {
-        if (batch.PendingQueue is null || batch.Source.IsCancellationRequested) return;
+        if (batch.PendingQueue is null || batch.Source.IsCancellationRequested)
+        {
+            return;
+        }
+
         var queued = new List<DownloadJob>();
         var existing = batch.Jobs.Where(job => !job.Terminal).Select(job => job.Video.Id).ToHashSet(StringComparer.Ordinal);
         foreach (var video in videos.Where(video => video.IsVideo))
         {
-            if (!existing.Add(video.Id)) continue;
+            if (!existing.Add(video.Id))
+            {
+                continue;
+            }
+
             var row = new ListViewItem(video.Title);
             row.SubItems.AddRange(["Queued", "Unknown", "--", "Unknown", "--", "--"]);
             var job = new DownloadJob(video, batch.Jobs.Length + queued.Count, row);
@@ -259,14 +338,22 @@ public partial class YoutubeBrowserWindow
             batch.PendingQueue.Enqueue(job);
         }
         batch.Jobs = [.. batch.Jobs, .. queued];
-        if (queued.Count > 0) batch.QueueChanged?.Release();
+        if (queued.Count > 0)
+        {
+            batch.QueueChanged?.Release();
+        }
+
         RefreshBatchProgress(batch);
         AppendLog($"Enqueued {queued.Count} additional video(s); using the running batch's download and import settings.");
     }
 
     private void DownloadSelected(bool showDownloads)
     {
-        if (!CanEnqueueDownloads) return;
+        if (!CanEnqueueDownloads)
+        {
+            return;
+        }
+
         var selected = SelectedVideos().Where(video => !video.IsChannel).ToArray();
         if (selected.Any(video => video.IsPlaylist))
         {
@@ -278,9 +365,17 @@ public partial class YoutubeBrowserWindow
 
     private void QueueDownloadVideos(YtdlpVideo[] videos, bool showDownloads)
     {
-        if (!CanEnqueueDownloads) return;
+        if (!CanEnqueueDownloads)
+        {
+            return;
+        }
+
         videos = videos.Where(video => video.IsVideo).DistinctBy(video => video.Id).ToArray();
-        if (videos.Length == 0) return;
+        if (videos.Length == 0)
+        {
+            return;
+        }
+
         if (busy && activeBatch is { } batch)
         {
             EnqueueDownloadVideos(batch, videos);
@@ -330,13 +425,19 @@ public partial class YoutubeBrowserWindow
         }
         catch (Exception error)
         {
-            foreach (var job in batch.Jobs.Where(job => !job.Terminal)) RecordJobFailure(job, error);
+            foreach (var job in batch.Jobs.Where(job => !job.Terminal))
+            {
+                RecordJobFailure(job, error);
+            }
         }
         finally
         {
             batch.Cancelled |= token.IsCancellationRequested;
             foreach (var job in batch.Jobs.Where(job => !job.Terminal))
+            {
                 CompleteJob(job, job.Error is null ? "Cancelled" : "Failed");
+            }
+
             batch.Settled = true;
             operationClock.Stop();
             RefreshOperationTiming();
@@ -345,15 +446,24 @@ public partial class YoutubeBrowserWindow
             AppendLog($"Batch finished: {batch.Jobs.Count(job => job.Status == "Completed")} imported, " +
                 $"{failures.Length} failed, {batch.Jobs.Count(job => job.Status == "Cancelled")} cancelled.");
             if (failures.Length > 0 && (!recoveryShown || recoveryRetried) && !token.IsCancellationRequested && !closing && !IsDisposed && !resourcesReleased)
+            {
                 ReportError("Some YouTube imports failed", new AggregateException("Failed imports (including cleanup failures):", failures));
+            }
         }
     }
 
     private static void ValidateBatchOutput(YtdlpDownloadOptions options)
     {
-        if (!options.SaveToDisk) return;
+        if (!options.SaveToDisk)
+        {
+            return;
+        }
+
         if (string.IsNullOrWhiteSpace(options.OutputDirectory) || !Path.IsPathFullyQualified(options.OutputDirectory))
+        {
             throw new ArgumentException("Choose a fully qualified output folder before saving audio.");
+        }
+
         _ = Path.GetFullPath(options.OutputDirectory);
     }
 
@@ -362,7 +472,11 @@ public partial class YoutubeBrowserWindow
     {
         using var jobCancellation = CancellationTokenSource.CreateLinkedTokenSource(token);
         job.Cancellation = jobCancellation;
-        if (job.CancelRequested) jobCancellation.Cancel();
+        if (job.CancelRequested)
+        {
+            jobCancellation.Cancel();
+        }
+
         token = jobCancellation.Token;
         job.Started = true;
         job.Clock.Start();
@@ -396,7 +510,10 @@ public partial class YoutubeBrowserWindow
     {
         var jobClient = new YtdlpClient(binaryManager);
         if (connectedSession is not null && options.BrowserSession is null)
+        {
             options = options with { BrowserSession = connectedSession };
+        }
+
         var result = await retries.RunAsync(cancellation =>
         {
             var text = CreateJobTextProgress(batch, job, audio: false);
@@ -496,9 +613,15 @@ public partial class YoutubeBrowserWindow
                 string message = taggedBpm is { } bpm ? $"BPM tag detected ({bpm:0.###}): {job.Video.Title}"
                     : $"Warning: BPM tag wait timed out after {cooldown.TotalSeconds:0.###} s; importing without an awaited BPM tag: {job.Video.Title}. Increase Wait (s), or set 0 to wait until tagged.";
                 AppendLog(message);
-                if (job.BpmTagTimedOut) LogManager.LogWarning(message);
+                if (job.BpmTagTimedOut)
+                {
+                    LogManager.LogWarning(message);
+                }
             }
-            else await Task.Delay(cooldown, token);
+            else
+            {
+                await Task.Delay(cooldown, token);
+            }
         }
         finally { job.CooldownDeadline = null; job.WaitingForBpmWithoutLimit = false; }
         job.Status = "Waiting for audio import";

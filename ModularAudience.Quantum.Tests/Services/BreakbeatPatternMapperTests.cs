@@ -117,6 +117,8 @@ public sealed class BreakbeatPatternMapperTests
         Assert.ThrowsExactly<ArgumentException>(() => this.mapper.Map(" ", new Dictionary<string, int>(), TimeSpan.Zero));
         Assert.ThrowsExactly<ArgumentOutOfRangeException>(() => this.mapper.Map("qasm", new Dictionary<string, int>(), TimeSpan.FromTicks(-1)));
         foreach (int steps in new[] { 0, 1025 })
+        {
             Assert.ThrowsExactly<ArgumentOutOfRangeException>(() => this.mapper.Map("qasm", new Dictionary<string, int>(), TimeSpan.Zero, steps));
+        }
     }
 }

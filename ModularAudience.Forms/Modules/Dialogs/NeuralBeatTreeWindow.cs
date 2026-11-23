@@ -29,7 +29,7 @@ internal sealed class NeuralBeatTreeWindow : Form
         var tools = new FlowLayoutPanel { Dock = DockStyle.Fill, AutoSize = true, WrapContents = true };
         mode.Items.AddRange(["Sample-slot weights", "Hit-count / rest weights"]); mode.SelectedIndex = 0;
         tools.Controls.AddRange([Button("Refresh", (_, _) => RefreshTree()), mode, name,
-            Button("Rename branch", (_, _) => Edit(() => { if (BranchId() is { } id) engine.RenameBranch(id, name.Text); })),
+            Button("Rename branch", (_, _) => Edit(() => { if (BranchId() is { } id) { engine.RenameBranch(id, name.Text); } })),
             new Label { Text = "Mutation", AutoSize = true, Margin = new Padding(4, 8, 3, 0) }, mutation,
             Button("Fork / remix", Fork_Click), Button("Trim branch...", Trim_Click), Button("Use / audition", Audition_Click)]);
         var split = new SplitContainer { Dock = DockStyle.Fill, Size = new Size(1050, 600), SplitterDistance = 300, Panel1MinSize = 180, Panel2MinSize = 400 };
@@ -48,7 +48,11 @@ internal sealed class NeuralBeatTreeWindow : Form
 
     internal void RefreshTree()
     {
-        if (IsDisposed) return;
+        if (IsDisposed)
+        {
+            return;
+        }
+
         string? selected = tree.SelectedNode?.Name;
         snapshot = engine.Snapshot();
         tree.BeginUpdate();
@@ -61,10 +65,19 @@ internal sealed class NeuralBeatTreeWindow : Form
             {
                 var node = nodes[branch.Id];
                 foreach (var record in branch.Patterns)
+                {
                     node.Nodes.Add(new TreeNode($"Pattern {record.CreatedUtc.ToLocalTime():HH:mm:ss} · r{record.Revision} · {(record.Feedback is { } rating ? rating.ToString("P0") : "unrated")}")
                     { Name = record.Id, Tag = record });
-                if (branch.ParentId is { } parent && nodes.TryGetValue(parent, out var owner)) owner.Nodes.Add(node);
-                else tree.Nodes.Add(node);
+                }
+
+                if (branch.ParentId is { } parent && nodes.TryGetValue(parent, out var owner))
+                {
+                    owner.Nodes.Add(node);
+                }
+                else
+                {
+                    tree.Nodes.Add(node);
+                }
             }
             tree.Nodes[0].Expand();
             tree.SelectedNode = selected is null ? tree.Nodes[0] : tree.Nodes.Find(selected, true).FirstOrDefault() ?? tree.Nodes[0];
@@ -75,7 +88,11 @@ internal sealed class NeuralBeatTreeWindow : Form
 
     private void ShowSelection()
     {
-        if (snapshot is null || BranchId() is not { } id) return;
+        if (snapshot is null || BranchId() is not { } id)
+        {
+            return;
+        }
+
         var branch = snapshot.Branches.First(item => item.Id == id);
         var record = tree.SelectedNode?.Tag as BeatPatternRecord;
         filling = true;
@@ -114,10 +131,18 @@ internal sealed class NeuralBeatTreeWindow : Form
 
     private void Grid_CellEndEdit(object? sender, DataGridViewCellEventArgs e)
     {
-        if (filling || tree.SelectedNode?.Tag is not BeatBranchSnapshot branch) return;
+        if (filling || tree.SelectedNode?.Tag is not BeatBranchSnapshot branch)
+        {
+            return;
+        }
+
         Edit(() =>
         {
-            if (!float.TryParse(Convert.ToString(grid[e.ColumnIndex, e.RowIndex].Value), out float value)) throw new ArgumentException("Enter a numeric weight.");
+            if (!float.TryParse(Convert.ToString(grid[e.ColumnIndex, e.RowIndex].Value), out float value))
+            {
+                throw new ArgumentException("Enter a numeric weight.");
+            }
+
             engine.SetWeight(branch.Id, e.RowIndex, e.ColumnIndex, value, mode.SelectedIndex == 1);
         });
     }
@@ -131,7 +156,11 @@ internal sealed class NeuralBeatTreeWindow : Form
 
     private async void Fork_Click(object? sender, EventArgs e)
     {
-        if (!canEdit() || BranchId() is not { } id) return;
+        if (!canEdit() || BranchId() is not { } id)
+        {
+            return;
+        }
+
         try
         {
             string child = tree.SelectedNode?.Tag is BeatPatternRecord record ? engine.ForkPattern(id, record.Id) :
@@ -143,14 +172,25 @@ internal sealed class NeuralBeatTreeWindow : Form
 
     private void Trim_Click(object? sender, EventArgs e)
     {
-        if (BranchId() is not { } id || id == "root") return;
+        if (BranchId() is not { } id || id == "root")
+        {
+            return;
+        }
+
         if (MessageBox.Show(this, "Remove this branch and all descendants? Parent weights are preserved; the removed branches are not unlearned from other branches.",
-            "Trim training branch", MessageBoxButtons.OKCancel) == DialogResult.OK) Edit(() => engine.TrimBranch(id));
+            "Trim training branch", MessageBoxButtons.OKCancel) == DialogResult.OK)
+        {
+            Edit(() => engine.TrimBranch(id));
+        }
     }
 
     private async void Audition_Click(object? sender, EventArgs e)
     {
-        if (!canEdit() || BranchId() is not { } id) return;
+        if (!canEdit() || BranchId() is not { } id)
+        {
+            return;
+        }
+
         try { await audition(id, tree.SelectedNode?.Tag as BeatPatternRecord); }
         catch (Exception error) { MessageBox.Show(this, error.Message, "Inspect beat pattern"); }
     }

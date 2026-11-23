@@ -95,11 +95,19 @@ public sealed class MixWindowGroupTests
         {
             WaitUntil(() =>
             {
-                uint id = Volatile.Read(ref nativeThread); if (id == 0) return false;
+                uint id = Volatile.Read(ref nativeThread); if (id == 0)
+                {
+                    return false;
+                }
+
                 EnumThreadWindows(id, (handle, _) =>
                 {
                     var name = new StringBuilder(128); GetClassName(handle, name, name.Capacity);
-                    if (name.ToString() == "#32770" && IsWindowVisible(handle) && GetDlgItem(handle, 2) != IntPtr.Zero) popup = handle;
+                    if (name.ToString() == "#32770" && IsWindowVisible(handle) && GetDlgItem(handle, 2) != IntPtr.Zero)
+                    {
+                        popup = handle;
+                    }
+
                     return true;
                 }, IntPtr.Zero);
                 return popup != IntPtr.Zero && IsWindowVisible(popup);
@@ -119,12 +127,17 @@ public sealed class MixWindowGroupTests
             PostMessage(cancel, 0x00F5, IntPtr.Zero, IntPtr.Zero); // BM_CLICK, scoped to this test's Cancel button.
             Drain(work); Assert.AreEqual(DialogResult.Cancel, work.Result); Assert.IsFalse(group.IsBlocked);
         }
-        finally { if (popup != IntPtr.Zero && IsWindow(popup)) PostMessage(popup, 0x0010, IntPtr.Zero, IntPtr.Zero); group.Dispose(); }
+        finally { if (popup != IntPtr.Zero && IsWindow(popup)) { PostMessage(popup, 0x0010, IntPtr.Zero, IntPtr.Zero); } group.Dispose(); }
     }
 
     private static Form Root(string title, bool show = true)
     {
-        var form = new Form { Text = title, Size = new Size(420, 220), MinimizeBox = true }; form.Controls.Add(new TextBox { Text = title }); if (show) form.Show(); return form;
+        var form = new Form { Text = title, Size = new Size(420, 220), MinimizeBox = true }; form.Controls.Add(new TextBox { Text = title }); if (show)
+        {
+            form.Show();
+        }
+
+        return form;
     }
     private static void Drain(Task task)
     {

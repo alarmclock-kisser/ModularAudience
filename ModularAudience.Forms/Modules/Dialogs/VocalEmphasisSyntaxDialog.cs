@@ -61,12 +61,24 @@ public sealed class VocalEmphasisSyntaxDialog : Form
         var rules = new List<VocalEmphasisRule>();
         foreach (DataGridViewRow row in grid.Rows)
         {
-            if (row.IsNewRow) continue;
+            if (row.IsNewRow)
+            {
+                continue;
+            }
+
             var marker = row.Cells["Marker"].Value?.ToString() ?? "";
-            if (string.IsNullOrWhiteSpace(marker)) continue;
+            if (string.IsNullOrWhiteSpace(marker))
+            {
+                continue;
+            }
+
             var mode = row.Cells["Mode"].Value is VocalEmphasisMode m ? m : VocalEmphasisMode.Strong;
             double.TryParse(row.Cells["Value"].Value?.ToString(), out var val);
-            if (val == 0) val = 1;
+            if (val == 0)
+            {
+                val = 1;
+            }
+
             var wrapping = row.Cells["Wrapping"].Value is true;
             rules.Add(new VocalEmphasisRule { Marker = marker, Mode = mode, Value = val, Wrapping = wrapping });
         }
@@ -75,13 +87,20 @@ public sealed class VocalEmphasisSyntaxDialog : Form
 
     internal static bool IsValidMarker(string marker)
     {
-        if (string.IsNullOrEmpty(marker)) return true;
+        if (string.IsNullOrEmpty(marker))
+        {
+            return true;
+        }
+
         ReadOnlySpan<char> remaining = marker.AsSpan();
         while (!remaining.IsEmpty)
         {
             if (Rune.DecodeFromUtf16(remaining, out Rune rune, out int consumed) != OperationStatus.Done
                 || !IsSpecialMarkerCategory(Rune.GetUnicodeCategory(rune)))
+            {
                 return false;
+            }
+
             remaining = remaining[consumed..];
         }
         return true;
@@ -89,16 +108,30 @@ public sealed class VocalEmphasisSyntaxDialog : Form
 
     private void Grid_EditingControlShowing(object? sender, DataGridViewEditingControlShowingEventArgs e)
     {
-        if (e.Control is not TextBox editingControl) return;
+        if (e.Control is not TextBox editingControl)
+        {
+            return;
+        }
+
         editingControl.KeyPress -= MarkerEditor_KeyPress;
         if (grid.CurrentCell?.OwningColumn?.Name == "Marker")
+        {
             editingControl.KeyPress += MarkerEditor_KeyPress;
+        }
     }
 
     private void MarkerEditor_KeyPress(object? sender, KeyPressEventArgs e)
     {
-        if (e.KeyChar == '\b') return;
-        if (char.IsSurrogate(e.KeyChar)) return;
+        if (e.KeyChar == '\b')
+        {
+            return;
+        }
+
+        if (char.IsSurrogate(e.KeyChar))
+        {
+            return;
+        }
+
         if (!IsSpecialMarkerCategory(char.GetUnicodeCategory(e.KeyChar)))
         {
             e.Handled = true;
@@ -108,7 +141,11 @@ public sealed class VocalEmphasisSyntaxDialog : Form
 
     private void Grid_CellValidating(object? sender, DataGridViewCellValidatingEventArgs e)
     {
-        if (grid.Columns[e.ColumnIndex].Name != "Marker") return;
+        if (grid.Columns[e.ColumnIndex].Name != "Marker")
+        {
+            return;
+        }
+
         string marker = e.FormattedValue?.ToString() ?? string.Empty;
         if (!IsValidMarker(marker))
         {
@@ -136,7 +173,11 @@ public sealed class VocalEmphasisSyntaxDialog : Form
 
     private void FlashRow(int rowIndex)
     {
-        if (rowIndex < 0 || rowIndex >= grid.Rows.Count || grid.Rows[rowIndex].IsNewRow) return;
+        if (rowIndex < 0 || rowIndex >= grid.Rows.Count || grid.Rows[rowIndex].IsNewRow)
+        {
+            return;
+        }
+
         RestoreFlashingRow();
         flashingRow = grid.Rows[rowIndex];
         flashingRowOriginalColor = flashingRow.DefaultCellStyle.BackColor;
@@ -148,13 +189,20 @@ public sealed class VocalEmphasisSyntaxDialog : Form
     {
         markerFlashTimer.Stop();
         if (flashingRow is not null && !flashingRow.IsNewRow)
+        {
             flashingRow.DefaultCellStyle.BackColor = flashingRowOriginalColor;
+        }
+
         flashingRow = null;
     }
 
     protected override void Dispose(bool disposing)
     {
-        if (disposing) markerFlashTimer.Dispose();
+        if (disposing)
+        {
+            markerFlashTimer.Dispose();
+        }
+
         base.Dispose(disposing);
     }
 }

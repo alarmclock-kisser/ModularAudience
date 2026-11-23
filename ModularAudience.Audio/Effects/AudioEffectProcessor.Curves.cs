@@ -11,14 +11,21 @@ public static partial class AudioEffectProcessor
     {
         int frames = source.Length / context.Channels;
         if (settings.Choice("Method") == 1)
+        {
             return ResampleSpeed(source, frame => Math.Pow(2, context.Automation.Value("Semitones", frame) / 12), context);
+        }
+
         const int hop = 64;
         var shifts = new double[(frames + hop - 1) / hop + 1];
         for (int i = 0; i < shifts.Length; i++)
         {
             context.Token.ThrowIfCancellationRequested(); shifts[i] = context.Automation.Value("Semitones", Math.Min(frames - 1, i * hop));
         }
-        if (shifts.All(value => Math.Abs(value) < 1e-12)) return new(source, context.Channels);
+        if (shifts.All(value => Math.Abs(value) < 1e-12))
+        {
+            return new(source, context.Channels);
+        }
+
         var curve = new AutoTuneCorrectionCurve(shifts, Enumerable.Repeat(1f, shifts.Length).ToArray(), hop, 0, 0);
         var quality = new AutoTuneSettings { FftSize = context.Rate < 12000 ? 1024 : 2048, Overlap = 8 };
         float[] shifted = AutoTunePhaseVocoder.Render(source, context.Rate, context.Channels, quality, curve,
@@ -32,7 +39,11 @@ public static partial class AudioEffectProcessor
         var map = new EffectCurveTimeMap(frames, context.Channels, frame => 1 / speedAt(frame), context.Token);
         context.SourceAtOutput = map.SourceAt;
         context.OutputAtSource = map.OutputAtSource;
-        if (map.IsIdentity) return new(source, context.Channels, 1);
+        if (map.IsIdentity)
+        {
+            return new(source, context.Channels, 1);
+        }
+
         int outputFrames = EnsureLength(map.OutputFrames, context.Channels);
         var output = new float[outputFrames * context.Channels];
         // Variable-ratio, anti-aliased windowed-sinc reconstruction. One shared map preserves channel alignment.
@@ -65,7 +76,11 @@ public static partial class AudioEffectProcessor
         var map = new EffectCurveTimeMap(frames, context.Channels, frame => context.Automation.Value("Factor", frame), context.Token);
         context.SourceAtOutput = map.SourceAt;
         context.OutputAtSource = map.OutputAtSource;
-        if (map.IsIdentity && !settings.Flag("TrimSilence")) return new(source, context.Channels, 1);
+        if (map.IsIdentity && !settings.Flag("TrimSilence"))
+        {
+            return new(source, context.Channels, 1);
+        }
+
         int targetFrames = EnsureLength(map.OutputFrames, context.Channels), size = 256 << settings.Choice("FftSize");
         // Fixed synthesis hops and continuously moving analysis centers: no independent chunk renders or splice seams.
         double maximumSpeed = 1 / context.Automation.Minimum("Factor");
@@ -77,7 +92,10 @@ public static partial class AudioEffectProcessor
         for (int index = 0; index < windows; index++)
         {
             context.Token.ThrowIfCancellationRequested(); int start = index * hop - size / 2;
-            for (int i = Math.Max(0, -start); i < size && start + i < targetFrames; i++) weights[start + i] += (float)(window[i] * window[i]);
+            for (int i = Math.Max(0, -start); i < size && start + i < targetFrames; i++)
+            {
+                weights[start + i] += (float)(window[i] * window[i]);
+            }
         }
         long finished = 0, total = (long)windows * context.Channels;
         void RenderChannel(int channel)
@@ -108,13 +126,24 @@ public static partial class AudioEffectProcessor
                     previous[bin] = phases[bin]; locked[bin] = synthesis[bin];
                 }
                 peaks.Clear();
-                for (int bin = 1; bin < bins - 1; bin++) if (magnitudes[bin] > magnitudes[bin - 1] && magnitudes[bin] >= magnitudes[bin + 1]) peaks.Add(bin);
+                for (int bin = 1; bin < bins - 1; bin++)
+                {
+                    if (magnitudes[bin] > magnitudes[bin - 1] && magnitudes[bin] >= magnitudes[bin + 1])
+                    {
+                        peaks.Add(bin);
+                    }
+                }
+
                 if (peaks.Count > 0)
                 {
                     int nearest = 0;
                     for (int bin = 1; bin < bins - 1; bin++)
                     {
-                        while (nearest + 1 < peaks.Count && bin > (peaks[nearest] + peaks[nearest + 1]) / 2) nearest++;
+                        while (nearest + 1 < peaks.Count && bin > (peaks[nearest] + peaks[nearest + 1]) / 2)
+                        {
+                            nearest++;
+                        }
+
                         int peak = peaks[nearest]; locked[bin] = synthesis[peak] + Math.IEEERemainder(phases[bin] - phases[peak], 2 * Math.PI);
                     }
                 }
@@ -123,30 +152,53 @@ public static partial class AudioEffectProcessor
                 {
                     Complex value = Complex.FromPolarCoordinates(magnitudes[bin], locked[bin]);
                     spectrum[bin] = bin == 0 || bin == bins - 1 ? new Complex(value.Real, 0) : value;
-                    if (bin > 0 && bin < bins - 1) spectrum[size - bin] = Complex.Conjugate(value);
+                    if (bin > 0 && bin < bins - 1)
+                    {
+                        spectrum[size - bin] = Complex.Conjugate(value);
+                    }
                 }
                 fourier.Backward(spectrum, FourierTransformScaling.BackwardScaling);
                 int start = outputCenter - size / 2;
                 for (int i = Math.Max(0, -start); i < size && start + i < targetFrames; i++)
+                {
                     output[(start + i) * context.Channels + channel] += (float)(spectrum[i].Real * window[i]);
+                }
+
                 previousCenter = center;
-                long done = Interlocked.Increment(ref finished); if ((done & 15) == 0) context.Progress?.Report(0.95 * done / total);
+                long done = Interlocked.Increment(ref finished); if ((done & 15) == 0)
+                {
+                    context.Progress?.Report(0.95 * done / total);
+                }
             }
         }
         if (context.Channels == 1 || context.MaximumThreads == 1)
-            for (int channel = 0; channel < context.Channels; channel++) RenderChannel(channel);
-        else Parallel.For(0, context.Channels, new ParallelOptions { CancellationToken = context.Token,
+        {
+            for (int channel = 0; channel < context.Channels; channel++)
+            {
+                RenderChannel(channel);
+            }
+        }
+        else
+        {
+            Parallel.For(0, context.Channels, new ParallelOptions { CancellationToken = context.Token,
             MaxDegreeOfParallelism = Math.Min(context.Channels, context.MaximumThreads) }, RenderChannel);
+        }
+
         for (int frame = 0; frame < targetFrames; frame++)
         {
             context.Check(frame, targetFrames);
-            for (int channel = 0; channel < context.Channels; channel++) output[frame * context.Channels + channel] /= Math.Max(1e-12f, weights[frame]);
+            for (int channel = 0; channel < context.Channels; channel++)
+            {
+                output[frame * context.Channels + channel] /= Math.Max(1e-12f, weights[frame]);
+            }
         }
         if (settings.Flag("PreservePeak"))
         {
             double before = source.Max(value => Math.Abs((double)value)), after = output.Max(value => Math.Abs((double)value));
             if (before > 1e-12 && after > 1e-12)
+            {
                 for (int i = 0; i < output.Length; i++) { context.Check(i, output.Length); output[i] = (float)(output[i] * before / after); }
+            }
         }
         if (settings.Flag("TrimSilence"))
         {

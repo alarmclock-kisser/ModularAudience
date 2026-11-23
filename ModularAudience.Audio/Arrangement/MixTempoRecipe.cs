@@ -45,14 +45,24 @@ public sealed class MixTempoRecipe
             this.ClipIds.Any(id => !this.Lane.Clips.Any(clip => clip.Id == id)) ||
             this.FrozenClipId is Guid frozen && !this.Lane.Clips.Any(clip => clip.Id == frozen) ||
             (this.FrozenClipId is null && (this.Effect is null) == (this.AutoTune is null)))
+        {
             throw new InvalidDataException("Invalid tempo rendering recipe.");
+        }
+
         this.Effect?.Validate(); this.AutoTune?.Validate(MixEffectEditSession.SampleRate);
         if (this.CurveScope is not null)
         {
             int frames = checked((int)Math.Round((this.End - this.Start) * MixEffectEditSession.SampleRate));
             EffectCurveClock.Normalize(this.CurveScope.Segments, frames);
-            if (this.CurveScope.SelectionSegments is not null) EffectCurveClock.Normalize(this.CurveScope.SelectionSegments, frames);
-            if (this.CurveScope.AudibleSegments is not null) EffectCurveClock.Normalize(this.CurveScope.AudibleSegments, frames);
+            if (this.CurveScope.SelectionSegments is not null)
+            {
+                EffectCurveClock.Normalize(this.CurveScope.SelectionSegments, frames);
+            }
+
+            if (this.CurveScope.AudibleSegments is not null)
+            {
+                EffectCurveClock.Normalize(this.CurveScope.AudibleSegments, frames);
+            }
         }
     }
 }

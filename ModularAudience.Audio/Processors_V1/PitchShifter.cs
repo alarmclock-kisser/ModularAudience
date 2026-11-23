@@ -359,7 +359,10 @@ namespace ModularAudience.Audio.Processors_V1
 
                 double pitchFactor = Math.Pow(2.0, semitones / 12.0);
                 if (!double.IsFinite(pitchFactor) || pitchFactor <= 0)
+                {
                     throw new ArgumentOutOfRangeException(nameof(semitones));
+                }
+
                 if (Math.Abs(semitones) < 1e-6f)
                 {
                     progress?.Report(1);
@@ -381,7 +384,9 @@ namespace ModularAudience.Audio.Processors_V1
                 long outputFrames = Math.Max(1L, (long)Math.Round(inputFrames / pitchFactor));
 
                 if (outputFrames * channels > AudioEffectProcessor.MaximumOutputSamples)
+                {
                     throw new ArgumentOutOfRangeException(nameof(semitones), "Pitch-shift output exceeds 4 GiB; use a smaller selection.");
+                }
 
                 var inChannels = new float[channels][];
                 for (int c = 0; c < channels; c++)
@@ -391,7 +396,11 @@ namespace ModularAudience.Audio.Processors_V1
 
                 for (long f = 0; f < inputFrames; f++)
                 {
-                    if ((f & 65535) == 0) cancellationToken.ThrowIfCancellationRequested();
+                    if ((f & 65535) == 0)
+                    {
+                        cancellationToken.ThrowIfCancellationRequested();
+                    }
+
                     for (int c = 0; c < channels; c++)
                     {
                         long srcIndex = f * channels + c;
@@ -426,7 +435,11 @@ namespace ModularAudience.Audio.Processors_V1
 
                     for (long outFrame = start; outFrame < end; outFrame++)
                     {
-                        if ((outFrame & 1023) == 0) cancellationToken.ThrowIfCancellationRequested();
+                        if ((outFrame & 1023) == 0)
+                        {
+                            cancellationToken.ThrowIfCancellationRequested();
+                        }
+
                         double srcPos = outFrame * (inputFrames / (double)outputFrames);
                         long srcIndexFloor = (long)Math.Floor(srcPos);
                         double frac = srcPos - srcIndexFloor;
@@ -547,11 +560,21 @@ namespace ModularAudience.Audio.Processors_V1
             ArgumentNullException.ThrowIfNull(data);
             if (channels <= 0 || data.Length == 0 || data.Length % channels != 0 || targetFrames < 1 ||
                 fftSize < 256 || fftSize > 16384 || (fftSize & (fftSize - 1)) != 0 || !double.IsFinite(overlap) || overlap < 0.5 || overlap > 0.95)
+            {
                 throw new ArgumentException("Invalid phase-vocoder format, frame count or window settings.");
+            }
+
             if ((long)targetFrames * channels > AudioEffectProcessor.MaximumOutputSamples)
+            {
                 throw new ArgumentOutOfRangeException(nameof(targetFrames), "Phase-vocoder output exceeds 4 GiB.");
+            }
+
             cancellationToken.ThrowIfCancellationRequested();
-            if (targetFrames == data.Length / channels) return (float[])data.Clone();
+            if (targetFrames == data.Length / channels)
+            {
+                return (float[])data.Clone();
+            }
+
             return PhaseVocoderTimeStretch(data, channels, data.Length / channels, targetFrames, progress, fftSize, overlap, cancellationToken);
         }
 
@@ -625,7 +648,11 @@ namespace ModularAudience.Audio.Processors_V1
 
             for (int f = 0; f < inputFrames; f++)
             {
-                if ((f & 65535) == 0) cancellationToken.ThrowIfCancellationRequested();
+                if ((f & 65535) == 0)
+                {
+                    cancellationToken.ThrowIfCancellationRequested();
+                }
+
                 for (int c = 0; c < channels; c++)
                 {
                     inChannels[c][f] = data[f * channels + c];
@@ -644,7 +671,11 @@ namespace ModularAudience.Audio.Processors_V1
             var outData = new float[(long)targetFrames * channels];
             for (int f = 0; f < targetFrames; f++)
             {
-                if ((f & 65535) == 0) cancellationToken.ThrowIfCancellationRequested();
+                if ((f & 65535) == 0)
+                {
+                    cancellationToken.ThrowIfCancellationRequested();
+                }
+
                 for (int c = 0; c < channels; c++)
                 {
                     outData[f * channels + c] = outChannels[c].Length > f ? outChannels[c][f] : 0f;
@@ -749,14 +780,23 @@ namespace ModularAudience.Audio.Processors_V1
                 synthesisPhases.CopyTo(lockedPhases, 0);
                 peaks.Clear();
                 for (int k = 1; k < N / 2; k++)
-                    if (mag[k] > mag[k - 1] && mag[k] >= mag[k + 1]) peaks.Add(k);
+                {
+                    if (mag[k] > mag[k - 1] && mag[k] >= mag[k + 1])
+                    {
+                        peaks.Add(k);
+                    }
+                }
+
                 if (peaks.Count > 0)
                 {
                     int peakIndex = 0;
                     for (int k = 1; k < N / 2; k++)
                     {
                         while (peakIndex + 1 < peaks.Count && k > (peaks[peakIndex] + peaks[peakIndex + 1]) / 2)
+                        {
                             peakIndex++;
+                        }
+
                         int peak = peaks[peakIndex];
                         lockedPhases[k] = synthesisPhases[peak] + WrapPhase(ph[k] - ph[peak]);
                     }
@@ -801,7 +841,11 @@ namespace ModularAudience.Audio.Processors_V1
             int trim = center;
             for (int i = 0; i < targetFrames; i++)
             {
-                if ((i & 65535) == 0) cancellationToken.ThrowIfCancellationRequested();
+                if ((i & 65535) == 0)
+                {
+                    cancellationToken.ThrowIfCancellationRequested();
+                }
+
                 int index = i + trim;
                 if (index < y.Length && weights[index] > 1e-10)
                 {

@@ -7,7 +7,11 @@ public partial class WindowMain
     private WaveformModeller? waveformModeller;
     private void ModelWaveform_Click(object? sender, EventArgs e)
     {
-        if (waveformModeller == null || waveformModeller.IsDisposed) waveformModeller = new WaveformModeller();
+        if (waveformModeller == null || waveformModeller.IsDisposed)
+        {
+            waveformModeller = new WaveformModeller();
+        }
+
         waveformModeller.Show(); waveformModeller.Activate();
     }
 }

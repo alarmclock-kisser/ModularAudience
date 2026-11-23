@@ -117,8 +117,11 @@ public sealed class YtdlpRecoveryTests
     {
         var options = new YtdlpDownloadOptions { WavBitDepth = 24, Network = new() { ProxyUrl = "http://proxy.example:8080" } };
         foreach (var kind in Enum.GetValues<YtdlpFailureKind>())
+        {
             Assert.AreEqual(kind is YtdlpFailureKind.Authentication or YtdlpFailureKind.BrowserCookies,
                 YtdlpRecoveryRules.CanApply(kind, YtdlpRecoveryAction.BrowserSession, options), kind.ToString());
+        }
+
         var session = new YtdlpBrowserSession { Browser = YtdlpBrowser.Firefox, Profile = "abc.default-release", ConsentGranted = true };
         var recovered = YtdlpRecoveryRules.Apply(YtdlpFailureKind.Authentication, new(YtdlpRecoveryAction.BrowserSession, session), options);
         Assert.AreSame(session, recovered.BrowserSession);
@@ -138,7 +141,11 @@ public sealed class YtdlpRecoveryTests
         try
         {
             var start = new System.Diagnostics.ProcessStartInfo("not-started.exe");
-            foreach (string argument in arguments) start.ArgumentList.Add(argument);
+            foreach (string argument in arguments)
+            {
+                start.ArgumentList.Add(argument);
+            }
+
             var type = typeof(YtdlpClient).Assembly.GetType("ModularAudience.Ytdlp.YtdlpSessionScratch")!;
             string scratch;
             using ((IDisposable)Activator.CreateInstance(type, [start, job, null])!)

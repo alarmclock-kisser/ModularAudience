@@ -85,7 +85,11 @@ namespace ModularAudience.Audio.Processing
                     double skip = Math.Floor(this.highRateSkip);
                     array.SkipFrames(skip);
                     this.highRateSkip -= skip;
-                    if (array.Read(buffer.Slice(written * channels, channels)) < channels) break;
+                    if (array.Read(buffer.Slice(written * channels, channels)) < channels)
+                    {
+                        break;
+                    }
+
                     this.highRateSkip += sourceStep - 1;
                 }
                 return written;

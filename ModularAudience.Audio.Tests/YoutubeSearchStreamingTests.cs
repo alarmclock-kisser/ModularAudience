@@ -42,7 +42,11 @@ public sealed class YoutubeSearchStreamingTests
         if (type == YtdlpResultType.Playlists)
         {
             Assert.AreEqual("[Playlist] Synth playlist", list.Items[0].Text);
-            foreach (int column in new[] { 2, 3, 6 }) Assert.AreEqual(string.Empty, list.Items[0].SubItems[column].Text);
+            foreach (int column in new[] { 2, 3, 6 })
+            {
+                Assert.AreEqual(string.Empty, list.Items[0].SubItems[column].Text);
+            }
+
             list.Items[0].Selected = true;
             Assert.IsFalse(Field<Button>(window, "metadataButton").Enabled);
             Assert.IsFalse(Field<Button>(window, "showRelatedButton").Enabled);
@@ -156,7 +160,10 @@ public sealed class YoutubeSearchStreamingTests
         {
             yield return Video(0);
             await release.Task.WaitAsync(token);
-            for (int index = 1; index < 205; index++) yield return Video(index);
+            for (int index = 1; index < 205; index++)
+            {
+                yield return Video(index);
+            }
         }
     }
 
@@ -258,7 +265,11 @@ public sealed class YoutubeSearchStreamingTests
         Assert.AreEqual(2, menu.Items.Count);
         Assert.IsTrue(menu.Height < 120, "Two real searches must not reserve room for 32 entries.");
         menu.Close();
-        for (int index = 0; index < 40; index++) history.Add("Music " + index);
+        for (int index = 0; index < 40; index++)
+        {
+            history.Add("Music " + index);
+        }
+
         var loaded = new YoutubeSearchHistory(scope.HistoryPath);
         Assert.AreEqual(32, loaded.Entries.Count);
         Assert.AreEqual("Music 39", loaded.Entries[0]);

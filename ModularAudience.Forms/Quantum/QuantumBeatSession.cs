@@ -60,15 +60,28 @@ internal sealed class QuantumBeatSession(IQuantumCircuitTranspiler? transpiler =
     public async Task<QuantumExecutionResult> ExecuteIbmAsync(QuantumCircuitDefinition circuit, int shots, string backend,
         string pythonExecutable, int optimizationLevel, int seed, string? preparedIsaQasm, CancellationToken cancellationToken)
     {
-        if (this.cloudClient is null || this.backendClient is null) throw new InvalidOperationException("Connect to IBM Quantum before submitting a hardware job.");
+        if (this.cloudClient is null || this.backendClient is null)
+        {
+            throw new InvalidOperationException("Connect to IBM Quantum before submitting a hardware job.");
+        }
+
         if (!string.Equals(backend, this.configuredBackend, StringComparison.Ordinal))
+        {
             throw new InvalidOperationException("Reconnect after selecting or changing the IBM backend.");
+        }
+
         var target = await this.backendClient.GetBackendConfigurationAsync(backend, cancellationToken).ConfigureAwait(false);
         if (circuit.QubitCount > target.QubitCount || shots > target.MaximumShots)
+        {
             throw new ArgumentException("The circuit width or shot count exceeds the selected backend's limits.");
+        }
+
         string qasm;
         TimeSpan compilation = TimeSpan.Zero;
-        if (!string.IsNullOrWhiteSpace(preparedIsaQasm)) qasm = preparedIsaQasm;
+        if (!string.IsNullOrWhiteSpace(preparedIsaQasm))
+        {
+            qasm = preparedIsaQasm;
+        }
         else
         {
             long start = Stopwatch.GetTimestamp();

@@ -159,7 +159,11 @@ internal static class BreakbeatPatternInstrumentRenderer
         reference.ReleaseSeconds = Math.Min(reference.ReleaseSeconds, 1);
         using AudioObj sample = InstrumentSampleSynth.Render(reference);
         float rms = PlaylistNormalizer.MeasureRms(sample.Data);
-        if (!float.IsFinite(rms) || rms <= MinimumInstrumentHitRms) return 100;
+        if (!float.IsFinite(rms) || rms <= MinimumInstrumentHitRms)
+        {
+            return 100;
+        }
+
         double percent = Math.Clamp(TargetInstrumentHitRms / rms * 100, 10, 100);
         return (float)Math.Clamp(Math.Round(percent / 5, MidpointRounding.AwayFromZero) * 5, 10, 100);
     }
@@ -242,7 +246,10 @@ internal static class BreakbeatPatternInstrumentRenderer
                     variantRms.Add(variantIndex, hitRms);
                 }
                 if (!trackHitLevels.TryGetValue(note.TrackIndex, out TrackHitLevels? levels))
+                {
                     trackHitLevels.Add(note.TrackIndex, levels = new TrackHitLevels());
+                }
+
                 double noteVolume = float.IsFinite(note.VolumePercent)
                     ? Math.Clamp(note.VolumePercent, 0f, 250f) / 100d
                     : 1;
@@ -266,9 +273,17 @@ internal static class BreakbeatPatternInstrumentRenderer
 
             foreach ((int trackIndex, TrackHitLevels levels) in trackHitLevels)
             {
-                if (levels.Count == 0) continue;
+                if (levels.Count == 0)
+                {
+                    continue;
+                }
+
                 double aggregateRms = Math.Sqrt(levels.SumSquaredRms / levels.Count);
-                if (!double.IsFinite(aggregateRms) || aggregateRms <= MinimumInstrumentHitRms) continue;
+                if (!double.IsFinite(aggregateRms) || aggregateRms <= MinimumInstrumentHitRms)
+                {
+                    continue;
+                }
+
                 float referencePercent = trackIndex < trackSettings.Count
                     && float.IsFinite(trackSettings[trackIndex].InstrumentLoudnessReferencePercent)
                     && trackSettings[trackIndex].InstrumentLoudnessReferencePercent > 0
@@ -282,10 +297,12 @@ internal static class BreakbeatPatternInstrumentRenderer
                 float effectivePercent = (float)Math.Clamp(
                     normalizationPercent * userPercent / referencePercent, 0, 250);
                 foreach (int variantIndex in levels.VariantIndices)
+                {
                     renderTrackSettings[variantIndex] = renderTrackSettings[variantIndex] with
                     {
                         DefaultVolumePercent = effectivePercent
                     };
+                }
             }
 
             return await BreakbeatGenerator_V2.RenderPatternNotesAsync(
@@ -344,11 +361,25 @@ internal static class BreakbeatPatternInstrumentRenderer
         double pitchFrequency = 440.0)
     {
         ArgumentNullException.ThrowIfNull(source);
-        if (midiNote is < 0 or > 127) throw new ArgumentOutOfRangeException(nameof(midiNote));
-        if (durationTicks <= 0) throw new ArgumentOutOfRangeException(nameof(durationTicks));
-        if (ticksPerQuarterNote <= 0) throw new ArgumentOutOfRangeException(nameof(ticksPerQuarterNote));
+        if (midiNote is < 0 or > 127)
+        {
+            throw new ArgumentOutOfRangeException(nameof(midiNote));
+        }
+
+        if (durationTicks <= 0)
+        {
+            throw new ArgumentOutOfRangeException(nameof(durationTicks));
+        }
+
+        if (ticksPerQuarterNote <= 0)
+        {
+            throw new ArgumentOutOfRangeException(nameof(ticksPerQuarterNote));
+        }
+
         if (!double.IsFinite(pitchFrequency) || pitchFrequency <= 0)
+        {
             throw new ArgumentOutOfRangeException(nameof(pitchFrequency));
+        }
 
         double tuningSemitones = 12 * Math.Log2(pitchFrequency / 440.0);
         double semitones = midiNote - source.MidiNote + tuningSemitones;

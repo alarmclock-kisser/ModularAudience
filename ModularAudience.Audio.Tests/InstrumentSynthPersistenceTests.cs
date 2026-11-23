@@ -19,7 +19,11 @@ public sealed class InstrumentSynthPersistenceTests
     public void Initialize()
     { directory = Path.Combine(Path.GetTempPath(), "synth-persistence-" + Guid.NewGuid().ToString("N")); store = new(directory); }
     [TestCleanup]
-    public void Cleanup() { if (Directory.Exists(directory)) Directory.Delete(directory, true); }
+    public void Cleanup() { if (Directory.Exists(directory))
+        {
+            Directory.Delete(directory, true);
+        }
+    }
 
     [TestMethod]
     public void SharedDelayPersistsIncludingZeroAndValidatesItsRange()
@@ -122,7 +126,11 @@ public sealed class InstrumentSynthPersistenceTests
             var numbers = (Dictionary<string, NumericUpDown>)Field(dialog, "numbers");
             var type = (ComboBox)Field(dialog, family == SynthFamily.DrumSet ? "kit" : "voice");
             type.SelectedIndex = 2;
-            if (family == SynthFamily.DrumSet) ((ComboBox)Field(dialog, "drum")).SelectedIndex = (int)SynthDrum.OpenHiHat;
+            if (family == SynthFamily.DrumSet)
+            {
+                ((ComboBox)Field(dialog, "drum")).SelectedIndex = (int)SynthDrum.OpenHiHat;
+            }
+
             ((DomainUpDown)Field(dialog, "note")).SelectedItem = "F#5";
             ((ComboBox)Field(dialog, "duration")).SelectedIndex = 3;
             ((ComboBox)Field(dialog, "articulation")).SelectedIndex = 2;

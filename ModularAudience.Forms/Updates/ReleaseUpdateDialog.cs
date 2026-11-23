@@ -37,7 +37,11 @@ internal sealed partial class ReleaseUpdateDialog : Form
 
     private async void Update_Click(object? sender, EventArgs e)
     {
-        if (activeDownload is not null || !SavePreference()) return;
+        if (activeDownload is not null || !SavePreference())
+        {
+            return;
+        }
+
         this.CancelHistoryLoad();
         using var cancellation = new CancellationTokenSource();
         activeDownload = cancellation;
@@ -45,12 +49,17 @@ internal sealed partial class ReleaseUpdateDialog : Form
         SetDownloading(true);
         var status = new Progress<string>(message =>
         {
-            if (!IsDisposed && activeDownload is not null && !installerCommitted) statusLabel.Text = message;
+            if (!IsDisposed && activeDownload is not null && !installerCommitted)
+            {
+                statusLabel.Text = message;
+            }
         });
         var progress = new Progress<YtdlpDownloadProgress>(value =>
         {
             if (!IsDisposed && activeDownload is not null && !installerCommitted && value.Percent is double percent)
+            {
                 downloadProgressBar.Value = (int)Math.Round(Math.Clamp(percent, 0, 100));
+            }
         });
         try
         {
@@ -83,7 +92,10 @@ internal sealed partial class ReleaseUpdateDialog : Form
                     closeWhenCancelled = false;
                     Close();
                 }
-                if (!IsDisposed && !installerCommitted) SetDownloading(false);
+                if (!IsDisposed && !installerCommitted)
+                {
+                    SetDownloading(false);
+                }
             }
         }
     }
@@ -100,7 +112,11 @@ internal sealed partial class ReleaseUpdateDialog : Form
 
     private void Skip_Click(object? sender, EventArgs e)
     {
-        if (activeDownload is not null || installerCommitted || dontAskCheckBox.Checked) return;
+        if (activeDownload is not null || installerCommitted || dontAskCheckBox.Checked)
+        {
+            return;
+        }
+
         try
         {
             settingsStore.SkipThroughRelease(release.Number);
@@ -126,7 +142,10 @@ internal sealed partial class ReleaseUpdateDialog : Form
         if (activeDownload is not null)
         {
             e.Cancel = true;
-            if (!installerCommitted) RequestCancellation();
+            if (!installerCommitted)
+            {
+                RequestCancellation();
+            }
         }
         else if (!SavePreference())
         {
@@ -137,7 +156,11 @@ internal sealed partial class ReleaseUpdateDialog : Form
 
     private bool SavePreference()
     {
-        if (!dontAskCheckBox.Checked || preferenceSaved) return true;
+        if (!dontAskCheckBox.Checked || preferenceSaved)
+        {
+            return true;
+        }
+
         try
         {
             settingsStore.DisableAsking();
@@ -153,7 +176,11 @@ internal sealed partial class ReleaseUpdateDialog : Form
 
     private void RequestCancellation()
     {
-        if (installerCommitted) return;
+        if (installerCommitted)
+        {
+            return;
+        }
+
         closeWhenCancelled = true;
         laterButton.Enabled = false;
         statusLabel.Text = "Cancelling the update...";

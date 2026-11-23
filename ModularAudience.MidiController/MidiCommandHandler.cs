@@ -44,7 +44,9 @@ public abstract class MidiCommandHandler
     {
         var command = this.Mapper.Map(message);
         if (command == MidiCommand.None)
+        {
             return;
+        }
 
         this.HandleCommand(command, message);
     }

@@ -24,7 +24,10 @@ public sealed class SampleModellerTests
         {
             var effect = SampleEffect.Create(kind);
             if (kind is SampleEffectKind.DrawWaveform or SampleEffectKind.VolumeEnvelope)
+            {
                 effect.Points = [new(0, 0), new(0.5, 1), new(1, 0)];
+            }
+
             using var result = SampleModellerDsp.Render(sample, new() { Effects = [effect] });
             Assert.IsTrue(result.Data.Length > 0 && result.Data.Length % 2 == 0, kind.ToString());
             Assert.IsTrue(result.Data.All(float.IsFinite), kind.ToString());
@@ -46,7 +49,10 @@ public sealed class SampleModellerTests
         var draw = SampleEffect.Create(SampleEffectKind.DrawWaveform); draw.Channel = 1; draw.Points = [new(0, -0.5), new(1, 0.5)];
         using var drawn = SampleModellerDsp.Render(sample, new() { Effects = [draw] });
         Assert.AreEqual(-0.5f, drawn.Data[0]); Assert.AreEqual(0.5f, drawn.Data[6]);
-        for (int i = 1; i < sample.Data.Length; i += 2) Assert.AreEqual(sample.Data[i], drawn.Data[i]);
+        for (int i = 1; i < sample.Data.Length; i += 2)
+        {
+            Assert.AreEqual(sample.Data[i], drawn.Data[i]);
+        }
     }
     [TestMethod]
     public void FiltersAttenuateTheCorrectFrequencyAndTimeToolsHaveExactDuration()
@@ -95,7 +101,11 @@ public sealed class SampleModellerTests
             settings.Effects[0].GainDb = double.NaN;
             Assert.ThrowsExactly<ArgumentException>(() => settings.Validate());
         }
-        finally { if (Directory.Exists(directory)) Directory.Delete(directory, true); }
+        finally { if (Directory.Exists(directory))
+            {
+                Directory.Delete(directory, true);
+            }
+        }
     }
     [STATestMethod]
     public void PreviewProviderLoopsSelectedFramesAndAcceptsUpdatedAudio()
@@ -156,7 +166,11 @@ public sealed class SampleModellerTests
             Call("CommitToCollection", true); Assert.AreNotEqual(audios[1].Name, audios[2].Name);
             Call("CommitToCollection", false);
             Assert.AreEqual("Original", sample.Name);
-            for (int i = 0; i < before.Length; i++) Assert.AreEqual(-before[i], sample.Data[i]);
+            for (int i = 0; i < before.Length; i++)
+            {
+                Assert.AreEqual(-before[i], sample.Data[i]);
+            }
+
             task = (Task)Call("SaveAsync", false)!;
             while (!task.IsCompleted && DateTime.UtcNow < deadline) { Application.DoEvents(); Thread.Sleep(2); }
             task.GetAwaiter().GetResult();

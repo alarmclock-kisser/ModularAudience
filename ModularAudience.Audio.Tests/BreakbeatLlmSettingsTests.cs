@@ -41,7 +41,11 @@ public sealed class BreakbeatLlmSettingsTests
             Assert.IsTrue(loaded.Parameters["top_k"].Enabled);
             Assert.IsFalse(File.ReadAllText(path).Contains("assistant"));
         }
-        finally { if (Directory.Exists(directory)) Directory.Delete(directory, true); }
+        finally { if (Directory.Exists(directory))
+            {
+                Directory.Delete(directory, true);
+            }
+        }
     }
 
     [TestMethod]
@@ -70,7 +74,10 @@ public sealed class BreakbeatLlmSettingsTests
         var temperature = BreakbeatLlmSettings.Definitions.Single(d => d.Key == "temperature");
         Assert.AreEqual(0.75, temperature.Parse("0,75"));
         foreach (string value in new[] { "NaN", "Infinity", "-0.1", "2.01", "text" })
+        {
             Assert.ThrowsExactly<ArgumentException>(() => temperature.Parse(value));
+        }
+
         var tokens = BreakbeatLlmSettings.Definitions.Single(d => d.Key == "max_tokens");
         Assert.ThrowsExactly<ArgumentException>(() => tokens.Parse("1.5"));
         Assert.ThrowsExactly<ArgumentException>(() => tokens.Parse("0"));
@@ -101,7 +108,11 @@ public sealed class BreakbeatLlmSettingsTests
         context.Messages("endpoint|model", "system", "new request", true);
         context.Remember(generation, "request", "late response");
         Assert.AreEqual(0, context.TurnCount);
-        for (int i = 0; i < 10; i++) context.Remember(context.Generation, $"user {i}", $"reply {i}");
+        for (int i = 0; i < 10; i++)
+        {
+            context.Remember(context.Generation, $"user {i}", $"reply {i}");
+        }
+
         Assert.AreEqual(BreakbeatLlmContext.MaximumTurns, context.TurnCount);
         Assert.AreEqual("user 2", context.Messages("endpoint|model", "system", "next", true)[1].content);
         context.Remember(context.Generation, "large", new string('a', BreakbeatLlmContext.MaximumCharacters - 10));
@@ -164,8 +175,14 @@ public sealed class BreakbeatLlmSettingsTests
         finally
         {
             sharedField.SetValue(null, originalShared);
-            if (original != null) File.WriteAllBytes(path, original);
-            else if (File.Exists(path)) File.Delete(path);
+            if (original != null)
+            {
+                File.WriteAllBytes(path, original);
+            }
+            else if (File.Exists(path))
+            {
+                File.Delete(path);
+            }
         }
     }
 }

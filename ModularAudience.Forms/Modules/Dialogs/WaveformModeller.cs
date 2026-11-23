@@ -89,7 +89,11 @@ public sealed class WaveformModeller : Form
         Tool(tools, "Smooth drawing", () =>
         {
             var input = drawn ?? cycle; var smooth = new double[input.Length];
-            for (int i = 0; i < smooth.Length; i++) smooth[i] = (input[(i + input.Length - 1) % input.Length] + 2 * input[i] + input[(i + 1) % input.Length]) / 4;
+            for (int i = 0; i < smooth.Length; i++)
+            {
+                smooth[i] = (input[(i + input.Length - 1) % input.Length] + 2 * input[i] + input[(i + 1) % input.Length]) / 4;
+            }
+
             ApplyDrawing(smooth);
         });
         Tool(tools, "Invert", () => ApplyDrawing((drawn ?? cycle).Select(v => -v).ToArray()));
@@ -115,22 +119,26 @@ public sealed class WaveformModeller : Form
         interactionHints.SetToolTip(plot, "Draw one cycle with the left mouse button. The horizontal axis is phase 0 to 1; the vertical axis is amplitude. Drawing is converted to a Fourier equation using Draw harmonics.");
         interactionHints.SetToolTip(hear, "Start or stop the continuous live oscillator. Valid edits crossfade into playback without restarting the current phase.");
         equation.TextChanged += (_, _) => { if (!editing) { drawn = null; QueueUpdate(); } };
-        foreach (var n in new[] { frequency, gain, duration, phase, harmonics, attack, release, channels }) n.ValueChanged += (_, _) => QueueUpdate();
+        foreach (var n in new[] { frequency, gain, duration, phase, harmonics, attack, release, channels })
+        {
+            n.ValueChanged += (_, _) => QueueUpdate();
+        }
+
         rate.SelectedIndexChanged += (_, _) => QueueUpdate(); normalize.CheckedChanged += (_, _) => QueueUpdate(); dc.CheckedChanged += (_, _) => QueueUpdate();
         name.TextChanged += (_, _) => QueueUpdate();
-        debounce.Tick += (_, _) => { debounce.Stop(); Safe(() => { if (drawn != null) SetDrawnEquation(); UpdateWave(!drawing); }); };
+        debounce.Tick += (_, _) => { debounce.Stop(); Safe(() => { if (drawn != null) { SetDrawnEquation(); } UpdateWave(!drawing); }); };
         plot.Paint += PaintWave;
-        plot.MouseDown += (_, e) => { if (e.Button != MouseButtons.Left) return; drawing = true; drawn ??= (double[])cycle.Clone(); lastDraw = e.Location; plot.Capture = true; DrawTo(e.Location); };
-        plot.MouseMove += (_, e) => { if (drawing) DrawTo(e.Location); };
-        plot.MouseUp += (_, _) => { if (!drawing) return; drawing = false; plot.Capture = false; debounce.Stop(); SetDrawnEquation(); UpdateWave(true); };
-        FormClosing += (_, e) => { if (rendering) { closeAfterRender = true; renderCancellation?.Cancel(); status.Text = "Cancelling render…"; e.Cancel = true; } else StopHear(); };
+        plot.MouseDown += (_, e) => { if (e.Button != MouseButtons.Left) { return; } drawing = true; drawn ??= (double[])cycle.Clone(); lastDraw = e.Location; plot.Capture = true; DrawTo(e.Location); };
+        plot.MouseMove += (_, e) => { if (drawing) { DrawTo(e.Location); } };
+        plot.MouseUp += (_, _) => { if (!drawing) { return; } drawing = false; plot.Capture = false; debounce.Stop(); SetDrawnEquation(); UpdateWave(true); };
+        FormClosing += (_, e) => { if (rendering) { closeAfterRender = true; renderCancellation?.Cancel(); status.Text = "Cancelling render…"; e.Cancel = true; } else { StopHear(); } };
         ApplySettings(settings);
     }
     private static NumericUpDown Number(decimal min, decimal max, decimal value, decimal step) => new()
     { Minimum = min, Maximum = max, Value = value, Increment = step, DecimalPlaces = step < 1 ? 2 : 0, Width = 76 };
     private static FlowLayoutPanel Flow() => new() { AutoSize = true, Dock = DockStyle.Fill, WrapContents = true };
     private void Safe(Action action) { try { action(); } catch (Exception error) { status.Text = error.Message; } }
-    private void QueueUpdate() { if (editing) return; debounce.Stop(); debounce.Start(); }
+    private void QueueUpdate() { if (editing) { return; } debounce.Stop(); debounce.Start(); }
     private WaveformSettings ReadSettings() => new()
     {
         Name = name.Text, Equation = equation.Text, Frequency = (double)frequency.Value, Gain = (double)gain.Value / 100,
@@ -171,36 +179,63 @@ public sealed class WaveformModeller : Form
     private void History(bool forward)
     {
         var source = forward ? redo : undo; var destination = forward ? undo : redo;
-        if (source.Count == 0) return; debounce.Stop(); destination.Push(committed.Clone()); ApplySettings(source.Pop());
+        if (source.Count == 0)
+        {
+            return;
+        }
+
+        debounce.Stop(); destination.Push(committed.Clone()); ApplySettings(source.Pop());
     }
     private void ApplyDrawing(double[] values) { drawn = values; SetDrawnEquation(); UpdateWave(true); }
     private void SetDrawnEquation()
     {
-        if (drawn == null) return;
+        if (drawn == null)
+        {
+            return;
+        }
+
         editing = true;
         try { equation.Text = WaveformModel.FourierEquation(drawn, (int)harmonics.Value); }
         finally { editing = false; }
     }
     private void DrawTo(Point point)
     {
-        if (drawn == null) return;
+        if (drawn == null)
+        {
+            return;
+        }
+
         int Index(int x) => Math.Clamp((int)Math.Round((x - 35) / (double)Math.Max(1, plot.Width - 50) * (drawn.Length - 1)), 0, drawn.Length - 1);
         double Value(int y) => Math.Clamp(1 - 2 * (y - 15) / (double)Math.Max(1, plot.Height - 40), -1, 1);
         int first = Index(lastDraw.X), last = Index(point.X); double a = Value(lastDraw.Y), b = Value(point.Y);
         for (int i = Math.Min(first, last); i <= Math.Max(first, last); i++)
+        {
             drawn[i] = first == last ? b : a + (b - a) * (i - first) / (last - first);
+        }
+
         lastDraw = point; plot.Invalidate();
         // Throttle drawing updates rather than restarting a debounce on every mouse move:
         // continuous strokes must remain audible, not wait until the mouse stops.
-        if (!debounce.Enabled) debounce.Start();
+        if (!debounce.Enabled)
+        {
+            debounce.Start();
+        }
     }
     private void PaintWave(object? sender, PaintEventArgs e)
     {
         var g = e.Graphics; g.Clear(Color.FromArgb(25, 28, 34));
         int width = Math.Max(1, plot.Width - 50), height = Math.Max(1, plot.Height - 40);
         using var grid = new Pen(Color.FromArgb(55, 62, 70));
-        for (int i = 0; i <= 8; i++) g.DrawLine(grid, 35 + width * i / 8, 15, 35 + width * i / 8, 15 + height);
-        for (int i = 0; i <= 4; i++) g.DrawLine(grid, 35, 15 + height * i / 4, 35 + width, 15 + height * i / 4);
+        for (int i = 0; i <= 8; i++)
+        {
+            g.DrawLine(grid, 35 + width * i / 8, 15, 35 + width * i / 8, 15 + height);
+        }
+
+        for (int i = 0; i <= 4; i++)
+        {
+            g.DrawLine(grid, 35, 15 + height * i / 4, 35 + width, 15 + height * i / 4);
+        }
+
         TextRenderer.DrawText(g, "+1", Font, new Point(2, 10), Color.Silver); TextRenderer.DrawText(g, "−1", Font, new Point(2, height + 5), Color.Silver);
         TextRenderer.DrawText(g, "x: phase 0 → 1", Font, new Point(35, height + 18), Color.Silver);
         var values = drawing && drawn != null ? drawn : cycle;
@@ -210,7 +245,12 @@ public sealed class WaveformModeller : Form
         {
             double value = values[Math.Min(values.Length - 1, x * values.Length / width)];
             var p = new PointF(35 + x, (float)(15 + height * (1 - value) / 2));
-            if (prior is { } before) g.DrawLine(pen, before, p); prior = p;
+            if (prior is { } before)
+            {
+                g.DrawLine(pen, before, p);
+            }
+
+            prior = p;
         }
     }
     private void ToggleHear()
@@ -229,26 +269,45 @@ public sealed class WaveformModeller : Form
     private void StopHear() { output?.Stop(); output?.Dispose(); output = null; live = null; hear.Text = "Prehear"; }
     private async Task RenderAsync()
     {
-        if (rendering) return;
+        if (rendering)
+        {
+            return;
+        }
+
         WaveformSettings snapshot;
         try { snapshot = ReadSettings(); WaveformModel.BuildCycle(snapshot); }
         catch (Exception error) { status.Text = error.Message; return; }
         rendering = true; renderCancellation = new();
         try
         {
-            var progress = new Progress<double>(p => { if (!IsDisposed) status.Text = $"Rendering {p:P0}"; });
+            var progress = new Progress<double>(p => { if (!IsDisposed) { status.Text = $"Rendering {p:P0}"; } });
             var token = renderCancellation.Token;
             var audio = await Task.Run(() => WaveformModel.Render(snapshot, token, progress), token);
             if (IsDisposed || disposedResources || token.IsCancellationRequested) { audio.Dispose(); return; }
-            if (collection == null || collection.IsDisposed) collection = new AudioCollectionView([], "Modelled Waveforms");
+            if (collection == null || collection.IsDisposed)
+            {
+                collection = new AudioCollectionView([], "Modelled Waveforms");
+            }
+
             collection.AudioC.Audios.Add(audio); collection.Show(); status.Text = "Rendered AudioObj added to Modelled Waveforms.";
         }
-        catch (OperationCanceledException) { if (!IsDisposed) status.Text = "Render cancelled."; }
-        catch (Exception error) { if (!IsDisposed) status.Text = error.Message; }
+        catch (OperationCanceledException) { if (!IsDisposed)
+            {
+                status.Text = "Render cancelled.";
+            }
+        }
+        catch (Exception error) { if (!IsDisposed)
+            {
+                status.Text = error.Message;
+            }
+        }
         finally
         {
             rendering = false; renderCancellation.Dispose(); renderCancellation = null;
-            if (closeAfterRender && !IsDisposed) Close();
+            if (closeAfterRender && !IsDisposed)
+            {
+                Close();
+            }
         }
     }
     private void Save()
@@ -261,7 +320,11 @@ public sealed class WaveformModeller : Form
     {
         Directory.CreateDirectory(WaveformSettings.PresetDirectory);
         using var dialog = new OpenFileDialog { Filter = "Waveform model (*.json)|*.json", InitialDirectory = WaveformSettings.PresetDirectory };
-        if (dialog.ShowDialog(this) != DialogResult.OK) return;
+        if (dialog.ShowDialog(this) != DialogResult.OK)
+        {
+            return;
+        }
+
         var loaded = WaveformSettings.Load(dialog.FileName); undo.Push(committed.Clone()); redo.Clear(); ApplySettings(loaded);
     }
     protected override bool ProcessCmdKey(ref Message msg, Keys keyData)

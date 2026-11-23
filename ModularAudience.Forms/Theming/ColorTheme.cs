@@ -65,28 +65,56 @@ public static class ThemeFiles
     };
     public static Color ParseColor(string text)
     {
-        if (text.Equals("Transparent", StringComparison.OrdinalIgnoreCase)) return Color.Transparent;
+        if (text.Equals("Transparent", StringComparison.OrdinalIgnoreCase))
+        {
+            return Color.Transparent;
+        }
+
         if (text.StartsWith('#') && (text.Length == 7 || text.Length == 9))
         {
             uint value = Convert.ToUInt32(text[1..], 16);
             return Color.FromArgb(unchecked((int)(text.Length == 7 ? value | 0xFF000000 : value)));
         }
-        if (Enum.TryParse<KnownColor>(text, true, out var known)) return Color.FromKnownColor(known);
+        if (Enum.TryParse<KnownColor>(text, true, out var known))
+        {
+            return Color.FromKnownColor(known);
+        }
+
         throw new FormatException($"Invalid color '{text}'. Use #RRGGBB, #AARRGGBB or a named color.");
     }
     public static string FormatColor(Color color) => color.A == 255 ? $"#{color.R:X2}{color.G:X2}{color.B:X2}" : $"#{color.A:X2}{color.R:X2}{color.G:X2}{color.B:X2}";
     public static ColorTheme Deserialize(string json)
     {
         var theme = JsonSerializer.Deserialize<ColorTheme>(json, JsonOptions) ?? throw new JsonException("The theme is empty.");
-        if (theme.Version != 1) throw new JsonException("Unsupported theme version.");
-        if (theme.Palette == null || theme.Rules == null) throw new JsonException("Palette and rules are required.");
+        if (theme.Version != 1)
+        {
+            throw new JsonException("Unsupported theme version.");
+        }
+
+        if (theme.Palette == null || theme.Rules == null)
+        {
+            throw new JsonException("Palette and rules are required.");
+        }
+
         foreach (var property in typeof(ThemeColors).GetProperties())
-            if (property.GetValue(theme.Palette) is string value && !string.IsNullOrWhiteSpace(value)) ParseColor(value);
+        {
+            if (property.GetValue(theme.Palette) is string value && !string.IsNullOrWhiteSpace(value))
+            {
+                ParseColor(value);
+            }
+        }
+
         foreach (var rule in theme.Rules)
         {
             if (rule == null || rule.Colors == null || rule.FormType == null || rule.ControlType == null || rule.ElementPath == null)
+            {
                 throw new JsonException("Invalid theme rule.");
-            foreach (string value in rule.Colors.Values) ParseColor(value);
+            }
+
+            foreach (string value in rule.Colors.Values)
+            {
+                ParseColor(value);
+            }
         }
         return theme;
     }
@@ -98,6 +126,10 @@ public static class ThemeFiles
         Directory.CreateDirectory(Path.GetDirectoryName(Path.GetFullPath(path))!);
         string temporary = path + "." + Guid.NewGuid().ToString("N") + ".tmp";
         try { File.WriteAllText(temporary, json); File.Move(temporary, path, true); }
-        finally { if (File.Exists(temporary)) File.Delete(temporary); }
+        finally { if (File.Exists(temporary))
+            {
+                File.Delete(temporary);
+            }
+        }
     }
 }

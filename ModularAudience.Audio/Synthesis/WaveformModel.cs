@@ -32,9 +32,14 @@ public sealed class WaveformSettings
             || Channels is < 1 or > 8 || Harmonics is < 1 or > 128
             || !double.IsFinite(AttackMilliseconds) || AttackMilliseconds is < 0 or > 10000
             || !double.IsFinite(ReleaseMilliseconds) || ReleaseMilliseconds is < 0 or > 10000)
+        {
             throw new ArgumentException("Invalid waveform settings.");
+        }
+
         if (DrawnCycle != null && (DrawnCycle.Length != WaveformModel.TableSize || DrawnCycle.Any(v => !double.IsFinite(v) || Math.Abs(v) > 1)))
+        {
             throw new ArgumentException("A stored drawing must contain 2048 finite values in the range -1…1.");
+        }
     }
     public static string PresetDirectory => Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.ApplicationData), "ModularAudience", "Waveforms");
     public void Save(string path) { Validate(); WaveformModel.BuildCycle(this); File.WriteAllText(path, JsonSerializer.Serialize(this, new JsonSerializerOptions { WriteIndented = true })); }
@@ -57,21 +62,43 @@ public static class WaveformModel
             double value;
             try { value = expression(i / (double)cycle.Length); }
             catch (ArithmeticException error) { throw new ArgumentException("Equation evaluation failed: " + error.Message); }
-            if (!double.IsFinite(value) || Math.Abs(value) > 1e6) throw new ArgumentException($"Equation is not finite/bounded at x={i / (double)cycle.Length:0.0000}.");
+            if (!double.IsFinite(value) || Math.Abs(value) > 1e6)
+            {
+                throw new ArgumentException($"Equation is not finite/bounded at x={i / (double)cycle.Length:0.0000}.");
+            }
+
             cycle[i] = value;
         }
         double mean = settings.RemoveDc ? cycle.Average() : 0;
-        for (int i = 0; i < cycle.Length; i++) cycle[i] -= mean;
+        for (int i = 0; i < cycle.Length; i++)
+        {
+            cycle[i] -= mean;
+        }
+
         double peak = cycle.Max(Math.Abs);
-        if (settings.Normalize && peak > 1e-12) for (int i = 0; i < cycle.Length; i++) cycle[i] /= peak;
-        else if (peak > 1) throw new ArgumentException("Waveform exceeds ±1. Enable Normalize or reduce the equation's level.");
+        if (settings.Normalize && peak > 1e-12)
+        {
+            for (int i = 0; i < cycle.Length; i++)
+            {
+                cycle[i] /= peak;
+            }
+        }
+        else if (peak > 1)
+        {
+            throw new ArgumentException("Waveform exceeds ±1. Enable Normalize or reduce the equation's level.");
+        }
+
         return cycle;
     }
     public static float[] BandLimitedTable(double[] cycle, double frequency, int sampleRate)
     {
         var fft = cycle.Select(v => new Complex(v, 0)).ToArray(); Fourier.Forward(fft, FourierOptions.Matlab);
         int maximum = Math.Clamp((int)Math.Floor(sampleRate * 0.48 / frequency), 0, cycle.Length / 2 - 1);
-        for (int i = maximum + 1; i < fft.Length - maximum; i++) fft[i] = Complex.Zero;
+        for (int i = maximum + 1; i < fft.Length - maximum; i++)
+        {
+            fft[i] = Complex.Zero;
+        }
+
         Fourier.Inverse(fft, FourierOptions.Matlab);
         double peak = fft.Max(v => Math.Abs(v.Real));
         double scale = peak > 1 ? 1 / peak : 1;
@@ -79,16 +106,31 @@ public static class WaveformModel
     }
     public static string FourierEquation(IReadOnlyList<double> cycle, int harmonics)
     {
-        if (cycle.Count == 0) throw new ArgumentException("Draw a waveform first.");
+        if (cycle.Count == 0)
+        {
+            throw new ArgumentException("Draw a waveform first.");
+        }
+
         var fft = cycle.Select(v => new Complex(v, 0)).ToArray(); Fourier.Forward(fft, FourierOptions.Matlab);
         var terms = new List<string>();
         string Number(double value) => value.ToString("0.########", CultureInfo.InvariantCulture);
-        if (Math.Abs(fft[0].Real / cycle.Count) > 1e-7) terms.Add(Number(fft[0].Real / cycle.Count));
+        if (Math.Abs(fft[0].Real / cycle.Count) > 1e-7)
+        {
+            terms.Add(Number(fft[0].Real / cycle.Count));
+        }
+
         for (int h = 1; h <= Math.Min(harmonics, cycle.Count / 2 - 1); h++)
         {
             double cosine = 2 * fft[h].Real / cycle.Count, sine = -2 * fft[h].Imaginary / cycle.Count;
-            if (Math.Abs(cosine) > 1e-7) terms.Add($"({Number(cosine)})*cos(tau*{h}*x)");
-            if (Math.Abs(sine) > 1e-7) terms.Add($"({Number(sine)})*sin(tau*{h}*x)");
+            if (Math.Abs(cosine) > 1e-7)
+            {
+                terms.Add($"({Number(cosine)})*cos(tau*{h}*x)");
+            }
+
+            if (Math.Abs(sine) > 1e-7)
+            {
+                terms.Add($"({Number(sine)})*sin(tau*{h}*x)");
+            }
         }
         return terms.Count > 0 ? string.Join(" + ", terms) : "0";
     }
@@ -96,7 +138,11 @@ public static class WaveformModel
     {
         var cycle = BuildCycle(settings); var table = BandLimitedTable(cycle, settings.Frequency, settings.SampleRate);
         long frames = (long)Math.Round(settings.Duration * settings.SampleRate);
-        if (frames * settings.Channels > int.MaxValue) throw new ArgumentException("The requested audio exceeds the RAM buffer limit.");
+        if (frames * settings.Channels > int.MaxValue)
+        {
+            throw new ArgumentException("The requested audio exceeds the RAM buffer limit.");
+        }
+
         var output = new float[checked((int)frames * settings.Channels)];
         for (int i = 0; i < frames; i++)
         {
@@ -105,10 +151,21 @@ public static class WaveformModel
             double index = phase * table.Length; int first = (int)index % table.Length;
             double value = table[first] + (table[(first + 1) % table.Length] - table[first]) * (index - first);
             double envelope = 1;
-            if (settings.AttackMilliseconds > 0) envelope = Math.Min(envelope, i / (settings.AttackMilliseconds * settings.SampleRate / 1000));
-            if (settings.ReleaseMilliseconds > 0) envelope = Math.Min(envelope, (frames - 1 - i) / (settings.ReleaseMilliseconds * settings.SampleRate / 1000));
+            if (settings.AttackMilliseconds > 0)
+            {
+                envelope = Math.Min(envelope, i / (settings.AttackMilliseconds * settings.SampleRate / 1000));
+            }
+
+            if (settings.ReleaseMilliseconds > 0)
+            {
+                envelope = Math.Min(envelope, (frames - 1 - i) / (settings.ReleaseMilliseconds * settings.SampleRate / 1000));
+            }
+
             float sample = (float)(value * settings.Gain * Math.Max(0, envelope));
-            for (int ch = 0; ch < settings.Channels; ch++) output[i * settings.Channels + ch] = sample;
+            for (int ch = 0; ch < settings.Channels; ch++)
+            {
+                output[i * settings.Channels + ch] = sample;
+            }
         }
         progress?.Report(1);
         return new AudioObj { Name = settings.Name, Data = output, SampleRate = settings.SampleRate, Channels = settings.Channels,

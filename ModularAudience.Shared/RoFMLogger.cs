@@ -355,7 +355,11 @@ namespace ModularAudience.Shared
 
         public void StartBackgroundWriter(CancellationToken cancellationToken)
         {
-            if (this._logWriterTask != null) return;
+            if (this._logWriterTask != null)
+            {
+                return;
+            }
+
             this._logCts = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken);
 
             this._logCts.Token.Register(() => this._logChannel.Writer.TryComplete());

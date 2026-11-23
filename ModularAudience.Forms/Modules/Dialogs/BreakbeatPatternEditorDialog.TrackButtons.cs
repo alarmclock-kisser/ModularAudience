@@ -22,8 +22,10 @@ public partial class BreakbeatPatternEditorDialog
             Color back = on && button == 0 ? Color.LightGreen : on ? Color.FromArgb(48, 48, 48) : Color.FromArgb(65, 69, 76);
             using var brush = new SolidBrush(back); graphics.FillRectangle(brush, bounds);
             if (button < 2)
+            {
                 TextRenderer.DrawText(graphics, button == 0 ? "S" : "M", SystemFonts.MessageBoxFont, bounds,
                     on && button == 0 ? Color.Black : Color.White, TextFormatFlags.HorizontalCenter | TextFormatFlags.VerticalCenter);
+            }
             else
             {
                 // Small eraser glyph, independent of installed symbol/emoji fonts.
@@ -36,16 +38,29 @@ public partial class BreakbeatPatternEditorDialog
     }
     private bool TryClickTrackButtons(MouseEventArgs e)
     {
-        if (e.Button != MouseButtons.Left) return false;
+        if (e.Button != MouseButtons.Left)
+        {
+            return false;
+        }
+
         for (int row = 0; row < this.samples.Count; row++)
+        {
             for (int button = 0; button < 3; button++)
             {
-                if (!this.TrackButtonBounds(row, button).Contains(e.Location)) continue;
+                if (!this.TrackButtonBounds(row, button).Contains(e.Location))
+                {
+                    continue;
+                }
+
                 AudioObj sample = this.samples[row];
                 if (button < 2)
                 {
                     var set = button == 0 ? this.soloTracks : this.mutedTracks;
-                    if (!set.Remove(sample)) set.Add(sample);
+                    if (!set.Remove(sample))
+                    {
+                        set.Add(sample);
+                    }
+
                     this.RegisterPatternNotesChanged(this.notes.Select(n => (BreakbeatPatternNote?)n).ToArray());
                 }
                 else
@@ -60,17 +75,27 @@ public partial class BreakbeatPatternEditorDialog
                 this.pictureBox_pattern.Invalidate();
                 return true;
             }
+        }
+
         return false;
     }
     private bool IsTrackAudible(int row)
     {
-        if (row < 0 || row >= this.samples.Count || this.mutedTracks.Contains(this.samples[row])) return false;
+        if (row < 0 || row >= this.samples.Count || this.mutedTracks.Contains(this.samples[row]))
+        {
+            return false;
+        }
+
         bool anySolo = this.samples.Any(this.soloTracks.Contains);
         return !anySolo || this.soloTracks.Contains(this.samples[row]);
     }
     private void ClearAllPatternNotes()
     {
-        if (this.notes.Count == 0) return;
+        if (this.notes.Count == 0)
+        {
+            return;
+        }
+
         var removed = this.notes.ToArray();
         this.notes.Clear();
         this.selectedNotes.Clear();

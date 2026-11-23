@@ -92,7 +92,11 @@ internal static class YoutubeChromeBridge
             int count;
             while ((count = await context.Request.InputStream.ReadAsync(chunk, token)) > 0)
             {
-                if (buffer.Length + count > 1024 * 1024) throw new InvalidDataException("Cookie response too large.");
+                if (buffer.Length + count > 1024 * 1024)
+                {
+                    throw new InvalidDataException("Cookie response too large.");
+                }
+
                 buffer.Write(chunk, 0, count);
             }
             var session = ParseSession(Encoding.UTF8.GetString(buffer.ToArray()));
@@ -118,7 +122,10 @@ internal static class YoutubeChromeBridge
             Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.ProgramFilesX86), "Google", "Chrome", "Application", "chrome.exe")
         }.FirstOrDefault(File.Exists);
         if (chrome is null)
+        {
             throw new FileNotFoundException("Google Chrome could not be located. Install Chrome to use the automatic connection.");
+        }
+
         return chrome;
     }
 
@@ -133,7 +140,10 @@ internal static class YoutubeChromeBridge
     private static void OpenChromePage(string chrome, string url)
     {
         using var process = Process.Start(ChromePageStartInfo(chrome, url));
-        if (process is null) throw new InvalidOperationException("Chrome could not be started.");
+        if (process is null)
+        {
+            throw new InvalidOperationException("Chrome could not be started.");
+        }
     }
 
     internal static YtdlpBrowserSession ParseSession(string json)
@@ -145,20 +155,36 @@ internal static class YoutubeChromeBridge
         {
             string domain = cookie.GetProperty("domain").GetString() ?? "";
             string host = domain.TrimStart('.');
-            if (!(host.Equals("youtube.com", StringComparison.OrdinalIgnoreCase) || host.EndsWith(".youtube.com", StringComparison.OrdinalIgnoreCase))) continue;
+            if (!(host.Equals("youtube.com", StringComparison.OrdinalIgnoreCase) || host.EndsWith(".youtube.com", StringComparison.OrdinalIgnoreCase)))
+            {
+                continue;
+            }
+
             string path = cookie.GetProperty("path").GetString() ?? "/";
             string name = cookie.GetProperty("name").GetString() ?? "";
             string value = cookie.GetProperty("value").GetString() ?? "";
-            if (new[] { domain, path, name, value }.Any(field => field.Any(c => c is '\r' or '\n' or '\t' or '\0'))) continue;
+            if (new[] { domain, path, name, value }.Any(field => field.Any(c => c is '\r' or '\n' or '\t' or '\0')))
+            {
+                continue;
+            }
+
             double expiry = cookie.GetProperty("expirationDate").GetDouble();
-            if (!double.IsFinite(expiry) || expiry < 0 || expiry > long.MaxValue) continue;
+            if (!double.IsFinite(expiry) || expiry < 0 || expiry > long.MaxValue)
+            {
+                continue;
+            }
+
             text.Append(cookie.GetProperty("httpOnly").GetBoolean() ? "#HttpOnly_" : "").Append(domain).Append('\t')
                 .Append(domain.StartsWith('.') ? "TRUE" : "FALSE").Append('\t').Append(path).Append('\t')
                 .Append(cookie.GetProperty("secure").GetBoolean() ? "TRUE" : "FALSE").Append('\t')
                 .Append((long)expiry).Append('\t').Append(name).Append('\t').Append(value).Append('\n');
             accepted++;
         }
-        if (accepted == 0) throw new InvalidDataException("No YouTube cookies were received. Open YouTube in this Chrome profile first, then connect again.");
+        if (accepted == 0)
+        {
+            throw new InvalidDataException("No YouTube cookies were received. Open YouTube in this Chrome profile first, then connect again.");
+        }
+
         return new YtdlpBrowserSession { Browser = YtdlpBrowser.Chrome, CookieContents = text.ToString(), ConsentGranted = true };
     }
 }

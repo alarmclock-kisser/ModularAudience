@@ -146,7 +146,11 @@ public static class VocalPhonemeInventory
 
     public static VocalPhoneme Get(string symbol)
     {
-        if (Map.TryGetValue(symbol, out var p)) return p;
+        if (Map.TryGetValue(symbol, out var p))
+        {
+            return p;
+        }
+
         return Map["uh"];
     }
 

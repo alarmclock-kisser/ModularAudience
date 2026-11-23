@@ -81,7 +81,11 @@ namespace ModularAudience.Audio.Processors_V4
         {
             for (int bin = 0; bin < block.Bins; bin++)
             {
-                if ((bin & 255) == 0) token.ThrowIfCancellationRequested();
+                if ((bin & 255) == 0)
+                {
+                    token.ThrowIfCancellationRequested();
+                }
+
                 int band = this.BandOfBin[bin];
                 double power = Positive(block.Power[frame][bin]);
                 this.Power[destination][bin] = power;
@@ -94,7 +98,11 @@ namespace ModularAudience.Audio.Processors_V4
             for (int band = 0; band < this.BandPower[destination].Length; band++)
             {
                 double energy = this.BandPower[destination][band];
-                if (energy <= 0) continue;
+                if (energy <= 0)
+                {
+                    continue;
+                }
+
                 this.Harmonic[destination][band] /= energy;
                 this.Percussive[destination][band] /= energy;
                 this.Pan[destination][band] /= energy;
@@ -106,7 +114,11 @@ namespace ModularAudience.Audio.Processors_V4
             double maximum = Maximum(this.Power, token);
             this.IsSilent = maximum == 0;
             this.Floor = NormalizePower(this.Power, maximum, token);
-            if (this.IsSilent) return;
+            if (this.IsSilent)
+            {
+                return;
+            }
+
             for (int frame = 0; frame < this.Power.Length; frame++)
             {
                 token.ThrowIfCancellationRequested();
@@ -141,7 +153,10 @@ namespace ModularAudience.Audio.Processors_V4
             foreach (double[] row in values)
             {
                 token.ThrowIfCancellationRequested();
-                foreach (double value in row) maximum = Math.Max(maximum, Positive(value));
+                foreach (double value in row)
+                {
+                    maximum = Math.Max(maximum, Positive(value));
+                }
             }
             return maximum;
         }
@@ -154,7 +169,11 @@ namespace ModularAudience.Audio.Processors_V4
             for (int bin = 0; bin < bins; bin++)
             {
                 int band = (int)(47 * Math.Log(1.0 + bin) / Math.Log(bins));
-                if (band != previous) compact++;
+                if (band != previous)
+                {
+                    compact++;
+                }
+
                 map[bin] = compact;
                 previous = band;
             }
@@ -174,8 +193,16 @@ namespace ModularAudience.Audio.Processors_V4
         internal void Report(double fraction, string stage)
         {
             fraction = Math.Clamp(fraction, 0, 1);
-            if (fraction < this.lastFraction) return;
-            if (stage == this.lastStage && fraction < 1 && fraction - this.lastFraction < 0.02) return;
+            if (fraction < this.lastFraction)
+            {
+                return;
+            }
+
+            if (stage == this.lastStage && fraction < 1 && fraction - this.lastFraction < 0.02)
+            {
+                return;
+            }
+
             this.lastFraction = fraction;
             this.lastStage = stage;
             target?.Report(new DeterministicSeparationProgress(fraction, stage));

@@ -27,7 +27,10 @@ namespace ModularAudience.Audio.Processors_V4
             double rows = Math.Sqrt((IlrmaNumerics.Power(unit.M00) + IlrmaNumerics.Power(unit.M01))
                 * (IlrmaNumerics.Power(unit.M10) + IlrmaNumerics.Power(unit.M11)));
             if (!IlrmaNumerics.IsFinite(determinant) || determinant.Magnitude <= 1e-12 * rows || rows == 0)
+            {
                 throw new ArithmeticException("ILRMA encountered a singular or poorly conditioned 2x2 matrix; no source image was fabricated.");
+            }
+
             IlrmaMatrix inverse = new(unit.M11 / determinant / scale, -unit.M01 / determinant / scale,
                 -unit.M10 / determinant / scale, unit.M00 / determinant / scale);
             inverse.Scale();
@@ -40,7 +43,10 @@ namespace ModularAudience.Audio.Processors_V4
             IlrmaMatrix unit = this.Divide(scale);
             double determinant = (unit.M00 * unit.M11 - unit.M01 * unit.M10).Magnitude;
             if (!(determinant > 0) || !double.IsFinite(determinant))
+            {
                 throw new ArithmeticException("ILRMA has a non-finite or zero demixing determinant.");
+            }
+
             return 2 * Math.Log(scale) + Math.Log(determinant);
         }
 
@@ -48,10 +54,17 @@ namespace ModularAudience.Audio.Processors_V4
         {
             if (!IlrmaNumerics.IsFinite(this.M00) || !IlrmaNumerics.IsFinite(this.M01)
                 || !IlrmaNumerics.IsFinite(this.M10) || !IlrmaNumerics.IsFinite(this.M11))
+            {
                 throw new ArithmeticException("ILRMA has a non-finite 2x2 matrix.");
+            }
+
             double scale = Math.Max(Math.Max(this.M00.Magnitude, this.M01.Magnitude),
                 Math.Max(this.M10.Magnitude, this.M11.Magnitude));
-            if (!(scale > 0)) throw new ArithmeticException("ILRMA has a zero 2x2 matrix.");
+            if (!(scale > 0))
+            {
+                throw new ArithmeticException("ILRMA has a zero 2x2 matrix.");
+            }
+
             return scale;
         }
 

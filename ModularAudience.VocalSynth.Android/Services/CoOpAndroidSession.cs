@@ -69,11 +69,16 @@ internal sealed class CoOpAndroidSession : IAsyncDisposable
     internal async Task HostAsync(CancellationToken cancellationToken = default)
     {
         if (this.IsHosting || this.hostConnection?.IsConnected == true)
+        {
             throw new InvalidOperationException("Disconnect before starting a new co-op session.");
+        }
+
         bool requiresPassword = !string.IsNullOrEmpty(this.SessionPassword);
         if (requiresPassword && !CoOpSecurity.IsValidSessionPassword(this.SessionPassword))
+        {
             throw new InvalidOperationException(
                 "A session password must be 8–128 characters. Clear it to host without a password on the local network.");
+        }
 
         string certificatePath = Path.Combine(FileSystem.AppDataDirectory, "CoOp", "host-certificate.pfx");
         X509Certificate2 certificate = CoOpSecurity.LoadOrCreateHostCertificate(certificatePath);
@@ -124,13 +129,21 @@ internal sealed class CoOpAndroidSession : IAsyncDisposable
     internal async Task ConnectAsync(string host, int port, CancellationToken cancellationToken = default)
     {
         if (this.IsHosting || this.hostConnection?.IsConnected == true)
+        {
             throw new InvalidOperationException("Disconnect before joining another co-op session.");
+        }
+
         if (string.IsNullOrWhiteSpace(host) || port is <= 0 or > 65535)
+        {
             throw new ArgumentException("Enter a valid host address and port.");
+        }
+
         bool hasSessionPassword = !string.IsNullOrEmpty(this.SessionPassword);
         if (hasSessionPassword && !CoOpSecurity.IsValidSessionPassword(this.SessionPassword))
+        {
             throw new InvalidOperationException(
                 "A session password must be 8–128 characters. Clear it only to connect to a passwordless host on the local network.");
+        }
 
         this.SetState("Connecting...");
         var authChallenge = new TaskCompletionSource<AuthChallengeMessage>(TaskCreationOptions.RunContinuationsAsynchronously);
@@ -149,7 +162,9 @@ internal sealed class CoOpAndroidSession : IAsyncDisposable
             bool trusted = this.ConfirmServerCertificate != null
                 && await this.ConfirmServerCertificate(host, port, fingerprint);
             if (!trusted)
+            {
                 throw new CoOpCertificateTrustException(host, port, fingerprint);
+            }
 
             this.hostConnection = connection;
             connection.MessageReceived += this.Connection_MessageReceived;
@@ -163,15 +178,24 @@ internal sealed class CoOpAndroidSession : IAsyncDisposable
             if (challenge.RequiresPassword)
             {
                 if (!CoOpSecurity.IsValidSessionPassword(this.SessionPassword))
+                {
                     throw new CoOpProtocolException("This host requires a session password of 8–128 characters.");
+                }
+
                 passwordProof = CoOpSecurity.CreatePasswordProof(this.SessionPassword, challenge, this.localPeerId);
             }
             else
             {
                 if (!challenge.IsLanOnly)
+                {
                     throw new CoOpProtocolException("The host does not require a password but is not restricted to the local network.");
+                }
+
                 if (hasSessionPassword)
+                {
                     throw new CoOpProtocolException("This host does not use a session password. Clear the password field and reconnect.");
+                }
+
                 if (this.ConfirmPasswordlessSession == null
                     || !await this.ConfirmPasswordlessSession(host, port))
                 {
@@ -188,7 +212,10 @@ internal sealed class CoOpAndroidSession : IAsyncDisposable
                 cancellationToken);
             WelcomeMessage hostInfo = await welcome.Task.WaitAsync(TimeSpan.FromSeconds(8), cancellationToken);
             if (hostInfo.ProtocolVersion != CoOpDefaults.ProtocolVersion)
+            {
                 throw new CoOpProtocolException($"The host uses unsupported co-op protocol version {hostInfo.ProtocolVersion}.");
+            }
+
             this.hostSupportsBatchTransfers = hostInfo.SupportsBatchTransfers;
             this.pendingWelcome = null;
             this.pendingAuthChallenge = null;
@@ -198,7 +225,10 @@ internal sealed class CoOpAndroidSession : IAsyncDisposable
         catch
         {
             if (connection != null)
+            {
                 await connection.DisposeAsync();
+            }
+
             this.hostConnection = null;
             this.pendingWelcome = null;
             this.pendingAuthChallenge = null;
@@ -213,7 +243,10 @@ internal sealed class CoOpAndroidSession : IAsyncDisposable
     {
         ArgumentNullException.ThrowIfNull(selectedItems);
         if (!this.IsHosting && this.hostConnection?.IsConnected != true)
+        {
             throw new InvalidOperationException("Start hosting or connect before sending soundboard samples.");
+        }
+
         List<(SoundboardItem Item, CoOpAudioSnapshot Snapshot)> snapshots = [];
         foreach ((SoundboardItem item, VocalAudioData audio) in selectedItems)
         {
@@ -246,7 +279,10 @@ internal sealed class CoOpAndroidSession : IAsyncDisposable
             {
                 Dictionary<Guid, CoOpAudioSnapshot> combined = existing.Audios.ToDictionary(audio => audio.AudioId);
                 foreach (CoOpAudioSnapshot snapshot in groupSnapshots)
+                {
                     combined[snapshot.AudioId] = snapshot;
+                }
+
                 groupSnapshots = combined.Values.ToList();
             }
             this.outgoingCollections[collectionId] = (group.Key, groupSnapshots);
@@ -267,7 +303,10 @@ internal sealed class CoOpAndroidSession : IAsyncDisposable
         }
 
         if (snapshots.Count > 0)
+        {
             await this.SendBatchCompletedAsync(Guid.NewGuid(), cancellationToken);
+        }
+
         this.StatusChanged?.Invoke($"Sent {snapshots.Count} sample(s) in {snapshots.Select(item => item.Item.GroupName).Distinct().Count()} collection group(s).");
     }
 
@@ -280,17 +319,24 @@ internal sealed class CoOpAndroidSession : IAsyncDisposable
         this.pendingAuthChallenge?.TrySetCanceled();
         this.pendingAuthChallenge = null;
         if (hostConnection != null)
+        {
             await hostConnection.DisposeAsync();
+        }
 
         CoOpDiscoveryResponder? responder = this.discoveryResponder;
         this.discoveryResponder = null;
         if (responder != null)
+        {
             await responder.DisposeAsync();
+        }
 
         CoOpServer? server = this.server;
         this.server = null;
         if (server != null)
+        {
             await server.DisposeAsync();
+        }
+
         this.hostCertificate?.Dispose();
         this.hostCertificate = null;
 
@@ -331,7 +377,10 @@ internal sealed class CoOpAndroidSession : IAsyncDisposable
     {
         AuthChallengeMessage challenge;
         lock (this.gate)
+        {
             challenge = this.peerChallenges[connection];
+        }
+
         try
         {
             await connection.SendAsync(challenge);
@@ -377,7 +426,9 @@ internal sealed class CoOpAndroidSession : IAsyncDisposable
     private void Connection_MessageReceived(object? sender, CoOpMessageReceivedEventArgs e)
     {
         if (sender is CoOpConnection connection)
+        {
             _ = this.HandleMessageAsync(connection, e.Message);
+        }
     }
 
     private async Task HandleMessageAsync(CoOpConnection connection, CoOpMessage message)
@@ -396,7 +447,9 @@ internal sealed class CoOpAndroidSession : IAsyncDisposable
                 lock (this.gate)
                 {
                     if (!this.authenticatedPeers.Contains(connection))
+                    {
                         return;
+                    }
                 }
             }
 
@@ -416,7 +469,9 @@ internal sealed class CoOpAndroidSession : IAsyncDisposable
                     lock (this.gate)
                     {
                         if (!this.peerChallenges.TryGetValue(connection, out challenge))
+                        {
                             return;
+                        }
                     }
 
                     bool authenticated;
@@ -446,11 +501,16 @@ internal sealed class CoOpAndroidSession : IAsyncDisposable
                         return;
                     }
                     lock (this.gate)
+                    {
                         this.authenticatedPeers.Add(connection);
+                    }
+
                     if (hello.SupportsBatchTransfers)
                     {
                         lock (this.gate)
+                        {
                             this.batchCapablePeers.Add(connection);
+                        }
                     }
                     await connection.SendAsync(new WelcomeMessage(
                         this.localPeerId,
@@ -471,7 +531,9 @@ internal sealed class CoOpAndroidSession : IAsyncDisposable
                     lock (this.gate)
                     {
                         if (this.pendingCollections.TryGetValue(added.CollectionId, out PendingCollection? pending))
+                        {
                             pending.Audios.Add(added.Audio);
+                        }
                     }
                     break;
                 case ShareCollectionCompletedMessage completed:
@@ -492,7 +554,10 @@ internal sealed class CoOpAndroidSession : IAsyncDisposable
                             lock (this.gate)
                             {
                                 if (!this.completedCollections.TryGetValue(connection, out List<CoOpIncomingBatch>? batches))
+                                {
                                     this.completedCollections[connection] = batches = [];
+                                }
+
                                 batches.Add(batch);
                             }
                         }
@@ -509,12 +574,18 @@ internal sealed class CoOpAndroidSession : IAsyncDisposable
                         this.completedCollections.Remove(connection, out completedBatches);
                     }
                     if (completedBatches is { Count: > 0 })
+                    {
                         await this.ConfirmAndForwardAsync(completedBatches, connection);
+                    }
+
                     break;
                 case ErrorMessage error:
                     this.StatusChanged?.Invoke($"Co-op error: {error.Message}");
                     if (ReferenceEquals(connection, this.hostConnection))
+                    {
                         this.pendingWelcome?.TrySetException(new CoOpProtocolException(error.Message));
+                    }
+
                     break;
             }
         }
@@ -555,12 +626,20 @@ internal sealed class CoOpAndroidSession : IAsyncDisposable
         CoOpConnection source)
     {
         if (this.server == null)
+        {
             return;
+        }
+
         CoOpConnection[] peers;
         lock (this.gate)
+        {
             peers = this.peerConnections.Where(peer => !ReferenceEquals(peer, source) && peer.IsConnected).ToArray();
+        }
+
         if (peers.Length == 0)
+        {
             return;
+        }
 
         ShareCollectionMessage share = new(
             collection.CollectionId,
@@ -571,7 +650,10 @@ internal sealed class CoOpAndroidSession : IAsyncDisposable
         {
             await peer.SendAsync(share);
             foreach (CoOpAudioSnapshot audio in collection.Audios)
+            {
                 await peer.SendAsync(new AudioAddedMessage(collection.CollectionId, audio));
+            }
+
             await peer.SendAsync(new ShareCollectionCompletedMessage(collection.CollectionId));
         }
     }
@@ -587,19 +669,29 @@ internal sealed class CoOpAndroidSession : IAsyncDisposable
             await connection.SendAsync(new ShareCollectionMessage(
                 collectionId, name, this.localPeerId, this.DisplayName), cancellationToken);
             foreach (CoOpAudioSnapshot audio in audios)
+            {
                 await connection.SendAsync(new AudioAddedMessage(collectionId, audio), cancellationToken);
+            }
+
             await connection.SendAsync(new ShareCollectionCompletedMessage(collectionId), cancellationToken);
         }
         if (supportsBatchTransfers && this.outgoingCollections.Count > 0)
+        {
             await connection.SendAsync(new ShareBatchCompletedMessage(batchId), cancellationToken);
+        }
     }
 
     private bool SupportsBatchTransfersFor(CoOpConnection connection)
     {
         if (ReferenceEquals(connection, this.hostConnection))
+        {
             return this.hostSupportsBatchTransfers;
+        }
+
         lock (this.gate)
+        {
             return this.batchCapablePeers.Contains(connection);
+        }
     }
 
     private async Task SendBatchCompletedAsync(Guid batchId, CancellationToken cancellationToken)
@@ -607,15 +699,23 @@ internal sealed class CoOpAndroidSession : IAsyncDisposable
         if (this.hostConnection?.IsConnected == true)
         {
             if (this.hostSupportsBatchTransfers)
+            {
                 await this.hostConnection.SendAsync(new ShareBatchCompletedMessage(batchId), cancellationToken);
+            }
+
             return;
         }
 
         CoOpConnection[] peers;
         lock (this.gate)
+        {
             peers = this.peerConnections.Where(peer => peer.IsConnected && this.batchCapablePeers.Contains(peer)).ToArray();
+        }
+
         foreach (CoOpConnection peer in peers)
+        {
             await peer.SendAsync(new ShareBatchCompletedMessage(batchId), cancellationToken);
+        }
     }
 
     private async Task SendToSessionAsync(CoOpMessage message, CancellationToken cancellationToken)
@@ -628,11 +728,19 @@ internal sealed class CoOpAndroidSession : IAsyncDisposable
 
         CoOpConnection[] peers;
         lock (this.gate)
+        {
             peers = this.peerConnections.Where(peer => peer.IsConnected).ToArray();
+        }
+
         if (peers.Length == 0)
+        {
             throw new IOException("No connected co-op peers are available.");
+        }
+
         foreach (CoOpConnection peer in peers)
+        {
             await peer.SendAsync(message, cancellationToken);
+        }
     }
 
     private void SetState(string state)

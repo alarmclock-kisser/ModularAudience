@@ -12,7 +12,11 @@ public partial class WindowMain
         var menu = this.contextMenuStrip_main;
         menu.Items.Add("Theme Editor…", null, (_, _) =>
         {
-            if (this.themeEditor == null || this.themeEditor.IsDisposed) this.themeEditor = new ThemeEditor();
+            if (this.themeEditor == null || this.themeEditor.IsDisposed)
+            {
+                this.themeEditor = new ThemeEditor();
+            }
+
             this.themeEditor.Show(); this.themeEditor.Activate();
         });
         menu.Items.Add(new ToolStripLabel("Load Theme"));
@@ -24,7 +28,11 @@ public partial class WindowMain
             try
             {
                 themes.Items.Clear(); themes.Items.Add("No theme — original Forms colors");
-                foreach (string path in ThemeFiles.SavedThemes()) themes.Items.Add(new SavedThemeItem(path));
+                foreach (string path in ThemeFiles.SavedThemes())
+                {
+                    themes.Items.Add(new SavedThemeItem(path));
+                }
+
                 themes.SelectedIndex = ThemeManager.Current == null ? 0 : -1;
             }
             finally { refreshing = false; }
@@ -32,7 +40,11 @@ public partial class WindowMain
         menu.Opening += (_, _) => RefreshThemes();
         themes.SelectedIndexChanged += (_, _) =>
         {
-            if (refreshing) return;
+            if (refreshing)
+            {
+                return;
+            }
+
             try
             {
                 ThemeManager.SetTheme(themes.SelectedItem is SavedThemeItem item ? ThemeFiles.Load(item.Path) : null, persist: true);
@@ -46,7 +58,11 @@ public partial class WindowMain
             try
             {
                 using var dialog = new OpenFileDialog { Filter = "Color themes (*.json)|*.json", InitialDirectory = ThemeFiles.SettingsDirectory };
-                if (dialog.ShowDialog(this) != DialogResult.OK) return;
+                if (dialog.ShowDialog(this) != DialogResult.OK)
+                {
+                    return;
+                }
+
                 var theme = ThemeFiles.Load(dialog.FileName);
                 string destination = Path.Combine(ThemeFiles.SettingsDirectory, Path.GetFileName(dialog.FileName));
                 ThemeFiles.Save(destination, theme);

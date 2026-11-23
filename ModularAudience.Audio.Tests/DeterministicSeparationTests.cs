@@ -188,7 +188,11 @@ namespace ModularAudience.Audio.Tests
             float[] samples = scenario == "empty" ? [] : [value, 0.125f, -0.25f];
             AudioObj source = scope.Create(samples, SampleRate);
             source.Channels = scenario switch { "unaligned-stereo" => 2, "zero-channels" => 0, "three-channels" => 3, _ => 1 };
-            if (scenario == "zero-sample-rate") source.SampleRate = 0;
+            if (scenario == "zero-sample-rate")
+            {
+                source.SampleRate = 0;
+            }
+
             Func<Task> analyze = async () => { await DeterministicSeparationProcessor.AnalyzeAsync(source, InvalidSettings(scenario)); };
             if (parameter is null)
             {
@@ -217,23 +221,38 @@ namespace ModularAudience.Audio.Tests
             Assert.IsTrue(analysis.Sources.Count > 0, "Cancellation must exercise active source rendering, not a residual-only shortcut.");
             using CancellationTokenSource cancellation = new();
             CancelAtProgress progress = new(cancellation, phase);
-            if (before) cancellation.Cancel();
+            if (before)
+            {
+                cancellation.Cancel();
+            }
+
             DeterministicSeparationAnalysis? partialAnalysis = null;
             DeterministicSeparationResult? partialResult = null;
 
             await Assert.ThrowsAsync<OperationCanceledException>(async () =>
             {
                 if (phase == "analysis")
+                {
                     partialAnalysis = await DeterministicSeparationProcessor.AnalyzeAsync(source, settings, progress, cancellation.Token);
+                }
                 else
+                {
                     partialResult = await RenderOwned(scope, analysis, progress: progress, cancellationToken: cancellation.Token);
+                }
             }, $"Cancellation was ignored: phase={phase}, before={before}, last progress={progress.CancelledAt}");
 
             Assert.IsNull(partialAnalysis, "Canceled analysis must not publish a partial model.");
             Assert.IsNull(partialResult, "Canceled rendering must not publish partial stems.");
             Assert.IsTrue(cancellation.IsCancellationRequested, "The cancellation trigger was not reached.");
-            if (before) Assert.AreEqual(0, progress.ReportCount, "A pre-canceled task must not start processing.");
-            else Assert.IsNotNull(progress.CancelledAt, "Cancellation must occur synchronously inside an active processing stage.");
+            if (before)
+            {
+                Assert.AreEqual(0, progress.ReportCount, "A pre-canceled task must not start processing.");
+            }
+            else
+            {
+                Assert.IsNotNull(progress.CancelledAt, "Cancellation must occur synchronously inside an active processing stage.");
+            }
+
             AssertSameStems(reference, await RenderOwned(scope, analysis), "Model reuse after cancellation");
             if (phase == "analysis")
             {
@@ -377,7 +396,11 @@ namespace ModularAudience.Audio.Tests
         private static double Dot(float[] first, float[] second)
         {
             double sum = 0;
-            for (int index = 0; index < first.Length; index++) sum += (double)first[index] * second[index];
+            for (int index = 0; index < first.Length; index++)
+            {
+                sum += (double)first[index] * second[index];
+            }
+
             return sum;
         }
 
@@ -447,7 +470,10 @@ namespace ModularAudience.Audio.Tests
             {
                 Assert.AreEqual(original.Length, stem.Data.Length, $"{stem.Name}: sample count changed.");
                 AssertFinite(stem.Data, stem.Name);
-                for (int sample = 0; sample < sum.Length; sample++) sum[sample] += stem.Data[sample];
+                for (int sample = 0; sample < sum.Length; sample++)
+                {
+                    sum[sample] += stem.Data[sample];
+                }
             }
             double error = Enumerable.Range(0, sum.Length).Max(sample => Math.Abs(sum[sample] - original[sample]));
             Assert.IsTrue(error <= 1e-6, $"Selected groups plus Residual must reconstruct the snapshot; maximum error={error:E9}.");
@@ -464,7 +490,11 @@ namespace ModularAudience.Audio.Tests
             for (int index = 0; index < expected.Length; index++)
             {
                 double error = Math.Abs((double)expected[index] - actual[index]);
-                if (error <= maximum) continue;
+                if (error <= maximum)
+                {
+                    continue;
+                }
+
                 maximum = error;
                 worst = index;
             }
@@ -476,7 +506,10 @@ namespace ModularAudience.Audio.Tests
         {
             for (int index = 0; index < samples.Length; index++)
             {
-                if (!float.IsFinite(samples[index])) Assert.Fail($"{context}: non-finite output at interleaved sample {index}: {samples[index]}.");
+                if (!float.IsFinite(samples[index]))
+                {
+                    Assert.Fail($"{context}: non-finite output at interleaved sample {index}: {samples[index]}.");
+                }
             }
         }
 
@@ -498,7 +531,11 @@ namespace ModularAudience.Audio.Tests
                 bool active = phase == "analysis"
                     ? value.Stage == "Learning deterministic IS-NMF dictionary" && value.Fraction >= 0.5 && value.Fraction < 0.86
                     : value.Stage.StartsWith("Separating frames ", StringComparison.Ordinal) && value.Fraction >= 0.1 && value.Fraction < 0.94;
-                if (!active || this.CancelledAt != null) return;
+                if (!active || this.CancelledAt != null)
+                {
+                    return;
+                }
+
                 this.CancelledAt = value;
                 cancellation.Cancel();
             }

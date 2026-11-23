@@ -45,7 +45,10 @@ public sealed partial class YtdlpClient
     public IAsyncEnumerable<YtdlpVideo> BrowsePlaylistStreamAsync(string youtubeUrl, CancellationToken cancellationToken)
     {
         Uri url = YtdlpParser.ValidateYoutubeUrl(youtubeUrl);
-        if (url.AbsolutePath != "/playlist") throw new ArgumentException("A YouTube playlist URL is required.", nameof(youtubeUrl));
+        if (url.AbsolutePath != "/playlist")
+        {
+            throw new ArgumentException("A YouTube playlist URL is required.", nameof(youtubeUrl));
+        }
         // Explicit playlist actions cover every playable video, independent of the search limit.
         return ReadMetadataStreamAsync(url.AbsoluteUri, null, cancellationToken, YtdlpResultType.Videos);
     }
@@ -54,7 +57,10 @@ public sealed partial class YtdlpClient
     {
         ArgumentException.ThrowIfNullOrWhiteSpace(query);
         if (query.Length > 500 || query.Any(char.IsControl))
+        {
             throw new ArgumentException("Search queries must contain at most 500 characters and no control characters.", nameof(query));
+        }
+
         string? filter = resultType switch
         {
             YtdlpResultType.All => null, YtdlpResultType.Videos => "EgIQAQ==",
@@ -80,7 +86,11 @@ public sealed partial class YtdlpClient
     public static string CreateChannelBrowseUrl(string youtubeUrl, YtdlpResultType resultType)
     {
         Uri url = YtdlpParser.ValidateYoutubeUrl(youtubeUrl);
-        if (!YtdlpParser.IsChannelUrl(url.AbsoluteUri)) throw new ArgumentException("A YouTube channel URL is required.", nameof(youtubeUrl));
+        if (!YtdlpParser.IsChannelUrl(url.AbsoluteUri))
+        {
+            throw new ArgumentException("A YouTube channel URL is required.", nameof(youtubeUrl));
+        }
+
         string tab = resultType switch
         {
             YtdlpResultType.All => "featured", YtdlpResultType.Videos => "videos",
@@ -119,7 +129,10 @@ public sealed partial class YtdlpClient
         var url = ValidateVideo(video);
         var outputDirectory = options.SaveToDisk ? Path.GetFullPath(options.OutputDirectory) : null;
         if (outputDirectory is not null)
+        {
             EnsureOutputAvailable(GetSavedPath(outputDirectory, video, format));
+        }
+
         var output = CreateDownloadProgress(progress, downloadProgress);
         await EnsureAvailableAsync(output, cancellationToken);
         var job = CreateJobDirectory();
@@ -131,7 +144,10 @@ public sealed partial class YtdlpClient
             var path = ValidateDownloadedPath(text, job, format, options.MaxFileSizeBytes);
             cancellationToken.ThrowIfCancellationRequested();
             if (outputDirectory is not null)
+            {
                 path = await SaveAsync(path, outputDirectory, video, format, cancellationToken);
+            }
+
             var result = new YtdlpDownloadResult(path, outputDirectory is null ? job : null);
             ownershipTransferred = outputDirectory is null;
             return result;
@@ -139,7 +155,9 @@ public sealed partial class YtdlpClient
         finally
         {
             if (!ownershipTransferred)
+            {
                 YtdlpBinaryManager.DeleteStaging(job);
+            }
         }
     }
 
@@ -148,7 +166,9 @@ public sealed partial class YtdlpClient
         YtdlpBinaryManager.RequireWindows();
         token.ThrowIfCancellationRequested();
         if (!manager.HasBinaries)
+        {
             await manager.EnsureAvailableAsync(progress, token);
+        }
     }
 
     private List<string> CommonArguments(YtdlpNetworkOptions? network = null)
@@ -182,10 +202,16 @@ public sealed partial class YtdlpClient
         AddAudioQualityArguments(arguments, format, options);
         var filter = "!is_live";
         if (options.MaxDuration is { } duration)
+        {
             filter += " & duration <= " + duration.TotalSeconds.ToString("0.###", CultureInfo.InvariantCulture);
+        }
+
         arguments.AddRange(["--match-filters", filter]);
         if (options.MaxFileSizeBytes is { } maximum)
+        {
             arguments.AddRange(["--max-filesize", maximum.ToString(CultureInfo.InvariantCulture)]);
+        }
+
         arguments.AddRange(["--", url]);
         return arguments;
     }
@@ -193,9 +219,13 @@ public sealed partial class YtdlpClient
     private static void AddAudioQualityArguments(List<string> arguments, string format, YtdlpDownloadOptions options)
     {
         if (format.Contains("3"))
+        {
             arguments.AddRange(["--audio-quality", options.Mp3Bitrate.ToString(CultureInfo.InvariantCulture) + "K"]);
+        }
         else
+        {
             arguments.AddRange(["--postprocessor-args", "ExtractAudio+ffmpeg_o:-c:a " + WavCodec(options.WavBitDepth)]);
+        }
     }
 
     private static string WavCodec(int bitDepth) => bitDepth switch
@@ -210,24 +240,43 @@ public sealed partial class YtdlpClient
         options.Network.Validate();
         options.BrowserSession?.Validate();
         if (options.Mp3Bitrate is not (64 or 96 or 128 or 192 or 256 or 320))
+        {
             throw new ArgumentOutOfRangeException(nameof(options), "Unsupported MP3 bitrate.");
+        }
+
         _ = WavCodec(options.WavBitDepth);
         if (options.SaveToDisk && string.IsNullOrWhiteSpace(options.OutputDirectory))
+        {
             throw new ArgumentException("An output directory is required when SaveToDisk is enabled.", nameof(options));
+        }
+
         if (options.MaxDuration is { } duration && (duration <= TimeSpan.Zero || duration > TimeSpan.FromHours(24)))
+        {
             throw new ArgumentOutOfRangeException(nameof(options), "Maximum duration must be positive and at most 24 hours.");
+        }
+
         if (options.MaxFileSizeBytes is { } size && (size <= 0 || size > 16L * 1024 * 1024 * 1024))
+        {
             throw new ArgumentOutOfRangeException(nameof(options), "Maximum file size must be positive and at most 16 GiB.");
+        }
+
         return format;
     }
 
     private static string ValidateVideo(YtdlpVideo video)
     {
-        if (!video.IsVideo) throw new ArgumentException("Select a video; playlists must first be expanded into their individual videos.", nameof(video));
+        if (!video.IsVideo)
+        {
+            throw new ArgumentException("Select a video; playlists must first be expanded into their individual videos.", nameof(video));
+        }
+
         var uri = YtdlpParser.ValidateYoutubeUrl(video.Url);
         var expected = "https://www.youtube.com/watch?v=" + video.Id;
         if (string.IsNullOrEmpty(video.Id) || uri.AbsoluteUri.Split('&')[0] != expected)
+        {
             throw new ArgumentException("The video ID must match a YouTube video URL; playlist-only URLs cannot be downloaded.", nameof(video));
+        }
+
         return expected;
     }
 
@@ -237,16 +286,28 @@ public sealed partial class YtdlpClient
             .LastOrDefault(line => line.StartsWith(OutputPathPrefix, StringComparison.Ordinal));
         var printed = marked?[OutputPathPrefix.Length..].Trim();
         if (string.IsNullOrWhiteSpace(printed))
+        {
             throw new InvalidDataException("yt-dlp did not report an audio output path.");
+        }
+
         var path = Path.GetFullPath(printed, job);
         if (!string.Equals(Path.GetDirectoryName(path), job, StringComparison.OrdinalIgnoreCase) ||
             !string.Equals(Path.GetExtension(path), "." + format, StringComparison.OrdinalIgnoreCase))
+        {
             throw new InvalidDataException("yt-dlp reported an unexpected output path or audio format.");
+        }
+
         var file = new FileInfo(path);
         if (!file.Exists || file.Length == 0 || (file.Attributes & FileAttributes.ReparsePoint) != 0)
+        {
             throw new InvalidDataException("The reported audio output is missing, empty, or a symbolic link.");
+        }
+
         if (maximumSize is { } limit && file.Length > limit)
+        {
             throw new InvalidDataException("The converted audio exceeds the configured file size limit.");
+        }
+
         return path;
     }
 
@@ -288,7 +349,9 @@ public sealed partial class YtdlpClient
     private static void EnsureOutputAvailable(string path)
     {
         if (File.Exists(path) || Directory.Exists(path))
+        {
             throw new YtdlpOutputFileExistsException(path);
+        }
     }
 
     private static async Task CopyFileAsync(string source, string destination, CancellationToken token)
@@ -306,12 +369,20 @@ public sealed partial class YtdlpClient
         var invalid = Path.GetInvalidFileNameChars();
         var safe = new string((title ?? string.Empty)
             .Select(c => char.IsControl(c) || invalid.Contains(c) ? '_' : c).ToArray()).TrimEnd(' ', '.');
-        if (string.IsNullOrWhiteSpace(safe)) return "audio";
+        if (string.IsNullOrWhiteSpace(safe))
+        {
+            return "audio";
+        }
+
         string stem = safe.Split('.')[0].TrimEnd(' ');
         if (stem.Equals("CON", StringComparison.OrdinalIgnoreCase) || stem.Equals("PRN", StringComparison.OrdinalIgnoreCase) ||
             stem.Equals("AUX", StringComparison.OrdinalIgnoreCase) || stem.Equals("NUL", StringComparison.OrdinalIgnoreCase) ||
             (stem.Length == 4 && (stem.StartsWith("COM", StringComparison.OrdinalIgnoreCase) || stem.StartsWith("LPT", StringComparison.OrdinalIgnoreCase)) &&
-             "123456789¹²³".Contains(stem[3]))) safe = "_" + safe;
+             "123456789¹²³".Contains(stem[3])))
+        {
+            safe = "_" + safe;
+        }
+
         return safe;
     }
 
@@ -335,11 +406,17 @@ public sealed partial class YtdlpClient
         return new CallbackProgress(message =>
         {
             if (message.StartsWith(OutputPathPrefix, StringComparison.Ordinal))
+            {
                 return;
+            }
+
             if (message.StartsWith(YtdlpProgressParser.Prefix, StringComparison.Ordinal))
             {
                 if (YtdlpProgressParser.TryParse(message, out var parsed))
+                {
                     downloadProgress?.Report(parsed!);
+                }
+
                 return;
             }
             diagnostics.Report(message);

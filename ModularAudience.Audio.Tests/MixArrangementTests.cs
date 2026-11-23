@@ -123,7 +123,11 @@ public sealed class MixArrangementTests
     public async Task ConfiguredTimeStretchUsesChosenAlgorithmAndTargetTempoAtImport()
     {
         var source = new MixSource { Data = new float[8000], SampleRate = 16000, Channels = 1, Bpm = 100 };
-        for (int i = 0; i < source.Data.Length; i++) source.Data[i] = (float)(0.2 * Math.Sin(2 * Math.PI * 220 * i / 16000));
+        for (int i = 0; i < source.Data.Length; i++)
+        {
+            source.Data[i] = (float)(0.2 * Math.Sin(2 * Math.PI * 220 * i / 16000));
+        }
+
         var settings = new ModularAudience.Audio.Processing.PlaylistStretchSettings(125, 0.8f, 1024, 0.5f,
             1, true, false, false, true, false, false);
         var prepared = await MixRenderer.PrepareSourceAsync(source, 125, ClipTempoMode.TimeStretch, stretchSettings: settings);
@@ -200,7 +204,11 @@ public sealed class MixArrangementTests
     public async Task ImportPreparationBakesTempoBeforePlayback(ClipTempoMode mode)
     {
         var source = new MixSource { Data = new float[16000], SampleRate = 16000, Channels = 1, Bpm = 60 };
-        for (int i = 0; i < source.Data.Length; i++) source.Data[i] = (float)(0.2 * Math.Sin(2 * Math.PI * 220 * i / 16000));
+        for (int i = 0; i < source.Data.Length; i++)
+        {
+            source.Data[i] = (float)(0.2 * Math.Sin(2 * Math.PI * 220 * i / 16000));
+        }
+
         var prepared = await MixRenderer.PrepareSourceAsync(source, 120, mode);
         Assert.AreEqual(0.5, prepared.Duration, 0.001);
         Assert.AreEqual(120f, prepared.Bpm);
@@ -361,7 +369,11 @@ public sealed class MixArrangementTests
     public async Task TempoMatchingChangesDurationAndTimeStretchPreservesPitch(ClipTempoMode mode)
     {
         using var audio = new AudioObj { Data = new float[16000], SampleRate = 16000, Channels = 1, Bpm = 60 };
-        for (int i = 0; i < audio.Data.Length; i++) audio.Data[i] = (float)(0.2 * Math.Sin(2 * Math.PI * 220 * i / 16000));
+        for (int i = 0; i < audio.Data.Length; i++)
+        {
+            audio.Data[i] = (float)(0.2 * Math.Sin(2 * Math.PI * 220 * i / 16000));
+        }
+
         using var mix = new MixArrangement { Bpm = 120 };
         var source = mix.AddSource(audio); var lane = new MixLane(); mix.Lanes.Add(lane);
         mix.AddClip(lane, source, 0).TempoMode = mode;
@@ -574,7 +586,10 @@ public sealed class MixArrangementTests
         }
         finally
         {
-            if (File.Exists(path)) File.Delete(path);
+            if (File.Exists(path))
+            {
+                File.Delete(path);
+            }
         }
     }
 

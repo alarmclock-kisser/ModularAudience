@@ -41,9 +41,14 @@ public sealed class YoutubeAudioStreamClient : IDisposable
                 var status = response.StatusCode;
                 response.Dispose();
                 if (location is null)
+                {
                     throw new HttpRequestException("The YouTube audio stream redirected without a Location header.", null, status);
+                }
+
                 if (redirectCount >= MaximumRedirects)
+                {
                     throw new HttpRequestException($"The YouTube audio stream exceeded {MaximumRedirects} redirects.", null, status);
+                }
 
                 try
                 {
@@ -78,7 +83,10 @@ public sealed class YoutubeAudioStreamClient : IDisposable
 
     public void Dispose()
     {
-        if (this.ownsClient) this.client.Dispose();
+        if (this.ownsClient)
+        {
+            this.client.Dispose();
+        }
     }
 }
 
@@ -113,10 +121,17 @@ public static class YoutubeAudioStreamUrl
     public static Uri Parse(string output)
     {
         ArgumentException.ThrowIfNullOrWhiteSpace(output);
-        if (output.Length > 16384) throw new InvalidDataException("yt-dlp returned an audio URL that exceeds the size limit.");
+        if (output.Length > 16384)
+        {
+            throw new InvalidDataException("yt-dlp returned an audio URL that exceeds the size limit.");
+        }
+
         string[] lines = output.Split(['\r', '\n'], StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries);
         if (lines.Length != 1 || !Uri.TryCreate(lines[0], UriKind.Absolute, out var url))
+        {
             throw new InvalidDataException("yt-dlp did not return exactly one audio stream URL.");
+        }
+
         Validate(url);
         return url;
     }
@@ -128,6 +143,8 @@ public static class YoutubeAudioStreamUrl
             !string.IsNullOrEmpty(streamUrl.UserInfo) || !string.IsNullOrEmpty(streamUrl.Fragment) ||
             !(streamUrl.Host.Equals("googlevideo.com", StringComparison.OrdinalIgnoreCase) ||
               streamUrl.Host.EndsWith(".googlevideo.com", StringComparison.OrdinalIgnoreCase)))
+        {
             throw new ArgumentException("The audio stream URL must be an HTTPS Google Video URL.", nameof(streamUrl));
+        }
     }
 }

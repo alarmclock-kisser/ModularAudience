@@ -11,7 +11,10 @@ internal static class VocalIpa
         bool delimited = notation.Length >= 2
             && (notation[0] == '/' && notation[^1] == '/'
                 || notation[0] == '[' && notation[^1] == ']');
-        if (delimited) notation = notation[1..^1];
+        if (delimited)
+        {
+            notation = notation[1..^1];
+        }
 
         bool hasIpaSymbol = false;
         bool hasOtherScript = false;
@@ -53,7 +56,11 @@ internal static class VocalIpa
             cancellationToken.ThrowIfCancellationRequested();
             char c = char.ToLowerInvariant(ipa[i]);
             if (c == 'ˈ') { stress = true; continue; }
-            if (c is 'ˌ' or '.' or ' ') continue;
+            if (c is 'ˌ' or '.' or ' ')
+            {
+                continue;
+            }
+
             if (c == '̃')
             {
                 if (output.Count == 0)
@@ -70,21 +77,38 @@ internal static class VocalIpa
                     "oe" or "ue" => "fr-un",
                     _ => null,
                 };
-                if (nasal is not null) output[^1] = previous with { Symbol = nasal };
-                else output.Add(new("n"));
+                if (nasal is not null)
+                {
+                    output[^1] = previous with { Symbol = nasal };
+                }
+                else
+                {
+                    output.Add(new("n"));
+                }
+
                 continue;
             }
             if (c == 'ː')
             {
-                if (output.Count == 0) output.Add(new("uh"));
-                else output.Add(output[^1] with { Stressed = false });
+                if (output.Count == 0)
+                {
+                    output.Add(new("uh"));
+                }
+                else
+                {
+                    output.Add(output[^1] with { Stressed = false });
+                }
+
                 continue;
             }
             if (c == 'ʰ') { output.Add(new("h")); continue; }
             if (c is '̪' or '̩' or '͡' or '͜' or 'ʼ' or 'ˑ'
                 or '˥' or '˦' or '˧' or '˨' or '˩' or 'ꜛ' or 'ꜜ'
                 or '̯' or '̞' or '̝' or '̟' or '̠' or '̚' or '̤' or '̰' or '̥'
-                or '̬' or '̹' or '̜' or '̘' or '̙' or '̪' or '͈' or '͉') continue;
+                or '̬' or '̹' or '̜' or '̘' or '̙' or '̪' or '͈' or '͉')
+            {
+                continue;
+            }
 
             string? pair = i + 1 < ipa.Length ? ipa.Substring(i, 2) : null;
             string? symbol = pair switch
@@ -101,8 +125,13 @@ internal static class VocalIpa
                 "d͡ʒ" or "d͜ʒ" => "j",
                 _ => null,
             };
-            if (symbol is not null) i++;
-            else symbol = c switch
+            if (symbol is not null)
+            {
+                i++;
+            }
+            else
+            {
+                symbol = c switch
             {
                 'a' or 'ɑ' or 'ɐ' => "a",
                 'ɒ' => "o",
@@ -144,10 +173,19 @@ internal static class VocalIpa
                 'ǁ' => "beat-ts",
                 _ => "unsupported",
             };
+            }
+
             bool vowel = VocalPhonemeInventory.Get(symbol).IsVowel;
             output.Add(new(symbol, stress && vowel));
-            if (stress && vowel) stress = false;
-            if (c is 'ɲ' or 'ʎ') output.Add(new("y"));
+            if (stress && vowel)
+            {
+                stress = false;
+            }
+
+            if (c is 'ɲ' or 'ʎ')
+            {
+                output.Add(new("y"));
+            }
         }
     }
 }

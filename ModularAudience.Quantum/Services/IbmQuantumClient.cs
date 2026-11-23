@@ -53,7 +53,11 @@ public sealed class IbmQuantumClient : IQuantumClient, IQuantumBackendClient, ID
                 () => JsonContent.Create(submission, QuantumJsonContext.Default.IbmJobSubmission), true, token).ConfigureAwait(false);
             var job = submitted.RootElement.Deserialize(QuantumJsonContext.Default.IbmJobStatus)
                 ?? throw new JsonException("IBM Quantum returned an empty job response.");
-            if (string.IsNullOrWhiteSpace(job.Id)) throw new JsonException("IBM Quantum did not return a job ID.");
+            if (string.IsNullOrWhiteSpace(job.Id))
+            {
+                throw new JsonException("IBM Quantum did not return a job ID.");
+            }
+
             jobId = job.Id;
             var jobUri = new Uri(this.options.BaseAddress, "jobs/" + Uri.EscapeDataString(jobId));
             string status = job.State?.Status ?? job.Status ?? "Queued";
@@ -105,14 +109,21 @@ public sealed class IbmQuantumClient : IQuantumClient, IQuantumBackendClient, ID
     {
         using var json = await this.ReadBackendJsonAsync("backends", cancellationToken).ConfigureAwait(false);
         if (!json.RootElement.TryGetProperty("devices", out var devices) || devices.ValueKind != JsonValueKind.Array || devices.GetArrayLength() > 2048)
+        {
             throw new JsonException("IBM Quantum returned an invalid backend list.");
+        }
+
         var result = new List<QuantumBackendInfo>();
         foreach (var device in devices.EnumerateArray())
         {
             cancellationToken.ThrowIfCancellationRequested();
             string? name = device.GetProperty("name").GetString();
             int qubits = device.GetProperty("qubits").GetInt32();
-            if (string.IsNullOrWhiteSpace(name) || qubits is < 1 or > 4096) throw new JsonException("IBM Quantum returned invalid backend metadata.");
+            if (string.IsNullOrWhiteSpace(name) || qubits is < 1 or > 4096)
+            {
+                throw new JsonException("IBM Quantum returned invalid backend metadata.");
+            }
+
             string status = device.TryGetProperty("status", out var state) && state.TryGetProperty("name", out var label)
                 ? label.GetString() ?? "unknown" : "unknown";
             result.Add(new(name, status, qubits, device.TryGetProperty("queue_length", out var queue) ? queue.GetInt32() : 0,
@@ -127,13 +138,22 @@ public sealed class IbmQuantumClient : IQuantumClient, IQuantumBackendClient, ID
         using var json = await this.ReadBackendJsonAsync("backends/" + Uri.EscapeDataString(backend) + "/configuration", cancellationToken).ConfigureAwait(false);
         var root = json.RootElement;
         int qubits = root.GetProperty("n_qubits").GetInt32();
-        if (qubits is < 1 or > 4096) throw new JsonException("IBM Quantum returned an unsupported backend size.");
+        if (qubits is < 1 or > 4096)
+        {
+            throw new JsonException("IBM Quantum returned an unsupported backend size.");
+        }
+
         var basis = root.GetProperty("basis_gates").EnumerateArray().Select(value => value.GetString()
             ?? throw new JsonException("A backend basis gate is missing its name.")).ToArray();
-        if (basis.Length is < 1 or > 128) throw new JsonException("IBM Quantum returned an invalid basis gate set.");
+        if (basis.Length is < 1 or > 128)
+        {
+            throw new JsonException("IBM Quantum returned an invalid basis gate set.");
+        }
+
         var coupling = root.TryGetProperty("coupling_map", out var map) ? ReadQubits(map, qubits, 2) : [];
         var gates = new List<QuantumBackendGate>();
         if (root.TryGetProperty("gates", out var instructions))
+        {
             foreach (var gate in instructions.EnumerateArray())
             {
                 cancellationToken.ThrowIfCancellationRequested();
@@ -141,8 +161,14 @@ public sealed class IbmQuantumClient : IQuantumClient, IQuantumBackendClient, ID
                 var indices = gate.TryGetProperty("coupling_map", out var gateMap) ? ReadQubits(gateMap, qubits) : [];
                 gates.Add(new(name, Array.AsReadOnly(indices)));
             }
+        }
+
         int shots = root.TryGetProperty("max_shots", out var limit) ? limit.GetInt32() : 1_000_000;
-        if (shots <= 0) throw new JsonException("The backend shot limit is invalid.");
+        if (shots <= 0)
+        {
+            throw new JsonException("The backend shot limit is invalid.");
+        }
+
         return new(backend, qubits, Array.AsReadOnly(basis), Array.AsReadOnly(coupling), gates.AsReadOnly(), shots);
     }
 
@@ -157,14 +183,25 @@ public sealed class IbmQuantumClient : IQuantumClient, IQuantumBackendClient, ID
 
     private static int[][] ReadQubits(JsonElement element, int qubits, int? arity = null)
     {
-        if (element.ValueKind == JsonValueKind.Null) return [];
-        if (element.ValueKind != JsonValueKind.Array || element.GetArrayLength() > 65_536) throw new JsonException("Invalid backend coupling map.");
+        if (element.ValueKind == JsonValueKind.Null)
+        {
+            return [];
+        }
+
+        if (element.ValueKind != JsonValueKind.Array || element.GetArrayLength() > 65_536)
+        {
+            throw new JsonException("Invalid backend coupling map.");
+        }
+
         return element.EnumerateArray().Select(row =>
         {
             int[] indices = row.EnumerateArray().Select(value => value.GetInt32()).ToArray();
             if (indices.Length is < 1 or > 3 || (arity.HasValue && indices.Length != arity.Value) ||
                 indices.Any(index => index < 0 || index >= qubits) || indices.Distinct().Count() != indices.Length)
+            {
                 throw new JsonException("A backend coupling references invalid qubits.");
+            }
+
             return indices;
         }).ToArray();
     }
@@ -202,8 +239,11 @@ public sealed class IbmQuantumClient : IQuantumClient, IQuantumBackendClient, ID
                     continue;
                 }
                 if (!response.IsSuccessStatusCode)
+                {
                     throw new HttpRequestException(FormattableString.Invariant(
                         $"IBM Quantum request failed with HTTP {(int)response.StatusCode} ({response.StatusCode})."), null, response.StatusCode);
+                }
+
                 using var stream = await response.Content.ReadAsStreamAsync(linked.Token).ConfigureAwait(false);
                 return await JsonDocument.ParseAsync(stream, cancellationToken: linked.Token).ConfigureAwait(false);
             }
@@ -226,11 +266,19 @@ public sealed class IbmQuantumClient : IQuantumClient, IQuantumBackendClient, ID
 
     private async Task<string> GetBearerTokenAsync(CancellationToken cancellationToken)
     {
-        if (!string.IsNullOrWhiteSpace(this.options.AccessToken)) return this.options.AccessToken;
+        if (!string.IsNullOrWhiteSpace(this.options.AccessToken))
+        {
+            return this.options.AccessToken;
+        }
+
         await this.tokenLock.WaitAsync(cancellationToken).ConfigureAwait(false);
         try
         {
-            if (this.cachedToken is not null && this.timeProvider.GetUtcNow() < this.tokenExpiresAt) return this.cachedToken;
+            if (this.cachedToken is not null && this.timeProvider.GetUtcNow() < this.tokenExpiresAt)
+            {
+                return this.cachedToken;
+            }
+
             using var json = await this.SendJsonAsync(HttpMethod.Post, this.options.IamTokenEndpoint,
                 () => new FormUrlEncodedContent(new Dictionary<string, string>
                 {
@@ -239,7 +287,10 @@ public sealed class IbmQuantumClient : IQuantumClient, IQuantumBackendClient, ID
                 }), false, cancellationToken).ConfigureAwait(false);
             var token = json.RootElement.Deserialize(QuantumJsonContext.Default.IbmIamToken);
             if (token is null || string.IsNullOrWhiteSpace(token.AccessToken) || token.ExpiresIn <= 0)
+            {
                 throw new JsonException("IBM Cloud IAM did not return a usable access token and expiry.");
+            }
+
             this.cachedToken = token.AccessToken;
             this.tokenExpiresAt = this.timeProvider.GetUtcNow().AddSeconds(token.ExpiresIn - Math.Min(60, token.ExpiresIn / 10.0));
             return this.cachedToken;

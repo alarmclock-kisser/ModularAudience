@@ -25,7 +25,10 @@ public partial class WindowMain
         };
         item.Click += (_, _) =>
         {
-            if (item.Checked != current()) save(() => store.SetEnableToolTips(item.Checked));
+            if (item.Checked != current())
+            {
+                save(() => store.SetEnableToolTips(item.Checked));
+            }
         };
         return item;
     }

@@ -83,7 +83,9 @@ public sealed class CoOpConnectionTests
         Assert.IsNull(client.HostPeer);
         Assert.IsNull(client.SessionAddress);
         if (accepted != null)
+        {
             await accepted.DisposeAsync();
+        }
     }
 
     [TestMethod]

@@ -34,8 +34,15 @@ public partial class YoutubeBrowserWindow
 
     private void ToolsFolder_Click(object? sender, EventArgs e)
     {
-        if (busy || browsing || playlistEnqueueCancellation is not null || closing) return;
-        if (ChooseToolsFolder()) InitializeToolsForSelectedPolicy();
+        if (busy || browsing || playlistEnqueueCancellation is not null || closing)
+        {
+            return;
+        }
+
+        if (ChooseToolsFolder())
+        {
+            InitializeToolsForSelectedPolicy();
+        }
     }
 
     private bool ChooseToolsFolder()
@@ -83,7 +90,10 @@ public partial class YoutubeBrowserWindow
     {
         var manager = new YtdlpBinaryManager(directory);
         if (!Directory.Exists(manager.BinaryDirectory))
+        {
             throw new DirectoryNotFoundException("The configured tools folder no longer exists: " + manager.BinaryDirectory);
+        }
+
         string probe = Path.Combine(manager.BinaryDirectory, ".ytdlp-write-test-" + Guid.NewGuid().ToString("N"));
         using var stream = new FileStream(probe, FileMode.CreateNew, FileAccess.Write, FileShare.None, 1, FileOptions.DeleteOnClose);
     }

@@ -65,11 +65,19 @@ public sealed class BreakbeatAutoRerollTests
         Assert.IsFalse(recordBeat.Bounds.IntersectsWith(settings.Bounds));
         Button[] buttons = ((Panel)Field(editor, "panel_controls")).Controls.OfType<Button>().ToArray();
         foreach (Button button in buttons)
+        {
             Assert.AreEqual(settings.Top, button.Top, $"{button.Name} must align with the Save row.");
+        }
+
         for (int i = 0; i < buttons.Length; i++)
+        {
             for (int j = i + 1; j < buttons.Length; j++)
+            {
                 Assert.IsFalse(buttons[i].Bounds.IntersectsWith(buttons[j].Bounds),
                     $"{buttons[i].Name} overlaps {buttons[j].Name}.");
+            }
+        }
+
         var saveNewSolo = (CheckBox)Field(editor, "checkBox_saveNewSolo");
         var saveNewEnsemble = (CheckBox)Field(editor, "checkBox_saveNewEnsemble");
         var saveOnlySelectedRange = (CheckBox)Field(editor, "checkBox_saveOnlySelectedRange");
@@ -261,7 +269,10 @@ public sealed class BreakbeatAutoRerollTests
             Invoke(editor, "ObserveAutoRerollLoops", 2L);
             Drain((Task)Field(editor, "autoSaveWork"));
             Assert.HasCount(1, ensembleAudio, "Identical rendered ensembles must be deduplicated.");
-            foreach (var audios in soloAudio) Assert.HasCount(2, audios);
+            foreach (var audios in soloAudio)
+            {
+                Assert.HasCount(2, audios);
+            }
         }
         finally
         {

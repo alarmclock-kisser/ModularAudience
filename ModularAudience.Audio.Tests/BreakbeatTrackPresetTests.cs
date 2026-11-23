@@ -47,7 +47,12 @@ public sealed class BreakbeatTrackPresetTests
                 Assert.IsTrue((float)Get(hit, "Volume") <= (float)Get(options, "VolumeMaxPercent"));
                 object kinds = Get(hit, "Kinds");
                 foreach (string flag in new[] { "AllowTruncated", "AllowTimeStretch", "AllowVarispeed" })
-                    if (!(bool)Get(options, flag)) Assert.IsFalse((bool)Get(kinds, flag));
+                {
+                    if (!(bool)Get(options, flag))
+                    {
+                        Assert.IsFalse((bool)Get(kinds, flag));
+                    }
+                }
             }
             Set(options, "DensityPercent", 0);
             Assert.HasCount(0, Hits(preset, options));
@@ -174,10 +179,26 @@ public sealed class BreakbeatTrackPresetTests
             notes.Clear(); Call(editor, "GeneratePatternInArea", 0, 0, 4, 59, options);
             Assert.IsTrue(notes.Count > 0, (string)Get(preset, "Name"));
             Assert.IsTrue(notes.All(n => n.StartTick >= 256 && n.StartTick + n.DurationTicks <= 3840));
-            if (!(bool)Get(options, "AllowPitchedNotes")) Assert.IsTrue(notes.All(n => n.PitchSemitones == 0));
-            if (!(bool)Get(options, "AllowVarispeed")) Assert.IsTrue(notes.All(n => !n.Varispeed));
-            if (!(bool)Get(options, "AllowTimeStretch")) Assert.IsTrue(notes.All(n => !n.TimeStretch));
-            if (!(bool)Get(options, "AllowTruncated")) Assert.IsTrue(notes.All(n => !n.Truncated));
+            if (!(bool)Get(options, "AllowPitchedNotes"))
+            {
+                Assert.IsTrue(notes.All(n => n.PitchSemitones == 0));
+            }
+
+            if (!(bool)Get(options, "AllowVarispeed"))
+            {
+                Assert.IsTrue(notes.All(n => !n.Varispeed));
+            }
+
+            if (!(bool)Get(options, "AllowTimeStretch"))
+            {
+                Assert.IsTrue(notes.All(n => !n.TimeStretch));
+            }
+
+            if (!(bool)Get(options, "AllowTruncated"))
+            {
+                Assert.IsTrue(notes.All(n => !n.Truncated));
+            }
+
             var snapshot = notes.ToArray(); notes.Clear();
             Call(editor, "GeneratePatternInArea", 0, 0, 4, 59, options);
             CollectionAssert.AreEqual(snapshot, notes.ToArray());

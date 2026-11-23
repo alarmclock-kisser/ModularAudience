@@ -32,6 +32,10 @@ internal sealed class CurveTimingEditor : FlowLayoutPanel
         finally { this.syncing = false; }
         this.UpdateState(); this.SettingsChanged?.Invoke(this, EventArgs.Empty);
     }
-    private void Changed(object? sender, EventArgs e) { this.UpdateState(); if (!this.syncing) this.SettingsChanged?.Invoke(this, EventArgs.Empty); }
+    private void Changed(object? sender, EventArgs e) { this.UpdateState(); if (!this.syncing)
+        {
+            this.SettingsChanged?.Invoke(this, EventArgs.Empty);
+        }
+    }
     private void UpdateState() { this.gaps.Enabled = this.scope.SelectedIndex == 1; this.threshold.Enabled = this.minimum.Enabled = !this.silence.Checked; }
 }

@@ -105,7 +105,11 @@ internal sealed class AutoTuneDialog : Form
         defaults.Click += (_, _) => this.ApplySettingsWithTrackTempo(this.context.Defaults);
         this.presets.SelectedIndexChanged += (_, _) =>
         {
-            if (!this.refreshingPresets) this.PresetAction(this.LoadSelectedPreset);
+            if (!this.refreshingPresets)
+            {
+                this.PresetAction(this.LoadSelectedPreset);
+            }
+
             this.UpdateButtons();
         };
         this.presets.DropDown += (_, _) => this.PresetAction(() => this.RefreshPresets(this.presets.SelectedItem as AutoTunePreset));
@@ -114,7 +118,7 @@ internal sealed class AutoTuneDialog : Form
         cancel.Click += (_, _) => this.Close();
         this.dry.CheckedChanged += (_, _) => this.StopPreview();
         this.loop.CheckedChanged += (_, _) => this.StopPreview();
-        this.playbackTimer.Tick += (_, _) => { if (!this.preview.IsPlaying) this.StopPreview(); };
+        this.playbackTimer.Tick += (_, _) => { if (!this.preview.IsPlaying) { this.StopPreview(); } };
         this.PresetAction(() => this.RefreshPresets(null));
         this.UpdateButtons();
     }
@@ -138,16 +142,27 @@ internal sealed class AutoTuneDialog : Form
         this.revision++;
         this.rendered = null; this.renderedSettings = null;
         this.active?.Cancel(); this.StopPreview();
-        if (!this.disposed) this.status.Text = "Parameters changed. Prehear or apply to render the new settings.";
+        if (!this.disposed)
+        {
+            this.status.Text = "Parameters changed. Prehear or apply to render the new settings.";
+        }
     }
 
     private async Task<AutoTuneResult?> RenderAsync()
     {
-        if (this.active is not null || this.disposed) return null;
+        if (this.active is not null || this.disposed)
+        {
+            return null;
+        }
+
         AutoTuneSettings settings;
         try { this.ValidateChildren(); settings = this.parameters.CaptureSettings(); settings.Validate(this.context.Session.SampleRate); }
         catch (Exception error) when (IsEffectError(error)) { this.status.Text = error.Message; return null; }
-        if (this.rendered is not null && settings.SoundEquals(this.renderedSettings)) return this.rendered;
+        if (this.rendered is not null && settings.SoundEquals(this.renderedSettings))
+        {
+            return this.rendered;
+        }
+
         int generation = this.revision;
         using var cancellation = CancellationTokenSource.CreateLinkedTokenSource(this.lifetime.Token);
         this.active = cancellation; this.UpdateButtons(); this.progress.Value = 0;
@@ -155,26 +170,39 @@ internal sealed class AutoTuneDialog : Form
         var report = new Progress<double>(value =>
         {
             if (!this.disposed && generation == this.revision && double.IsFinite(value))
+            {
                 this.progress.Value = (int)Math.Round(Math.Clamp(value, 0, 1) * this.progress.Maximum);
+            }
         });
         try
         {
             AutoTuneResult result = await this.render(settings, report, cancellation.Token);
             cancellation.Token.ThrowIfCancellationRequested();
-            if (this.disposed || generation != this.revision) return null;
+            if (this.disposed || generation != this.revision)
+            {
+                return null;
+            }
+
             if (result.Samples.Length != this.context.Session.SampleCount || result.Samples.Any(value => !float.IsFinite(value)))
+            {
                 throw new InvalidOperationException("The effect must return the same number of finite samples.");
+            }
+
             this.rendered = result; this.renderedSettings = settings.Copy();
             this.progress.Value = this.progress.Maximum;
             this.status.Text = $"Ready. Voiced frames: {result.VoicedFrames}/{result.AnalyzedFrames}; corrected: {result.CorrectedFrames}. " +
                 "OK creates one undo step; Cancel leaves the track unchanged.";
             return result;
         }
-        catch (OperationCanceledException) { if (!this.disposed) this.status.Text = "Rendering cancelled; the track was not changed."; return null; }
+        catch (OperationCanceledException) { if (!this.disposed) { this.status.Text = "Rendering cancelled; the track was not changed."; } return null; }
         catch (Exception error) when (IsEffectError(error)) { this.ShowError(error); return null; }
         finally
         {
-            if (ReferenceEquals(this.active, cancellation)) this.active = null;
+            if (ReferenceEquals(this.active, cancellation))
+            {
+                this.active = null;
+            }
+
             this.UpdateButtons();
         }
     }
@@ -183,12 +211,24 @@ internal sealed class AutoTuneDialog : Form
     {
         if (this.preview.IsPlaying) { this.StopPreview(); return; }
         AutoTuneResult? result = await this.RenderAsync();
-        if (result is null || this.disposed) return;
+        if (result is null || this.disposed)
+        {
+            return;
+        }
+
         int generation = this.revision;
         try
         {
-            if (this.context.BeforePreviewAsync is not null) await this.context.BeforePreviewAsync();
-            if (this.disposed || generation != this.revision) return;
+            if (this.context.BeforePreviewAsync is not null)
+            {
+                await this.context.BeforePreviewAsync();
+            }
+
+            if (this.disposed || generation != this.revision)
+            {
+                return;
+            }
+
             this.preview.Play(this.dry.Checked ? this.context.Session.Input.ToArray() : result.Samples,
                 this.context.Session.SampleRate, this.context.Session.Channels, this.loop.Checked);
             this.prehear.Text = "Stop prehear"; this.playbackTimer.Start();
@@ -200,7 +240,11 @@ internal sealed class AutoTuneDialog : Form
     {
         this.StopPreview();
         AutoTuneResult? result = await this.RenderAsync();
-        if (result is null || this.disposed) return;
+        if (result is null || this.disposed)
+        {
+            return;
+        }
+
         using var cancellation = CancellationTokenSource.CreateLinkedTokenSource(this.lifetime.Token);
         this.active = cancellation; this.committing = true; this.UpdateButtons();
         try
@@ -209,11 +253,19 @@ internal sealed class AutoTuneDialog : Form
             cancellation.Token.ThrowIfCancellationRequested();
             if (!this.disposed) { this.DialogResult = DialogResult.OK; this.Close(); }
         }
-        catch (OperationCanceledException) { if (!this.disposed) this.status.Text = "Apply cancelled."; }
+        catch (OperationCanceledException) { if (!this.disposed)
+            {
+                this.status.Text = "Apply cancelled.";
+            }
+        }
         catch (Exception error) when (IsEffectError(error)) { this.ShowError(error); }
         finally
         {
-            if (ReferenceEquals(this.active, cancellation)) this.active = null;
+            if (ReferenceEquals(this.active, cancellation))
+            {
+                this.active = null;
+            }
+
             this.committing = false; this.UpdateButtons();
         }
     }
@@ -228,7 +280,11 @@ internal sealed class AutoTuneDialog : Form
 
     internal void DeletePreset()
     {
-        if (this.presets.SelectedItem is not AutoTunePreset { IsBuiltIn: false } preset) return;
+        if (this.presets.SelectedItem is not AutoTunePreset { IsBuiltIn: false } preset)
+        {
+            return;
+        }
+
         this.store.Delete(preset.Name);
         this.RefreshPresets(null); this.presetName.Clear();
         this.ApplySettingsWithTrackTempo(this.context.Defaults);
@@ -237,7 +293,11 @@ internal sealed class AutoTuneDialog : Form
 
     internal void LoadSelectedPreset()
     {
-        if (this.presets.SelectedItem is not AutoTunePreset selected) return;
+        if (this.presets.SelectedItem is not AutoTunePreset selected)
+        {
+            return;
+        }
+
         AutoTunePreset preset = selected.IsBuiltIn ? selected : this.store.Load(selected.Name);
         this.presetName.Text = preset.IsBuiltIn ? string.Empty : preset.Name;
         this.ApplySettingsWithTrackTempo(preset.Parameters);
@@ -250,7 +310,11 @@ internal sealed class AutoTuneDialog : Form
 
     internal void RenamePreset()
     {
-        if (this.presets.SelectedItem is not AutoTunePreset { IsBuiltIn: false } selected) return;
+        if (this.presets.SelectedItem is not AutoTunePreset { IsBuiltIn: false } selected)
+        {
+            return;
+        }
+
         AutoTunePreset renamed = this.store.Rename(selected.Name, this.presetName.Text);
         this.presetName.Text = renamed.Name; this.RefreshPresets(renamed); this.status.Text = "Renamed preset: " + renamed.Name;
     }
@@ -289,7 +353,11 @@ internal sealed class AutoTuneDialog : Form
 
     private void UpdateButtons()
     {
-        if (this.disposed) return;
+        if (this.disposed)
+        {
+            return;
+        }
+
         bool busy = this.active is not null;
         this.accept.Enabled = this.prehear.Enabled = !busy;
         this.presetBar.UpdateState(busy, this.presets.SelectedItem is AutoTunePreset,
@@ -302,13 +370,24 @@ internal sealed class AutoTuneDialog : Form
     {
         this.playbackTimer.Stop();
         try { this.preview.Stop(); }
-        catch (Exception error) when (IsEffectError(error)) { if (!this.disposed) this.status.Text = error.Message; }
-        if (!this.disposed) this.prehear.Text = "Prehear";
+        catch (Exception error) when (IsEffectError(error)) { if (!this.disposed)
+            {
+                this.status.Text = error.Message;
+            }
+        }
+        if (!this.disposed)
+        {
+            this.prehear.Text = "Prehear";
+        }
     }
 
     private void ShowError(Exception error)
     {
-        if (this.disposed) return;
+        if (this.disposed)
+        {
+            return;
+        }
+
         this.status.Text = error.Message;
         LogManager.Log("Auto Tune failed.", error);
     }

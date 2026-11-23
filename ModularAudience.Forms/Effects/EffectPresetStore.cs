@@ -25,9 +25,17 @@ internal sealed class EffectPresetStore
     internal EffectPresetStore(AudioEffectKind effect, string? path = null)
     {
         this.definition = AudioEffectCatalog.Get(effect);
-        if (!this.definition.OpensOptions || effect == AudioEffectKind.AutoTune) throw new ArgumentException("This effect has no generic preset store.");
+        if (!this.definition.OpensOptions || effect == AudioEffectKind.AutoTune)
+        {
+            throw new ArgumentException("This effect has no generic preset store.");
+        }
+
         string appData = Environment.GetFolderPath(Environment.SpecialFolder.ApplicationData, Environment.SpecialFolderOption.DoNotVerify);
-        if (path is null && !Path.IsPathFullyQualified(appData)) throw new DirectoryNotFoundException("AppData is unavailable.");
+        if (path is null && !Path.IsPathFullyQualified(appData))
+        {
+            throw new DirectoryNotFoundException("AppData is unavailable.");
+        }
+
         this.FilePath = Path.GetFullPath(path ?? Path.Combine(appData, "ModularAudience", "Effects", effect + "Presets.json"));
         this.mutexName = @"Local\ModularAudience.EffectPresets." + Convert.ToHexString(SHA256.HashData(Encoding.UTF8.GetBytes(this.FilePath.ToUpperInvariant())));
     }
@@ -41,9 +49,16 @@ internal sealed class EffectPresetStore
     {
         List<EffectPreset> presets = this.Read(); bool changed = false;
         foreach (EffectPreset preset in this.FactoryPresets())
+        {
             if (!presets.Any(existing => string.Equals(existing.BuiltInId, preset.BuiltInId, StringComparison.OrdinalIgnoreCase)))
             { presets.Add(preset); changed = true; }
-        if (changed) this.Write(presets);
+        }
+
+        if (changed)
+        {
+            this.Write(presets);
+        }
+
         var known = this.definition.BuiltInPresets.Select(preset => preset.Id).ToHashSet(StringComparer.OrdinalIgnoreCase);
         return (IReadOnlyList<EffectPreset>)this.definition.BuiltInPresets.Select(definition => presets.Single(preset =>
                 string.Equals(preset.BuiltInId, definition.Id, StringComparison.OrdinalIgnoreCase)))
@@ -63,15 +78,25 @@ internal sealed class EffectPresetStore
             if (name.Length == 0)
             {
                 var used = presets.Select(preset => preset.Name).ToHashSet(StringComparer.OrdinalIgnoreCase);
-                int number = 1; while (used.Contains(name = $"Preset#{number}")) number = checked(number + 1);
+                int number = 1; while (used.Contains(name = $"Preset#{number}"))
+                {
+                    number = checked(number + 1);
+                }
             }
             ValidateName(name);
             int existing = presets.FindIndex(preset => !preset.IsBuiltIn && preset.Name.Equals(name, StringComparison.OrdinalIgnoreCase));
             var saved = new EffectPreset(existing >= 0 ? presets[existing].Name : name, settings.Copy());
-            if (existing >= 0) presets[existing] = saved;
+            if (existing >= 0)
+            {
+                presets[existing] = saved;
+            }
             else
             {
-                if (presets.Count(preset => !preset.IsBuiltIn) >= 4096) throw new InvalidDataException("The user-preset limit (4096) has been reached.");
+                if (presets.Count(preset => !preset.IsBuiltIn) >= 4096)
+                {
+                    throw new InvalidDataException("The user-preset limit (4096) has been reached.");
+                }
+
                 presets.Add(saved);
             }
             this.Write(presets); return saved;
@@ -83,9 +108,16 @@ internal sealed class EffectPresetStore
         string name = requestedName.Trim(); ValidateName(name);
         List<EffectPreset> presets = this.Read();
         int index = presets.FindIndex(preset => !preset.IsBuiltIn && preset.Name.Equals(oldName, StringComparison.OrdinalIgnoreCase));
-        if (index < 0) throw new KeyNotFoundException("The selected user preset no longer exists.");
+        if (index < 0)
+        {
+            throw new KeyNotFoundException("The selected user preset no longer exists.");
+        }
+
         if (presets.Where((_, position) => position != index).Any(preset => !preset.IsBuiltIn && preset.Name.Equals(name, StringComparison.OrdinalIgnoreCase)))
+        {
             throw new InvalidOperationException("A user preset already has that name. Rename never overwrites another preset.");
+        }
+
         EffectPreset renamed = presets[index] with { Name = name }; presets[index] = renamed;
         this.Write(presets); return renamed;
     });
@@ -94,35 +126,64 @@ internal sealed class EffectPresetStore
     {
         List<EffectPreset> presets = this.Read();
         bool removed = presets.RemoveAll(preset => !preset.IsBuiltIn && preset.Name.Equals(name, StringComparison.OrdinalIgnoreCase)) > 0;
-        if (removed) this.Write(presets); return removed;
+        if (removed)
+        {
+            this.Write(presets);
+        }
+
+        return removed;
     });
 
     private void ValidateSettings(AudioEffectSettings settings)
     {
         ArgumentNullException.ThrowIfNull(settings);
-        if (settings.Effect != this.Effect) throw new InvalidDataException("This preset belongs to another effect.");
+        if (settings.Effect != this.Effect)
+        {
+            throw new InvalidDataException("This preset belongs to another effect.");
+        }
+
         settings.Validate();
     }
 
     private List<EffectPreset> Read()
     {
-        if (!File.Exists(this.FilePath)) return [];
-        if (new FileInfo(this.FilePath).Length > 4 * 1024 * 1024) throw new InvalidDataException("Effect presets exceed 4 MiB.");
+        if (!File.Exists(this.FilePath))
+        {
+            return [];
+        }
+
+        if (new FileInfo(this.FilePath).Length > 4 * 1024 * 1024)
+        {
+            throw new InvalidDataException("Effect presets exceed 4 MiB.");
+        }
+
         List<EffectPreset> presets = JsonSerializer.Deserialize<List<EffectPreset>>(File.ReadAllText(this.FilePath), JsonOptions)
             ?? throw new InvalidDataException("The preset file must contain a JSON array.");
         if (presets.Count > 8192 || presets.Count(preset => preset is not null && !preset.IsBuiltIn) > 4096)
+        {
             throw new InvalidDataException("The preset file contains too many entries.");
+        }
+
         var names = new HashSet<string>(StringComparer.OrdinalIgnoreCase); var ids = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
         foreach (EffectPreset? preset in presets)
         {
-            if (preset is null || preset.Parameters is null) throw new InvalidDataException("The preset file contains an empty preset.");
+            if (preset is null || preset.Parameters is null)
+            {
+                throw new InvalidDataException("The preset file contains an empty preset.");
+            }
+
             ValidateName(preset.Name); this.ValidateSettings(preset.Parameters);
             if (preset.IsBuiltIn)
             {
                 if (string.IsNullOrWhiteSpace(preset.BuiltInId) || preset.BuiltInId.Length > 64 || preset.BuiltInId.Any(char.IsControl) || !ids.Add(preset.BuiltInId))
+                {
                     throw new InvalidDataException("Invalid or duplicate default-preset identifiers.");
+                }
             }
-            else if (!names.Add(preset.Name)) throw new InvalidDataException("Duplicate user-preset names.");
+            else if (!names.Add(preset.Name))
+            {
+                throw new InvalidDataException("Duplicate user-preset names.");
+            }
         }
         return presets;
     }
@@ -136,13 +197,27 @@ internal sealed class EffectPresetStore
             using (var stream = new FileStream(temporary, FileMode.CreateNew, FileAccess.Write, FileShare.None))
             {
                 JsonSerializer.Serialize(stream, presets, JsonOptions);
-                if (stream.Length > 4 * 1024 * 1024) throw new InvalidDataException("Effect presets exceed 4 MiB.");
+                if (stream.Length > 4 * 1024 * 1024)
+                {
+                    throw new InvalidDataException("Effect presets exceed 4 MiB.");
+                }
+
                 stream.Flush(flushToDisk: true);
             }
-            if (File.Exists(this.FilePath)) File.Replace(temporary, this.FilePath, null);
-            else File.Move(temporary, this.FilePath);
+            if (File.Exists(this.FilePath))
+            {
+                File.Replace(temporary, this.FilePath, null);
+            }
+            else
+            {
+                File.Move(temporary, this.FilePath);
+            }
         }
-        finally { if (File.Exists(temporary)) File.Delete(temporary); }
+        finally { if (File.Exists(temporary))
+            {
+                File.Delete(temporary);
+            }
+        }
     }
 
     private T WithLock<T>(Func<T> action)
@@ -151,15 +226,25 @@ internal sealed class EffectPresetStore
         try
         {
             try { held = mutex.WaitOne(TimeSpan.FromSeconds(5)); } catch (AbandonedMutexException) { held = true; }
-            if (!held) throw new IOException("Another instance is busy saving effect presets.");
+            if (!held)
+            {
+                throw new IOException("Another instance is busy saving effect presets.");
+            }
+
             return action();
         }
-        finally { if (held) mutex.ReleaseMutex(); }
+        finally { if (held)
+            {
+                mutex.ReleaseMutex();
+            }
+        }
     }
 
     private static void ValidateName(string? name)
     {
         if (string.IsNullOrWhiteSpace(name) || name.Length > 120 || name.Any(char.IsControl))
+        {
             throw new InvalidDataException("Preset names must contain 1–120 printable characters.");
+        }
     }
 }

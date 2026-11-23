@@ -12,7 +12,10 @@ namespace ModularAudience.Audio.Processors_V4
         internal static DeterministicSourceGroup[] Create(DeterministicComponentFeatures[] components, CancellationToken token)
         {
             double total = components.Sum(component => component.Energy);
-            if (total <= 0) return [];
+            if (total <= 0)
+            {
+                return [];
+            }
             // Energy pruning only, not ARD or a Bayesian relevance claim.
             DeterministicComponentFeatures[] retained = components.Where(component => component.Energy > total * 1e-5)
                 .OrderByDescending(component => component.Energy).ThenBy(component => component.Index).ToArray();
@@ -22,8 +25,14 @@ namespace ModularAudience.Audio.Processors_V4
                 token.ThrowIfCancellationRequested();
                 // Complete-link grouping avoids chaining incompatible spectra through an intermediate component.
                 List<DeterministicComponentFeatures>? match = groups.FirstOrDefault(group => group.All(other => Compatible(component, other, token)));
-                if (match is null) groups.Add([component]);
-                else match.Add(component);
+                if (match is null)
+                {
+                    groups.Add([component]);
+                }
+                else
+                {
+                    match.Add(component);
+                }
             }
             List<DeterministicComponentFeatures>[] ordered = groups.OrderByDescending(group => group.Sum(component => component.Energy))
                 .ThenBy(group => group.Min(component => component.Index)).ToArray();
@@ -39,19 +48,43 @@ namespace ModularAudience.Audio.Processors_V4
 
         private static bool Compatible(DeterministicComponentFeatures first, DeterministicComponentFeatures second, CancellationToken token)
         {
-            if (Math.Abs(first.Pan - second.Pan) > 0.15) return false;
-            if (Math.Abs(first.Harmonic - second.Harmonic) > 0.15 || Math.Abs(first.Percussive - second.Percussive) > 0.15) return false;
-            if (!RelatedPitch(first.FundamentalHz, second.FundamentalHz)) return false;
-            if (DeterministicSourceFeatures.EnvelopeSimilarity(first.Envelope, second.Envelope) < 0.975) return false;
+            if (Math.Abs(first.Pan - second.Pan) > 0.15)
+            {
+                return false;
+            }
+
+            if (Math.Abs(first.Harmonic - second.Harmonic) > 0.15 || Math.Abs(first.Percussive - second.Percussive) > 0.15)
+            {
+                return false;
+            }
+
+            if (!RelatedPitch(first.FundamentalHz, second.FundamentalHz))
+            {
+                return false;
+            }
+
+            if (DeterministicSourceFeatures.EnvelopeSimilarity(first.Envelope, second.Envelope) < 0.975)
+            {
+                return false;
+            }
+
             return DeterministicSourceFeatures.ActivationCorrelation(first.Activation, second.Activation, token) >= 0.90;
         }
 
         private static bool RelatedPitch(double first, double second)
         {
-            if (first == 0 || second == 0) return first == second;
+            if (first == 0 || second == 0)
+            {
+                return first == second;
+            }
+
             double ratio = Math.Max(first, second) / Math.Min(first, second);
             double harmonic = Math.Round(ratio);
-            if (harmonic < 1 || harmonic > 4) return false;
+            if (harmonic < 1 || harmonic > 4)
+            {
+                return false;
+            }
+
             return Math.Abs(1200 * Math.Log2(ratio / harmonic)) <= 35;
         }
 
@@ -77,7 +110,11 @@ namespace ModularAudience.Audio.Processors_V4
             Func<DeterministicComponentFeatures, double> selector, double energy)
         {
             double sum = 0;
-            foreach (DeterministicComponentFeatures component in components) sum += component.Energy / energy * selector(component);
+            foreach (DeterministicComponentFeatures component in components)
+            {
+                sum += component.Energy / energy * selector(component);
+            }
+
             return sum;
         }
 

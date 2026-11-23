@@ -20,7 +20,10 @@ public sealed class BreakbeatGeneratorRegressionTests
             var pattern = await BreakbeatGenerator_V2.GenerateBreakPatternAsync(elements, 2, 0.58f, 32, 0, 0.666f, interleaved, 123, preset);
             Assert.HasCount(elements.Length, pattern, preset);
             Assert.IsTrue(pattern.All(row => row.Length == 64));
-            if (interleaved) Assert.IsTrue(Enumerable.Range(0, 64).All(step => pattern.Count(row => row[step]) <= 1));
+            if (interleaved)
+            {
+                Assert.IsTrue(Enumerable.Range(0, 64).All(step => pattern.Count(row => row[step]) <= 1));
+            }
         }
     }
 

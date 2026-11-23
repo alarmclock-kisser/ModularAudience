@@ -66,7 +66,9 @@ public sealed class AutoTuneBuiltInPresetsTests
         }
         IReadOnlyList<AutoTunePreset> restored = new AutoTunePresetStore(files.Path).ListAvailable();
         foreach (AutoTuneBuiltInPreset definition in AutoTuneBuiltInPresets.All)
+        {
             Assert.AreEqual(definition.Parameters, restored.Single(preset => preset.BuiltInId == definition.Id).Parameters, definition.Id);
+        }
     }
 
     [TestMethod]

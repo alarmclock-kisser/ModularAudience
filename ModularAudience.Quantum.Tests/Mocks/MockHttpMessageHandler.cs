@@ -10,7 +10,7 @@ internal sealed class MockHttpMessageHandler(Func<RecordedRequest, CancellationT
 {
     private readonly List<RecordedRequest> requests = [];
     private readonly Lock requestLock = new();
-    internal RecordedRequest[] Requests { get { lock (this.requestLock) return this.requests.ToArray(); } }
+    internal RecordedRequest[] Requests { get { lock (this.requestLock) { return this.requests.ToArray(); } } }
 
     protected override async Task<HttpResponseMessage> SendAsync(HttpRequestMessage request, CancellationToken cancellationToken)
     {
@@ -19,7 +19,11 @@ internal sealed class MockHttpMessageHandler(Func<RecordedRequest, CancellationT
             request.Headers.TryGetValues("IBM-API-Version", out var version) ? version.Single() : null,
             request.Content?.Headers.ContentType?.MediaType,
             request.Content is null ? string.Empty : await request.Content.ReadAsStringAsync(cancellationToken));
-        lock (this.requestLock) this.requests.Add(snapshot);
+        lock (this.requestLock)
+        {
+            this.requests.Add(snapshot);
+        }
+
         return await respond(snapshot, cancellationToken);
     }
 

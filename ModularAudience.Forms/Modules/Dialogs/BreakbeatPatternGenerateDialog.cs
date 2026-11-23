@@ -76,7 +76,11 @@ namespace ModularAudience.Forms.Modules.Dialogs
             int row = 0;
             this.toolTip = new ToolTip { IsParameterHelp = true };
             this.combo_preset.Items.Add("- None -");
-            foreach (var preset in BreakbeatTrackPresets.All) this.combo_preset.Items.Add(preset);
+            foreach (var preset in BreakbeatTrackPresets.All)
+            {
+                this.combo_preset.Items.Add(preset);
+            }
+
             this.combo_preset.SelectedIndex = Math.Max(0, BreakbeatTrackPresets.All.ToList().FindIndex(p => p.Name == options.Preset) + 1);
             grid.Controls.Add(new Label { Text = "Pattern preset", AutoSize = true, Anchor = AnchorStyles.Left }, 0, row);
             grid.Controls.Add(this.combo_preset, 1, row++);
@@ -164,7 +168,10 @@ namespace ModularAudience.Forms.Modules.Dialogs
             this.check_interleaved.Checked = options.Interleaved;
             this.toolTip.SetToolTip(this.check_interleaved,
                 "On: generated notes never overlap in time across tracks.");
-            if (!autoReroll) stretchFlow.Controls.Add(this.check_interleaved);
+            if (!autoReroll)
+            {
+                stretchFlow.Controls.Add(this.check_interleaved);
+            }
             else
             {
                 stretchFlow.Controls.Add(this.check_saveEnsemble);
@@ -183,7 +190,9 @@ namespace ModularAudience.Forms.Modules.Dialogs
                 this.combo_applyFromTracks.SelectedIndexChanged += (_, _) =>
                 {
                     if (this.combo_applyFromTracks.SelectedItem is TrackOptionsItem item)
+                    {
                         this.ApplyAutoOptions(item.Options);
+                    }
                 };
                 this.ClientSize = new Size(this.ClientSize.Width, this.ClientSize.Height + 100);
             }
@@ -218,7 +227,9 @@ namespace ModularAudience.Forms.Modules.Dialogs
                 this.numeric_presetIntensity.Enabled = this.numeric_phraseBars.Enabled = active;
                 this.toolTip.SetToolTip(this.combo_preset, active ? ((BreakbeatTrackPreset)this.combo_preset.SelectedItem!).Description : "Legacy random generation; no preset processing.");
                 if (!this.applyingOptions && this.combo_preset.SelectedItem is BreakbeatTrackPreset preset)
+                {
                     this.ApplyOptions(preset.Defaults(this.Options, this.stepsPerBar));
+                }
             };
         }
 
@@ -232,7 +243,10 @@ namespace ModularAudience.Forms.Modules.Dialogs
         {
             this.combo_applyFromTracks.Items.Clear();
             foreach (var track in tracks)
+            {
                 this.combo_applyFromTracks.Items.Add(new TrackOptionsItem($"#{track.TrackNumber} — {track.Name}", track.Options.Clone()));
+            }
+
             this.combo_applyFromTracks.Enabled = this.combo_applyFromTracks.Items.Count > 0;
         }
         private void ApplyAutoOptions(TrackAutoRerollOptions options)
@@ -244,7 +258,11 @@ namespace ModularAudience.Forms.Modules.Dialogs
         }
         protected override void Dispose(bool disposing)
         {
-            if (disposing) this.toolTip.Dispose();
+            if (disposing)
+            {
+                this.toolTip.Dispose();
+            }
+
             base.Dispose(disposing);
         }
         public TrackAutoRerollOptions AutoOptions => new()

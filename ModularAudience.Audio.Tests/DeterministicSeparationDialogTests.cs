@@ -60,13 +60,19 @@ namespace ModularAudience.Audio.Tests
             Assert.AreEqual(analysis.Sources.Count, GetControl<DataGridView>(dialog, "dataGridView_sources").Rows.Count);
 
             if (controlName == "comboBox_windowSize")
+            {
                 GetControl<ComboBox>(dialog, controlName).SelectedItem = 512;
+            }
             else
+            {
                 GetControl<NumericUpDown>(dialog, controlName).Value += 2;
+            }
 
             if (controlName == "comboBox_windowSize")
+            {
                 Assert.AreEqual("128 samples (fixed)", GetControl<Label>(dialog, "label_hopSizeValue").Text,
                     "The FFT selection event must safely update the fixed hop size.");
+            }
 
             AssertAnalysisRetainedButIncompatible(dialog, analysis);
         }

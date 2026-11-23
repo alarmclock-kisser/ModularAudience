@@ -6,7 +6,12 @@ internal static class HintContent
     internal static void Apply(AppToolTip tips, Control root, IReadOnlyDictionary<string, string> content)
     {
         foreach (var (name, text) in content)
-            foreach (Control control in root.Controls.Find(name, searchAllChildren: true)) tips.SetToolTip(control, text);
+        {
+            foreach (Control control in root.Controls.Find(name, searchAllChildren: true))
+            {
+                tips.SetToolTip(control, text);
+            }
+        }
     }
 
     internal static readonly Dictionary<string, string> Main = new()

@@ -30,13 +30,24 @@ public partial class NeuralBeatEngineDialog
         numericUpDown_threadCount.Maximum = Math.Max(1, Environment.ProcessorCount);
         numericUpDown_threadCount.ValueChanged += (_, _) =>
         {
-            if (!restoringSessionOptions && !isSessionIo && !closing) engine?.SetThreadCount((int)numericUpDown_threadCount.Value);
+            if (!restoringSessionOptions && !isSessionIo && !closing)
+            {
+                engine?.SetThreadCount((int)numericUpDown_threadCount.Value);
+            }
         };
         foreach (var control in new[] { numericUpDown_learningRate, numericUpDown_temperature, numericUpDown_weightDecay,
-            numericUpDown_minWeight, numericUpDown_maxWeight }) control.ValueChanged += LearningOption_Changed;
+            numericUpDown_minWeight, numericUpDown_maxWeight })
+        {
+            control.ValueChanged += LearningOption_Changed;
+        }
+
         var root = new TableLayoutPanel { Name = "trainingRootLayout", Dock = DockStyle.Fill, Padding = new Padding(10), ColumnCount = 1, RowCount = 7 };
         root.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 100));
-        foreach (int row in Enumerable.Range(0, 7)) root.RowStyles.Add(new RowStyle(row == 5 ? SizeType.Percent : SizeType.AutoSize, row == 5 ? 100 : 0));
+        foreach (int row in Enumerable.Range(0, 7))
+        {
+            root.RowStyles.Add(new RowStyle(row == 5 ? SizeType.Percent : SizeType.AutoSize, row == 5 ? 100 : 0));
+        }
+
         var toolbar = new FlowLayoutPanel { AutoSize = true, Dock = DockStyle.Fill, WrapContents = true };
         saveTrainingButton = SessionButton("Save training...", SaveTraining_Click);
         loadTrainingButton = SessionButton("Load training...", LoadTraining_Click);
@@ -49,7 +60,11 @@ public partial class NeuralBeatEngineDialog
         trainingIterationsLabel = new Label { AutoSize = true, Margin = new Padding(8, 8, 3, 0), Text = "Training iterations: 0 | Active branch: 0" };
         toolbar.Controls.Add(trainingIterationsLabel);
         var parameters = new TableLayoutPanel { AutoSize = true, Dock = DockStyle.Fill, ColumnCount = 3, RowCount = 1 };
-        foreach (int column in Enumerable.Range(0, 3)) parameters.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, column == 2 ? 34 : 33));
+        foreach (int column in Enumerable.Range(0, 3))
+        {
+            parameters.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, column == 2 ? 34 : 33));
+        }
+
         foreach (var group in new[] { groupBox_samples, groupBox_timing, groupBox_learning })
         { group.Dock = DockStyle.Fill; group.Margin = new Padding(3); group.MinimumSize = new Size(210, 220); }
         parameters.Controls.Add(groupBox_samples, 0, 0);
@@ -79,7 +94,9 @@ public partial class NeuralBeatEngineDialog
         patternViewport.Layout += (_, _) =>
         {
             if (pictureBox_beatMap.Bounds != patternViewport.ClientRectangle)
+            {
                 pictureBox_beatMap.Bounds = patternViewport.ClientRectangle;
+            }
         };
         label_status.Dock = DockStyle.Fill;
         root.Controls.Add(toolbar, 0, 0);
@@ -92,7 +109,9 @@ public partial class NeuralBeatEngineDialog
         root.Layout += (_, _) =>
         {
             if (pictureBox_beatMap.Bounds != patternViewport.ClientRectangle)
+            {
                 pictureBox_beatMap.Bounds = patternViewport.ClientRectangle;
+            }
         };
         Controls.Add(root);
         sessionStatus.MaximumSize = new Size(Math.Max(100, root.ClientSize.Width - root.Padding.Horizontal - 6), 0);
@@ -109,12 +128,19 @@ public partial class NeuralBeatEngineDialog
         contextMenuStrip_samples.Items.Add("Move slot down", null, (_, _) => MoveSample(1));
         Audios.Audios.ListChanged += (_, _) =>
         {
-            if (closing || IsDisposed || Disposing) return;
+            if (closing || IsDisposed || Disposing)
+            {
+                return;
+            }
+
             SetFeedbackEnabled(false);
             UpdateSessionAvailability();
-            if (currentPattern is not null) ShowBeatMap(currentPattern);
+            if (currentPattern is not null)
+            {
+                ShowBeatMap(currentPattern);
+            }
         };
-        pictureBox_beatMap.Resize += (_, _) => { if (!closing && currentPattern is not null) ShowBeatMap(currentPattern); };
+        pictureBox_beatMap.Resize += (_, _) => { if (!closing && currentPattern is not null) { ShowBeatMap(currentPattern); } };
         InitializeOptionToolTips();
         ResumeLayout(true);
         UpdateSessionAvailability();
@@ -125,15 +151,25 @@ public partial class NeuralBeatEngineDialog
 
     private void UpdateSessionAvailability()
     {
-        if (saveTrainingButton is null || closing || IsDisposed || Disposing) return;
+        if (saveTrainingButton is null || closing || IsDisposed || Disposing)
+        {
+            return;
+        }
+
         bool editable = EditingAvailable;
         groupBox_timing.Enabled = !closing;
         foreach (var control in new[] { numericUpDown_bars, numericUpDown_beatsPerBar, numericUpDown_stepsPerBeat, numericUpDown_interleaved })
+        {
             control.Enabled = editable && !sessionLocked;
+        }
+
         numericUpDown_bpm.Enabled = editable && !isPlaying;
         groupBox_learning.Enabled = !closing;
         foreach (var control in groupBox_learning.Controls.OfType<NumericUpDown>())
+        {
             control.Enabled = !isSessionIo && !closing;
+        }
+
         numericUpDown_mutation.Enabled = editable;
         listBox_samples.Enabled = editable;
         checkBox_loopUntilFeedback.Enabled = editable && !isPlaying;
@@ -147,7 +183,11 @@ public partial class NeuralBeatEngineDialog
         loadTrainingButton.Enabled = resetTrainingButton.Enabled = editable && !isPlaying;
         explorerButton.Enabled = editable && engine is not null;
         playPatternButton.Enabled = editable && !isPlaying && SessionCompatible && currentPattern is not null;
-        if (!SessionCompatible) SetFeedbackEnabled(false);
+        if (!SessionCompatible)
+        {
+            SetFeedbackEnabled(false);
+        }
+
         var counts = engine?.GetTrainingIterations(currentNodeId) ?? (0L, 0);
         trainingIterationsLabel.Text = $"Training iterations: {counts.Item1:N0} | Active branch: {counts.Item2:N0}";
         sessionStatus.ForeColor = SessionCompatible ? SystemColors.ControlText : Color.DarkOrange;
@@ -160,7 +200,11 @@ public partial class NeuralBeatEngineDialog
 
     private bool EnsureSessionCompatible()
     {
-        if (SessionCompatible) return true;
+        if (SessionCompatible)
+        {
+            return true;
+        }
+
         UpdateSessionAvailability();
         label_status.Text = "Sample count does not match the session. Replace/add/remove samples to restore the expected slot count.";
         return false;
@@ -168,13 +212,25 @@ public partial class NeuralBeatEngineDialog
 
     private bool PrepareSessionForGeneration(ref string nodeId)
     {
-        if (engine is null) return true;
+        if (engine is null)
+        {
+            return true;
+        }
+
         var proposed = CreateConfig();
         if (proposed != engine.Config)
         {
-            if (sessionLocked) throw new InvalidOperationException("The session structure is locked. Reset or load a session before changing it.");
+            if (sessionLocked)
+            {
+                throw new InvalidOperationException("The session structure is locked. Reset or load a session before changing it.");
+            }
+
             if (MessageBox.Show(this, "The settings differ from the loaded model. Start a new model with these settings? Save first to retain the loaded training tree.",
-                "New model required", MessageBoxButtons.OKCancel) != DialogResult.OK) return false;
+                "New model required", MessageBoxButtons.OKCancel) != DialogResult.OK)
+            {
+                return false;
+            }
+
             explorer?.Close(); explorer = null;
             engine.Dispose(); engine = new AsyncBeatGraphEngine(proposed);
             currentNodeId = nodeId = "root"; slotMetadata = CaptureSlots();
@@ -185,7 +241,11 @@ public partial class NeuralBeatEngineDialog
 
     private async void PlayPattern_Click(object? sender, EventArgs e)
     {
-        if (!EditingAvailable || currentPattern is null || !EnsureSessionCompatible()) return;
+        if (!EditingAvailable || currentPattern is null || !EnsureSessionCompatible())
+        {
+            return;
+        }
+
         try
         {
             isGenerating = true; UpdateSessionAvailability(); SetFeedbackEnabled(false);
@@ -207,11 +267,19 @@ public partial class NeuralBeatEngineDialog
 
     private async void SaveTraining_Click(object? sender, EventArgs e)
     {
-        if (!EditingAvailable || engine is null) return;
+        if (!EditingAvailable || engine is null)
+        {
+            return;
+        }
+
         Directory.CreateDirectory(TrainingDumpDirectory);
         using var dialog = new SaveFileDialog { Filter = "Neural beat training (*.nbtrain)|*.nbtrain", DefaultExt = "nbtrain", AddExtension = true,
             InitialDirectory = TrainingDumpDirectory, FileName = "NeuralBeatTraining_" + DateTime.Now.ToString("yyyyMMdd_HHmmss") + ".nbtrain" };
-        if (dialog.ShowDialog(this) != DialogResult.OK) return;
+        if (dialog.ShowDialog(this) != DialogResult.OK)
+        {
+            return;
+        }
+
         try
         {
             isSessionIo = true; UpdateSessionAvailability();
@@ -229,13 +297,25 @@ public partial class NeuralBeatEngineDialog
 
     private async void LoadTraining_Click(object? sender, EventArgs e)
     {
-        if (!EditingAvailable || isPlaying) return;
+        if (!EditingAvailable || isPlaying)
+        {
+            return;
+        }
+
         Directory.CreateDirectory(TrainingDumpDirectory);
         using var dialog = new OpenFileDialog { Filter = "Neural beat training (*.nbtrain)|*.nbtrain", CheckFileExists = true,
             InitialDirectory = TrainingDumpDirectory };
-        if (dialog.ShowDialog(this) != DialogResult.OK) return;
+        if (dialog.ShowDialog(this) != DialogResult.OK)
+        {
+            return;
+        }
+
         if (engine is not null && MessageBox.Show(this, "Replace the current in-memory session with this file? Save first to retain current changes.",
-            "Load training", MessageBoxButtons.OKCancel) != DialogResult.OK) return;
+            "Load training", MessageBoxButtons.OKCancel) != DialogResult.OK)
+        {
+            return;
+        }
+
         try
         {
             isSessionIo = true; UpdateSessionAvailability();
@@ -256,9 +336,16 @@ public partial class NeuralBeatEngineDialog
         slotMetadata = loaded.Document.Slots;
         if (loaded.Samples.Count > 0)
         {
-            foreach (var audio in Audios.Audios) audio.Dispose();
+            foreach (var audio in Audios.Audios)
+            {
+                audio.Dispose();
+            }
+
             Audios.Audios.Clear();
-            foreach (var audio in loaded.Samples) Audios.Audios.Add(audio);
+            foreach (var audio in loaded.Samples)
+            {
+                Audios.Audios.Add(audio);
+            }
         }
         ApplyConfig(engine.Config, loaded.Document.Bpm);
         numericUpDown_mutation.Value = (decimal)loaded.Document.Mutation;
@@ -291,14 +378,24 @@ public partial class NeuralBeatEngineDialog
 
     private void LearningOption_Changed(object? sender, EventArgs e)
     {
-        if (restoringSessionOptions || isSessionIo || closing) return;
+        if (restoringSessionOptions || isSessionIo || closing)
+        {
+            return;
+        }
+
         if (numericUpDown_minWeight.Value >= numericUpDown_maxWeight.Value)
         {
             restoringSessionOptions = true;
             try
             {
-                if (sender == numericUpDown_minWeight) numericUpDown_minWeight.Value = numericUpDown_maxWeight.Value - .01m;
-                else numericUpDown_maxWeight.Value = numericUpDown_minWeight.Value + .01m;
+                if (sender == numericUpDown_minWeight)
+                {
+                    numericUpDown_minWeight.Value = numericUpDown_maxWeight.Value - .01m;
+                }
+                else
+                {
+                    numericUpDown_maxWeight.Value = numericUpDown_minWeight.Value + .01m;
+                }
             }
             finally { restoringSessionOptions = false; }
         }
@@ -329,8 +426,16 @@ public partial class NeuralBeatEngineDialog
 
     private async void ResetTraining_Click(object? sender, EventArgs e)
     {
-        if (!EditingAvailable) return;
-        if (engine is not null && MessageBox.Show(this, "Reset this in-memory training session? Save first to retain its tree and weights.", "Reset training", MessageBoxButtons.OKCancel) != DialogResult.OK) return;
+        if (!EditingAvailable)
+        {
+            return;
+        }
+
+        if (engine is not null && MessageBox.Show(this, "Reset this in-memory training session? Save first to retain its tree and weights.", "Reset training", MessageBoxButtons.OKCancel) != DialogResult.OK)
+        {
+            return;
+        }
+
         await StopPlaybackAsync();
         explorer?.Close(); explorer = null;
         engine?.Dispose(); engine = null; currentNodeId = "root"; currentPattern = null;
@@ -347,9 +452,17 @@ public partial class NeuralBeatEngineDialog
 
     private async void Samples_DragDrop(object? sender, DragEventArgs e)
     {
-        if (!EditingAvailable) return;
+        if (!EditingAvailable)
+        {
+            return;
+        }
+
         var samples = DroppedSamples(e.Data);
-        if (samples.Length == 0) return;
+        if (samples.Length == 0)
+        {
+            return;
+        }
+
         isSessionIo = true; UpdateSessionAvailability();
         try
         {
@@ -357,13 +470,20 @@ public partial class NeuralBeatEngineDialog
             renderedBeat?.Dispose(); renderedBeat = null;
             bool replace = (e.KeyState & 4) != 0;
             int index = listBox_samples.IndexFromPoint(listBox_samples.PointToClient(new Point(e.X, e.Y)));
-            if (replace && index < 0) index = listBox_samples.SelectedIndex;
+            if (replace && index < 0)
+            {
+                index = listBox_samples.SelectedIndex;
+            }
+
             foreach (var source in samples)
             {
                 var clone = source.Clone();
                 if (replace && index >= 0 && index < Audios.Count)
                 { var old = Audios.Audios[index]; Audios.Audios[index++] = clone; old.Dispose(); }
-                else Audios.Audios.Add(clone);
+                else
+                {
+                    Audios.Audios.Add(clone);
+                }
             }
             label_status.Text = "Samples copied. Slot order maps audio to learned pattern rows. Hold Shift while dropping to replace slots.";
         }
@@ -373,9 +493,17 @@ public partial class NeuralBeatEngineDialog
 
     private void MoveSample(int direction)
     {
-        if (!EditingAvailable || isPlaying) return;
+        if (!EditingAvailable || isPlaying)
+        {
+            return;
+        }
+
         int index = listBox_samples.SelectedIndex, next = index + direction;
-        if (index < 0 || next < 0 || next >= Audios.Count) return;
+        if (index < 0 || next < 0 || next >= Audios.Count)
+        {
+            return;
+        }
+
         var sample = Audios.Audios[index]; Audios.Audios.RemoveAt(index); Audios.Audios.Insert(next, sample);
         renderedBeat?.Dispose(); renderedBeat = null;
         listBox_samples.SelectedIndex = next;
@@ -384,14 +512,25 @@ public partial class NeuralBeatEngineDialog
 
     private void Explorer_Click(object? sender, EventArgs e)
     {
-        if (engine is null || !EditingAvailable) return;
+        if (engine is null || !EditingAvailable)
+        {
+            return;
+        }
+
         explorer ??= new NeuralBeatTreeWindow(engine, () => EditingAvailable && !isPlaying,
             async (nodeId, record) =>
             {
-                if (!EnsureSessionCompatible()) return;
+                if (!EnsureSessionCompatible())
+                {
+                    return;
+                }
+
                 await StopPlaybackAsync();
                 currentNodeId = nodeId;
-                if (record is null) await GenerateSequenceAsync(nodeId, false);
+                if (record is null)
+                {
+                    await GenerateSequenceAsync(nodeId, false);
+                }
                 else
                 {
                     isGenerating = true; UpdateSessionAvailability();

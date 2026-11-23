@@ -229,7 +229,7 @@ internal sealed class QuantumHelpDialog : Form
         this.MinimumSize = new Size(760, 450); this.StartPosition = FormStartPosition.CenterParent;
         var split = new SplitContainer { Dock = DockStyle.Fill, Size = new Size(1100, 640), SplitterDistance = 230 };
         this.topics.Items.AddRange(Topics.Select(topic => (object)topic.Title).ToArray());
-        this.topics.SelectedIndexChanged += (_, _) => { if (this.topics.SelectedIndex >= 0) this.content.Text = Topics[this.topics.SelectedIndex].Text.Replace("\n", Environment.NewLine); };
+        this.topics.SelectedIndexChanged += (_, _) => { if (this.topics.SelectedIndex >= 0) { this.content.Text = Topics[this.topics.SelectedIndex].Text.Replace("\n", Environment.NewLine); } };
         split.Panel1.Controls.Add(this.topics); split.Panel2.Controls.Add(this.content);
         var link = new LinkLabel { Text = "Open official IBM Quantum documentation", Dock = DockStyle.Bottom, Height = 32, Padding = new Padding(10, 5, 5, 5) };
         link.LinkClicked += (_, _) =>

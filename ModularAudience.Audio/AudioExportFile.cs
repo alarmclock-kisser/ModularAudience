@@ -56,7 +56,11 @@ internal sealed class AudioExportFile : IDisposable
 
     public void Dispose()
     {
-        if (this.disposed) return;
+        if (this.disposed)
+        {
+            return;
+        }
+
         this.disposed = true;
         this.Stream.Dispose();
         if (!this.completed && this.newlyCreated)

@@ -50,8 +50,15 @@ public sealed class DemucsFourier
             () => new ManagedFourierTransformProvider(),
             (i, _, provider) =>
             {
-                if (inverse) provider.Backward(frames[i], FourierTransformScaling.BackwardScaling);
-                else provider.Forward(frames[i], FourierTransformScaling.NoScaling);
+                if (inverse)
+                {
+                    provider.Backward(frames[i], FourierTransformScaling.BackwardScaling);
+                }
+                else
+                {
+                    provider.Forward(frames[i], FourierTransformScaling.NoScaling);
+                }
+
                 return provider;
             }, _ => { });
         return false;
@@ -86,7 +93,10 @@ internal static class CudaToolkitFourier
         Marshal.GetDelegateForFunctionPointer<T>(NativeLibrary.GetExport(library, name));
     private static void Check(int code, string operation)
     {
-        if (code != 0) throw new InvalidOperationException($"{operation} returned CUDA error {code}.");
+        if (code != 0)
+        {
+            throw new InvalidOperationException($"{operation} returned CUDA error {code}.");
+        }
     }
 
     internal static string? FindCuFftLibrary(IEnumerable<string> toolkitRoots)
@@ -95,11 +105,18 @@ internal static class CudaToolkitFourier
         {
             foreach (string directory in new[] { Path.Combine(root, "bin"), root }.Distinct(StringComparer.OrdinalIgnoreCase))
             {
-                if (!Directory.Exists(directory)) continue;
+                if (!Directory.Exists(directory))
+                {
+                    continue;
+                }
+
                 string? library = Directory.GetFiles(directory, "cufft64_*.dll", SearchOption.TopDirectoryOnly)
                     .OrderByDescending(CuFftLibraryVersion)
                     .FirstOrDefault();
-                if (library != null) return Path.GetFullPath(library);
+                if (library != null)
+                {
+                    return Path.GetFullPath(library);
+                }
             }
         }
         return null;
@@ -116,11 +133,21 @@ internal static class CudaToolkitFourier
         var toolkits = new Dictionary<int, (Version Version, string LibraryPath)>();
         foreach (var root in toolkitRoots)
         {
-            if (root.Version.Major is not (12 or 13)) continue;
+            if (root.Version.Major is not (12 or 13))
+            {
+                continue;
+            }
+
             string? library = FindCuFftLibrary([root.Path]);
-            if (library is null) continue;
+            if (library is null)
+            {
+                continue;
+            }
+
             if (!toolkits.TryGetValue(root.Version.Major, out var current) || root.Version > current.Version)
+            {
                 toolkits[root.Version.Major] = (root.Version, library);
+            }
         }
         return toolkits.OrderByDescending(item => item.Key)
             .Select(item => new DemucsCudaToolkit(item.Key, item.Value.LibraryPath)).ToArray();
@@ -147,18 +174,29 @@ internal static class CudaToolkitFourier
         var roots = new List<ToolkitRoot>();
         void AddRoot(string path, Version? declaredVersion = null)
         {
-            if (string.IsNullOrWhiteSpace(path)) return;
+            if (string.IsNullOrWhiteSpace(path))
+            {
+                return;
+            }
+
             Version version = declaredVersion is { Major: > 0 } ? declaredVersion : CudaVersionFromPath(path);
             if (version.Major > 0)
             {
                 roots.Add(new ToolkitRoot(path, version));
                 return;
             }
-            if (!Directory.Exists(path)) return;
+            if (!Directory.Exists(path))
+            {
+                return;
+            }
+
             foreach (string subdirectory in Directory.GetDirectories(path, "v*"))
             {
                 Version subdirectoryVersion = CudaVersionFromPath(subdirectory);
-                if (subdirectoryVersion.Major > 0) roots.Add(new ToolkitRoot(subdirectory, subdirectoryVersion));
+                if (subdirectoryVersion.Major > 0)
+                {
+                    roots.Add(new ToolkitRoot(subdirectory, subdirectoryVersion));
+                }
             }
         }
 
@@ -167,18 +205,26 @@ internal static class CudaToolkitFourier
             .Where(entry => entry.Name.StartsWith("CUDA_PATH", StringComparison.OrdinalIgnoreCase)
                 && !string.IsNullOrWhiteSpace(entry.Path))
             .OrderByDescending(entry => CudaVersion(entry.Name)))
+        {
             AddRoot(entry.Path, CudaVersion(entry.Name));
+        }
 
         string installationRoot = Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.ProgramFiles),
             "NVIDIA GPU Computing Toolkit", "CUDA");
         if (Directory.Exists(installationRoot))
+        {
             foreach (string subdirectory in Directory.GetDirectories(installationRoot, "v*"))
+            {
                 AddRoot(subdirectory);
+            }
+        }
 
         foreach (string path in (Environment.GetEnvironmentVariable("PATH") ?? string.Empty)
             .Split(Path.PathSeparator, StringSplitOptions.RemoveEmptyEntries)
             .Select(path => path.Trim().Trim('"')))
+        {
             AddRoot(path);
+        }
 
         return roots
             .DistinctBy(root => (Path.GetFullPath(root.Path), root.Version))
@@ -195,7 +241,11 @@ internal static class CudaToolkitFourier
             driver = NativeLibrary.Load("nvcuda.dll");
             Check(Function<Init>(driver, "cuInit")(0), "cuInit");
             Check(Function<DeviceGetCount>(driver, "cuDeviceGetCount")(out int count), "cuDeviceGetCount");
-            if (count < 0 || count > 128) throw new InvalidOperationException($"CUDA reported an invalid device count: {count}.");
+            if (count < 0 || count > 128)
+            {
+                throw new InvalidOperationException($"CUDA reported an invalid device count: {count}.");
+            }
+
             var getDevice = Function<DeviceGet>(driver, "cuDeviceGet");
             var getName = Function<DeviceGetName>(driver, "cuDeviceGetName");
             DeviceGetLuid? getLuid = NativeLibrary.TryGetExport(driver, "cuDeviceGetLuid", out IntPtr luidAddress)
@@ -212,20 +262,31 @@ internal static class CudaToolkitFourier
                         deviceName = $"CUDA device {ordinal}";
                         warnings.Add($"Could not read the name of CUDA device {ordinal}.");
                     }
-                    else deviceName = Marshal.PtrToStringAnsi(name) ?? $"CUDA device {ordinal}";
+                    else
+                    {
+                        deviceName = Marshal.PtrToStringAnsi(name) ?? $"CUDA device {ordinal}";
+                    }
                 }
                 finally { Marshal.FreeHGlobal(name); }
 
                 long? luid = null;
                 if (getLuid is null)
+                {
                     warnings.Add("The NVIDIA driver does not expose CUDA device LUIDs; CUDA devices cannot be matched to DirectML adapters.");
+                }
                 else
                 {
                     IntPtr luidBuffer = Marshal.AllocHGlobal(sizeof(long));
                     try
                     {
-                        if (getLuid(luidBuffer, out _, device) == 0) luid = Marshal.ReadInt64(luidBuffer);
-                        else warnings.Add($"Could not read the LUID of CUDA device {ordinal}; it cannot be matched to DirectML.");
+                        if (getLuid(luidBuffer, out _, device) == 0)
+                        {
+                            luid = Marshal.ReadInt64(luidBuffer);
+                        }
+                        else
+                        {
+                            warnings.Add($"Could not read the LUID of CUDA device {ordinal}; it cannot be matched to DirectML.");
+                        }
                     }
                     finally { Marshal.FreeHGlobal(luidBuffer); }
                 }
@@ -239,11 +300,17 @@ internal static class CudaToolkitFourier
         }
         finally
         {
-            if (driver != IntPtr.Zero) NativeLibrary.Free(driver);
+            if (driver != IntPtr.Zero)
+            {
+                NativeLibrary.Free(driver);
+            }
         }
         DemucsCudaToolkit[] toolkits = EnumerateCuFftToolkits();
         if (toolkits.Length == 0)
+        {
             warnings.Add("No CUDA 12/13 CuFFT toolkit was found; parallel CPU FFT will be used.");
+        }
+
         return new DemucsCudaDeviceCatalog(devices.AsReadOnly(),
             warnings.Count == 0 ? null : string.Join(" ", warnings.Distinct(StringComparer.Ordinal)))
         {
@@ -253,9 +320,16 @@ internal static class CudaToolkitFourier
 
     internal static void Transform(Complex[][] frames, bool inverse, int deviceId, string libraryPath)
     {
-        if (frames.Length == 0) return;
+        if (frames.Length == 0)
+        {
+            return;
+        }
+
         if (Environment.GetEnvironmentVariable("DEMUS_CUDA_DISABLE") == "1")
+        {
             throw new InvalidOperationException("CUDA disabled by DEMUS_CUDA_DISABLE.");
+        }
+
         IntPtr driver = NativeLibrary.Load("nvcuda.dll");
         IntPtr library = IntPtr.Zero;
         IntPtr context = IntPtr.Zero;
@@ -270,12 +344,15 @@ internal static class CudaToolkitFourier
             int length = frames[0].Length;
             var packed = new float[checked(frames.Length * length * 2)];
             for (int t = 0; t < frames.Length; t++)
+            {
                 for (int j = 0; j < length; j++)
                 {
                     int i = 2 * (t * length + j);
                     packed[i] = (float)frames[t][j].Real;
                     packed[i + 1] = (float)frames[t][j].Imaginary;
                 }
+            }
+
             nuint bytes = (nuint)(packed.LongLength * sizeof(float));
             Check(Function<Allocate>(driver, "cuMemAlloc_v2")(out memory, bytes), "cuMemAlloc");
             Check(Function<CopyToDevice>(driver, "cuMemcpyHtoD_v2")(memory, packed, bytes), "cuMemcpyHtoD");
@@ -284,18 +361,36 @@ internal static class CudaToolkitFourier
             Check(Function<CopyToHost>(driver, "cuMemcpyDtoH_v2")(packed, memory, bytes), "cuMemcpyDtoH");
             double scale = inverse ? 1.0 / length : 1;
             for (int t = 0; t < frames.Length; t++)
+            {
                 for (int j = 0; j < length; j++)
                 {
                     int i = 2 * (t * length + j);
                     frames[t][j] = new Complex(packed[i] * scale, packed[i + 1] * scale);
                 }
+            }
         }
         finally
         {
-            if (plan != 0) Function<DestroyPlan>(library, "cufftDestroy")(plan);
-            if (memory != 0) Function<Free>(driver, "cuMemFree_v2")(memory);
-            if (context != IntPtr.Zero) Function<ContextDestroy>(driver, "cuCtxDestroy_v2")(context);
-            if (library != IntPtr.Zero) NativeLibrary.Free(library);
+            if (plan != 0)
+            {
+                Function<DestroyPlan>(library, "cufftDestroy")(plan);
+            }
+
+            if (memory != 0)
+            {
+                Function<Free>(driver, "cuMemFree_v2")(memory);
+            }
+
+            if (context != IntPtr.Zero)
+            {
+                Function<ContextDestroy>(driver, "cuCtxDestroy_v2")(context);
+            }
+
+            if (library != IntPtr.Zero)
+            {
+                NativeLibrary.Free(library);
+            }
+
             NativeLibrary.Free(driver);
         }
     }
@@ -322,7 +417,9 @@ internal static class CudaToolkitFourier
         {
             string name = Path.GetFileName(Path.TrimEndingDirectorySeparator(current));
             if (name.StartsWith('v') && Version.TryParse(name[1..], out Version? version))
+            {
                 return version;
+            }
         }
         return new Version(0, 0);
     }

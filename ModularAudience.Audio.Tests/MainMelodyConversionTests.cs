@@ -77,7 +77,10 @@ public sealed class MainMelodyConversionTests
         {
             Assert.AreEqual(i * 0.5, MidiConversionTests.Seconds(midi, notes[i].StartTick), 0.08);
             Assert.IsTrue(MidiConversionTests.Seconds(midi, notes[i].DurationTicks) > 0.35);
-            if (i > 0) Assert.IsTrue(notes[i - 1].StartTick + notes[i - 1].DurationTicks <= notes[i].StartTick);
+            if (i > 0)
+            {
+                Assert.IsTrue(notes[i - 1].StartTick + notes[i - 1].DurationTicks <= notes[i].StartTick);
+            }
         }
     }
 }

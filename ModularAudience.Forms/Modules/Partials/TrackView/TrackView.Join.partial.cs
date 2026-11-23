@@ -13,12 +13,19 @@ public partial class TrackView
         this.Controls.Add(this.checkBox_join);
         this.checkBox_join.CheckedChanged += (_, _) =>
         {
-            if (this.suppressJoin) return;
+            if (this.suppressJoin)
+            {
+                return;
+            }
+
             if (this.checkBox_join.Checked)
             {
                 var mix = MixTrackView.OpenMixes.LastOrDefault() ?? new MixTrackView(); mix.Join(this);
             }
-            else this.LeaveCurrentMix();
+            else
+            {
+                this.LeaveCurrentMix();
+            }
         };
         var menu = new ContextMenuStrip(); this.checkBox_join.ContextMenuStrip = menu;
         menu.Opening += (_, _) =>
@@ -38,13 +45,20 @@ public partial class TrackView
     internal void SetJoinedMix(MixTrackView? mix)
     {
         JoinedMix = mix; suppressJoin = true;
-        if (checkBox_join != null) checkBox_join.Checked = mix != null;
+        if (checkBox_join != null)
+        {
+            checkBox_join.Checked = mix != null;
+        }
+
         suppressJoin = false;
     }
     internal void LeaveCurrentMix()
     {
         var mix = JoinedMix; if (mix == null || mix.IsDisposed) { SetJoinedMix(null); return; }
         mix.Detach(this); SetJoinedMix(null);
-        if (!IsDisposed && !Disposing) Show();
+        if (!IsDisposed && !Disposing)
+        {
+            Show();
+        }
     }
 }

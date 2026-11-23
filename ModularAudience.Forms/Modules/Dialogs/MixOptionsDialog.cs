@@ -76,14 +76,21 @@ Check("Auto-adjust track height", state.Visual.AutoTrackHeight, v => state.Visua
             }
             catch (FormatException error) { row.ErrorText = error.Message; }
         }
-        colors.CellEndEdit += (_, e) => { if (!initializing && e.RowIndex >= 0) Store(colors.Rows[e.RowIndex]); };
+        colors.CellEndEdit += (_, e) => { if (!initializing && e.RowIndex >= 0) { Store(colors.Rows[e.RowIndex]); } };
         colors.CellClick += async (_, e) =>
         {
-            if (e.RowIndex < 0 || e.ColumnIndex != 2) return;
+            if (e.RowIndex < 0 || e.ColumnIndex != 2)
+            {
+                return;
+            }
+
             var row = colors.Rows[e.RowIndex];
             Color initial = ThemeFiles.ParseColor((string)typeof(MixVisualOptions).GetProperty(row.Cells[0].Value!.ToString()!)!.GetValue(state.Visual)!);
             Color? chosen;
-            if (pickColor is not null) chosen = await pickColor(initial);
+            if (pickColor is not null)
+            {
+                chosen = await pickColor(initial);
+            }
             else { using var dialog = new ColorDialog { FullOpen = true, Color = initial }; chosen = dialog.ShowDialog(this) == DialogResult.OK ? dialog.Color : null; }
             if (chosen is Color color) { row.Cells[1].Value = ThemeFiles.FormatColor(color); Store(row); }
         };
@@ -91,9 +98,13 @@ Check("Auto-adjust track height", state.Visual.AutoTrackHeight, v => state.Visua
         var buttons = new FlowLayoutPanel { AutoSize = true, Dock = DockStyle.Fill, FlowDirection = FlowDirection.RightToLeft };
         var cancel = new Button { Text = "Cancel", DialogResult = DialogResult.Cancel, AutoSize = true };
         var ok = new Button { Text = "Apply", AutoSize = true };
-        ok.Click += (_, _) => { colors.EndEdit(); if (colors.Rows.Cast<DataGridViewRow>().Any(r => r.ErrorText.Length > 0)) return; DialogResult = DialogResult.OK; Close(); };
+        ok.Click += (_, _) => { colors.EndEdit(); if (colors.Rows.Cast<DataGridViewRow>().Any(r => r.ErrorText.Length > 0)) { return; } DialogResult = DialogResult.OK; Close(); };
         buttons.Controls.Add(cancel); buttons.Controls.Add(ok); AcceptButton = ok; CancelButton = cancel;
         root.Controls.Add(fields, 0, 0); root.Controls.Add(colors, 0, 1); root.Controls.Add(buttons, 0, 2); Controls.Add(root);
     }
-    private void ApplyPreview() { if (!initializing) preview(state); }
+    private void ApplyPreview() { if (!initializing)
+        {
+            preview(state);
+        }
+    }
 }

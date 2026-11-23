@@ -423,7 +423,7 @@ public sealed class MixEffectUiTests
     private static string[] MenuNames(ToolStripMenuItem root) => root.DropDownItems.OfType<ToolStripMenuItem>()
         .SelectMany(group => new[] { group.Text ?? "" }.Concat(group.DropDownItems.OfType<ToolStripMenuItem>().Select(item => item.Text ?? ""))).ToArray();
     private static IEnumerable<Control> Descendants(Control parent)
-    { foreach (Control child in parent.Controls) { yield return child; foreach (Control descendant in Descendants(child)) yield return descendant; } }
+    { foreach (Control child in parent.Controls) { yield return child; foreach (Control descendant in Descendants(child)) { yield return descendant; } } }
     private static object? Get(MixTrackView mix, string field) => typeof(MixTrackView).GetField(field, Flags)!.GetValue(mix);
     private static void Set(MixTrackView mix, string field, object value) => typeof(MixTrackView).GetField(field, Flags)!.SetValue(mix, value);
     private static object? Call(MixTrackView mix, string method, params object[] args) => typeof(MixTrackView).GetMethod(method, Flags)!.Invoke(mix, args);

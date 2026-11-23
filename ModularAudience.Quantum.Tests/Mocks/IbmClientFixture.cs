@@ -28,7 +28,11 @@ internal sealed class IbmClientFixture : IDisposable
             options.JobTimeout = TimeSpan.FromSeconds(10);
             configure?.Invoke(options);
         });
-        if (clock is not null) services.AddSingleton(clock);
+        if (clock is not null)
+        {
+            services.AddSingleton(clock);
+        }
+
         services.AddHttpClient(IbmQuantumClient.HttpClientName).ConfigurePrimaryHttpMessageHandler(() => this.Handler);
         services.AddHttpClient(IbmQuantumClient.IamHttpClientName).ConfigurePrimaryHttpMessageHandler(() => this.Handler);
         this.provider = services.BuildServiceProvider();

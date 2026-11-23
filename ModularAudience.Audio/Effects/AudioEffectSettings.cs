@@ -42,7 +42,11 @@ public sealed record AudioEffectSettings
     public AudioEffectSettings With(params (string Key, double Value)[] changes)
     {
         AudioEffectSettings copy = this.Copy();
-        foreach (var (key, value) in changes) copy.Parameters[key] = value;
+        foreach (var (key, value) in changes)
+        {
+            copy.Parameters[key] = value;
+        }
+
         copy.Validate();
         return copy;
     }
@@ -50,22 +54,39 @@ public sealed record AudioEffectSettings
     public void Validate()
     {
         AudioEffectDefinition definition = AudioEffectCatalog.Get(this.Effect);
-        if (this.Effect == AudioEffectKind.AutoTune) throw new ArgumentException("Auto Tune uses its own typed settings.");
+        if (this.Effect == AudioEffectKind.AutoTune)
+        {
+            throw new ArgumentException("Auto Tune uses its own typed settings.");
+        }
+
         if (this.Parameters is null || this.Parameters.Count != definition.Parameters.Count)
+        {
             throw new ArgumentException("The preset does not contain the complete parameter set for this effect.");
+        }
+
         foreach (EffectParameter parameter in definition.Parameters)
         {
             if (!this.Parameters.TryGetValue(parameter.Key, out double value) || !double.IsFinite(value) ||
                 value < parameter.Minimum || value > parameter.Maximum || (parameter.Integral && value != Math.Truncate(value)))
+            {
                 throw new ArgumentOutOfRangeException(parameter.Key, $"{parameter.Label}: expected {parameter.Minimum}–{parameter.Maximum}.");
+            }
         }
         if (this.Effect == AudioEffectKind.Phaser && this["MinimumHz"] >= this["MaximumHz"])
+        {
             throw new ArgumentException("The phaser's maximum frequency must be above its minimum frequency.");
+        }
+
         this.Automation?.Validate(EffectCurveTargets.ForEffect(this.Effect), key => EffectCurveTargets.BaseValue(this, key));
         if (this.Effect == AudioEffectKind.HumRemoval && this.Automation?.Parameters.TryGetValue("FrequencyHz", out var frequency) == true && frequency.Enabled && this.Choice("Mains") != 2)
+        {
             throw new ArgumentException("Select Custom mains frequency to automate the hum-removal fundamental.");
+        }
+
         if (this.Effect == AudioEffectKind.NoiseReduction && this.Automation?.Parameters.TryGetValue("NoiseFloorDb", out var floor) == true && floor.Enabled && this.Choice("Profile") != 2)
+        {
             throw new ArgumentException("Select Fixed spectral floor to automate the noise-floor level.");
+        }
     }
 
     public bool SoundEquals(AudioEffectSettings? other) => other is not null && this.Effect == other.Effect &&
@@ -108,7 +129,11 @@ public sealed class AudioEffectDefinition
         // Do not call the catalog while its static initializer is building the definitions.
         foreach (var (key, value) in changes)
         {
-            if (!settings.Parameters.ContainsKey(key)) throw new ArgumentException("Unknown factory-preset parameter: " + key);
+            if (!settings.Parameters.ContainsKey(key))
+            {
+                throw new ArgumentException("Unknown factory-preset parameter: " + key);
+            }
+
             settings.Parameters[key] = value;
         }
         return settings;

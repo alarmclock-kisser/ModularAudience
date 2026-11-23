@@ -20,7 +20,11 @@ public static class InstrumentSampleSynth
         double peak = 0;
         for (int i = 0; i < frames; i++)
         {
-            if ((i & 1023) == 0) token.ThrowIfCancellationRequested();
+            if ((i & 1023) == 0)
+            {
+                token.ThrowIfCancellationRequested();
+            }
+
             double t = i / (double)rate;
             double noise = random.NextDouble() * 2 - 1;
             double highNoise = noise - lastNoise; lastNoise = noise;
@@ -47,7 +51,10 @@ public static class InstrumentSampleSynth
                     for (int tap = 0; tap < roomDelays.Length; tap++)
                     {
                         int delay = (int)(rate * (roomDelays[tap] + c * 0.0017));
-                        if (i >= delay) value += data[(i - delay) * channels + c] * s.RoomPercent / 100 * (0.16 - tap * 0.025);
+                        if (i >= delay)
+                        {
+                            value += data[(i - delay) * channels + c] * s.RoomPercent / 100 * (0.16 - tap * 0.025);
+                        }
                     }
                 }
                 double tailFade = Math.Min(1, (frames - i) / Math.Max(1d, rate * 0.01));
@@ -64,17 +71,27 @@ public static class InstrumentSampleSynth
         {
             double sum = 0; int count = 0;
             for (int i = c; i < data.Length; i += channels) { sum += data[i]; count++; }
-            if (count == 0) continue;
+            if (count == 0)
+            {
+                continue;
+            }
+
             float mean = (float)(sum / count);
-            for (int i = c; i < data.Length; i += channels) data[i] -= mean;
+            for (int i = c; i < data.Length; i += channels)
+            {
+                data[i] -= mean;
+            }
         }
         // Recompute peak after DC removal.
         peak = 0;
-        for (int i = 0; i < data.Length; i++) peak = Math.Max(peak, Math.Abs(data[i]));
+        for (int i = 0; i < data.Length; i++)
+        {
+            peak = Math.Max(peak, Math.Abs(data[i]));
+        }
         // Attenuate only: retain attack/sustain and character differences, never amplify near-silent tails.
         double level = s.GainPercent / 100 * (peak > 0.95 ? 0.95 / peak : 1);
         for (int i = 0; i < data.Length; i++)
-        { if ((i & 8191) == 0) token.ThrowIfCancellationRequested(); data[i] *= (float)level; }
+        { if ((i & 8191) == 0) { token.ThrowIfCancellationRequested(); } data[i] *= (float)level; }
         string note = NoteName(s.MidiNote);
         var result = new AudioObj
         {
@@ -100,7 +117,11 @@ public static class InstrumentSampleSynth
         double sustain = s.SustainPercent / 100;
         double decay = Math.Exp(-held / Math.Max(0.01, s.DecaySeconds));
         double envelope = t < attack ? t / Math.Max(0.00001, attack) : sustain + (1 - sustain) * decay;
-        if (t > s.GateSeconds) envelope *= Math.Exp(-6 * (t - s.GateSeconds) / s.ReleaseSeconds);
+        if (t > s.GateSeconds)
+        {
+            envelope *= Math.Exp(-6 * (t - s.GateSeconds) / s.ReleaseSeconds);
+        }
+
         return envelope;
     }
 
@@ -139,16 +160,38 @@ public static class InstrumentSampleSynth
                 if (s.Family == SynthFamily.Woodwinds)
                 {
                     weight *= 0.6 + Math.Exp(-Math.Pow((h * f - (300 + s.Body * 14)) / (400 + s.Body * 5), 2));
-                    if (name.Contains("Flute") || name == "Pan Pipes") weight *= h == 1 ? 1 : Math.Exp(-h * 0.75);
-                    if (name == "Clarinet") weight *= h % 2 == 0 ? 0.05 : 1.4;
-                    if (name == "Oboe") weight *= 0.3 + Math.Exp(-Math.Pow((h - 5) / 3d, 2)) * 2;
-                    if (name == "Bassoon") weight *= h % 2 == 0 ? 0.45 : 1.3;
-                    if (name == "Tenor Sax") weight *= 1 + 1.8 * Math.Exp(-Math.Pow((h - 4) / 2.5, 2));
+                    if (name.Contains("Flute") || name == "Pan Pipes")
+                    {
+                        weight *= h == 1 ? 1 : Math.Exp(-h * 0.75);
+                    }
+
+                    if (name == "Clarinet")
+                    {
+                        weight *= h % 2 == 0 ? 0.05 : 1.4;
+                    }
+
+                    if (name == "Oboe")
+                    {
+                        weight *= 0.3 + Math.Exp(-Math.Pow((h - 5) / 3d, 2)) * 2;
+                    }
+
+                    if (name == "Bassoon")
+                    {
+                        weight *= h % 2 == 0 ? 0.45 : 1.3;
+                    }
+
+                    if (name == "Tenor Sax")
+                    {
+                        weight *= 1 + 1.8 * Math.Exp(-Math.Pow((h - 4) / 2.5, 2));
+                    }
                 }
                 if (s.Family == SynthFamily.Brass)
                 {
                     weight *= Math.Exp(-Math.Pow((h * f - (350 + s.Brightness * 20 + s.Body * 10)) / (600 + s.Brightness * 15), 2)) + 0.15;
-                    if (name == "Muted Trumpet") weight *= h < 3 ? 0.1 : 1.6;
+                    if (name == "Muted Trumpet")
+                    {
+                        weight *= h < 3 ? 0.1 : 1.6;
+                    }
                 }
                 if (s.Family == SynthFamily.BowedStrings)
                 {
@@ -156,15 +199,37 @@ public static class InstrumentSampleSynth
                     weight *= formant * Math.Sin(Math.PI * h * (0.08 + s.StrikePosition / 500));
                 }
                 if (s.Family == SynthFamily.OrientalSounds && name == "Black Sea Kemençe")
+                {
                     weight *= 0.65 + 1.3 * Math.Exp(-Math.Pow((h - 5) / 2.6, 2));
+                }
+
                 if (s.Family == SynthFamily.Organ)
                 {
                     weight = h switch { 1 => 0.8, 2 => 0.65, 3 => 0.4, 4 => 0.35, 6 => 0.25, 8 => 0.18, 12 => 0.12, _ => 0 };
-                    if (name == "Flute Stops") weight *= h > 2 ? 0.05 : 1;
-                    if (name == "Reed Organ") weight *= h % 2 == 0 ? 0.2 : 1.5;
-                    if (name == "Cathedral Mixture") weight *= h >= 4 ? 2 : 0.7;
-                    if (name == "Rock Tonewheel") weight *= h >= 3 ? 1.8 : 1;
-                    if (name == "Church Principal") weight *= h > 4 ? 0.6 : 1;
+                    if (name == "Flute Stops")
+                    {
+                        weight *= h > 2 ? 0.05 : 1;
+                    }
+
+                    if (name == "Reed Organ")
+                    {
+                        weight *= h % 2 == 0 ? 0.2 : 1.5;
+                    }
+
+                    if (name == "Cathedral Mixture")
+                    {
+                        weight *= h >= 4 ? 2 : 0.7;
+                    }
+
+                    if (name == "Rock Tonewheel")
+                    {
+                        weight *= h >= 3 ? 1.8 : 1;
+                    }
+
+                    if (name == "Church Principal")
+                    {
+                        weight *= h > 4 ? 0.6 : 1;
+                    }
                 }
                 harmonicWeights[h] = h * f < s.SampleRate * 0.45 ? weight : 0;
             }
@@ -174,14 +239,21 @@ public static class InstrumentSampleSynth
         public double PitchMultiplier(double t)
         {
             if (s.Family == SynthFamily.OrientalSounds && name == "Oud")
+            {
                 return Math.Pow(2, -0.75 * Math.Exp(-t * 18) / 12);
+            }
+
             if (s.Family == SynthFamily.OtherSoundFx && name == "Synthetic Vocal Whoop")
             {
                 double rise = 4 * (1 - Math.Exp(-t * 10));
                 double fall = 3 * (1 - Math.Exp(-Math.Max(0, t - 0.22) * 8));
                 return Math.Pow(2, (rise - fall) / 12);
             }
-            if (s.Family != SynthFamily.SynthBassAndLead) return 1;
+            if (s.Family != SynthFamily.SynthBassAndLead)
+            {
+                return 1;
+            }
+
             return name switch
             {
                 "Acid 303 Slide" => Math.Pow(2, -2.5 * Math.Exp(-t * 20) / 12),
@@ -191,7 +263,11 @@ public static class InstrumentSampleSynth
         }
         public double ModulateCutoff(double cutoff, double t)
         {
-            if (s.Family != SynthFamily.SynthBassAndLead || name != "Wobble Bass") return cutoff;
+            if (s.Family != SynthFamily.SynthBassAndLead || name != "Wobble Bass")
+            {
+                return cutoff;
+            }
+
             double depth = s.FilterEnvelope / 100;
             double lfo = 0.5 + 0.5 * Math.Sin(2 * Math.PI * Math.Max(0.1, s.VibratoHz) * t);
             return cutoff * (1 - 0.85 * depth + 0.85 * depth * lfo);
@@ -210,7 +286,11 @@ public static class InstrumentSampleSynth
                     double modal = 0;
                     for (int h = 0; h < modalRatios.Length; h++)
                     {
-                        double ratio = modalRatios[h]; if (ratio * f > s.SampleRate * 0.46) continue;
+                        double ratio = modalRatios[h]; if (ratio * f > s.SampleRate * 0.46)
+                        {
+                            continue;
+                        }
+
                         double decay = Math.Exp(-t * (0.3 + h * (1.2 - brightness)) / Math.Max(0.1, s.DecaySeconds));
                         double detune = 1 + s.DetuneCents / 1200 * (h % 2 == 0 ? 0.4 : -0.3);
                         double modulation = Math.Pow(2, Math.Sin(2 * Math.PI * s.VibratoHz * t) * s.VibratoCents * (1 - Math.Exp(-t * 5)) / 1200);
@@ -241,7 +321,10 @@ public static class InstrumentSampleSynth
                     {
                         double breathAttack = s.Family == SynthFamily.Brass ? 1 - Math.Exp(-t * (10 + h * 2)) : 1;
                         sum += harmonicWeights[h] * Math.Sin(2 * Math.PI * phase * h) * breathAttack;
-                        if (s.DetuneCents > 0) sum += harmonicWeights[h] * Math.Sin(2 * Math.PI * secondPhase * h) * (name.Contains("Ensemble") || name.Contains("Section") ? 0.65 : 0.15);
+                        if (s.DetuneCents > 0)
+                        {
+                            sum += harmonicWeights[h] * Math.Sin(2 * Math.PI * secondPhase * h) * (name.Contains("Ensemble") || name.Contains("Section") ? 0.65 : 0.15);
+                        }
                     }
                     double transient = s.Family == SynthFamily.Organ ? Math.Sin(2 * Math.PI * f * 3 * t) * Math.Exp(-t * 12) * s.DrumSnap / 200 : 0;
                     double air = breath * s.Noise / 100 * (s.Family == SynthFamily.BowedStrings ? 0.35 + brightness * 0.3 : 0.3);
@@ -363,7 +446,11 @@ public static class InstrumentSampleSynth
             for (int index = 0; index < modalRatios.Length; index++)
             {
                 double hz = frequency * modalRatios[index];
-                if (hz >= s.SampleRate * 0.45) continue;
+                if (hz >= s.SampleRate * 0.45)
+                {
+                    continue;
+                }
+
                 modalPhases[index] = (modalPhases[index] + hz / s.SampleRate) % 1;
                 double decay = Math.Exp(-t * (4 + index * 1.3) / Math.Max(0.1, s.DecaySeconds));
                 ring += Math.Sin(2 * Math.PI * modalPhases[index]) * modalAmplitudes[index] * decay;
@@ -374,7 +461,10 @@ public static class InstrumentSampleSynth
         {
             double sum = 0;
             for (int h = 1; h < harmonicWeights.Length; h++)
+            {
                 sum += harmonicWeights[h] * Math.Sin(2 * Math.PI * phase * h);
+            }
+
             double rasp = (noise * 0.08 + highNoise * 0.55) * s.Noise / 100;
             return Math.Tanh(sum * 0.34 + rasp * 0.3) * 0.85;
         }
@@ -461,7 +551,11 @@ public static class InstrumentSampleSynth
         }
         private double MorseSos(double t, double pitchScale)
         {
-            if (t >= s.GateSeconds) return 0;
+            if (t >= s.GateSeconds)
+            {
+                return 0;
+            }
+
             int index = Math.Min(MorseSosPattern.Length - 1, (int)(t / s.GateSeconds * MorseSosPattern.Length));
             return MorseSosPattern[index] == 0 ? 0 : SquareTone(730 * pitchScale, t) * 0.62;
         }
@@ -512,7 +606,11 @@ public static class InstrumentSampleSynth
             for (int harmonic = 1; harmonic <= 18; harmonic++)
             {
                 double hz = fundamental * harmonic;
-                if (hz >= s.SampleRate * 0.45) break;
+                if (hz >= s.SampleRate * 0.45)
+                {
+                    break;
+                }
+
                 double first = Math.Exp(-Math.Pow((hz - firstFormant) / 220, 2));
                 double second = Math.Exp(-Math.Pow((hz - secondFormant) / 360, 2));
                 double weight = (0.06 + first * 0.9 + second * 0.62) / Math.Pow(harmonic, 0.65);
@@ -558,7 +656,11 @@ public static class InstrumentSampleSynth
                 double repeat = Math.Floor(t / interval);
                 double phase = (t - repeat * interval) / interval;
                 stutterGain = Math.Pow(1 - kit.Stutter * 0.45, repeat);
-                if (phase > 0.72) stutterGain *= 1 - kit.Stutter * 0.7;
+                if (phase > 0.72)
+                {
+                    stutterGain *= 1 - kit.Stutter * 0.7;
+                }
+
                 t -= repeat * interval;
             }
             double ratio = Math.Pow(2, s.PitchSemitones / 12), decay = Math.Max(0.01, s.DecaySeconds * kit.Decay);
@@ -569,7 +671,10 @@ public static class InstrumentSampleSynth
             for (int j = 0; j < MetalRatios.Length; j++)
             {
                 double hz = (1900 + s.Brightness * 45) * ratio * MetalRatios[j] * kit.Metal;
-                if (hz < s.SampleRate * 0.46) metal += Math.Sin(2 * Math.PI * hz * t) / MetalRatios.Length;
+                if (hz < s.SampleRate * 0.46)
+                {
+                    metal += Math.Sin(2 * Math.PI * hz * t) / MetalRatios.Length;
+                }
             }
             double value = s.Drum switch
             {
@@ -592,9 +697,21 @@ public static class InstrumentSampleSynth
                 SynthDrum.Cowbell => (Math.Sin(2 * Math.PI * 560 * ratio * kit.Tone * t) + Math.Sin(2 * Math.PI * 845 * ratio * kit.Tone * t) * 0.75) * Math.Exp(-t / (decay * 0.3)),
                 _ => highNoise * kit.Noise * Math.Exp(-t / (decay * 0.2)) * (0.6 + 0.4 * Math.Sin(t * 700))
             };
-            if (kit.Name == "Beach Wood") value = value * 0.7 + sine(450, 30, 40) * Math.Exp(-t * 50) * s.Body / 150;
-            if (kit.Name == "Tribal Earth") value += sine(120, 25, 20) * Math.Exp(-t / (decay * 0.5)) * s.Body / 200;
-            if (kit.Name == "Electro Glass") value += metal * Math.Exp(-t / (decay * 0.4)) * 0.25;
+            if (kit.Name == "Beach Wood")
+            {
+                value = value * 0.7 + sine(450, 30, 40) * Math.Exp(-t * 50) * s.Body / 150;
+            }
+
+            if (kit.Name == "Tribal Earth")
+            {
+                value += sine(120, 25, 20) * Math.Exp(-t / (decay * 0.5)) * s.Body / 200;
+            }
+
+            if (kit.Name == "Electro Glass")
+            {
+                value += metal * Math.Exp(-t / (decay * 0.4)) * 0.25;
+            }
+
             if (kit.Name == "Lo-Fi Dust") { value = Math.Round(value * 48) / 48; value += noise * 0.015 * Math.Exp(-t / decay); }
             if (kit.BitCrush > 0)
             {
@@ -609,6 +726,7 @@ public static class InstrumentSampleSynth
         private static (double[], double[]) ModalProfile(InstrumentSynthSettings s, string name)
         {
             if (s.Family == SynthFamily.MalletsAndBells)
+            {
                 return name switch
                 {
                     "Marimba" => ([1, 3.99, 10.1, 18.3], [1, 0.3, 0.12, 0.04]),
@@ -618,6 +736,8 @@ public static class InstrumentSampleSynth
                     "Tubular Bells" => ([1, 1.414, 2.01, 2.756, 4.07, 5.43], [0.8, 0.5, 0.6, 0.4, 0.2, 0.12]),
                     _ => ([1, 2, 2.98, 4.1, 5.8], [1, 0.6, 0.35, 0.2, 0.1])
                 };
+            }
+
             double inharmonicity = name == "Toy Piano" ? 0.012 : 0.00004 + (100 - s.Body) * 0.000005;
             var ratios = Enumerable.Range(1, 12).Select(h => h * Math.Sqrt(1 + inharmonicity * h * h)).ToArray();
             var amplitudes = Enumerable.Range(1, 12).Select(h => Math.Exp(-(h - 1) / (1.5 + s.Brightness / 12)) / h).ToArray();

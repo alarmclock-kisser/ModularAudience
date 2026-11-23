@@ -12,10 +12,18 @@ internal static class VocalRussian
             cancellationToken.ThrowIfCancellationRequested();
             char c = word[i];
             char next = i + 1 < word.Length ? word[i + 1] : '\0';
-            if (c == '\'') continue;
+            if (c == '\'')
+            {
+                continue;
+            }
+
             if (c == '\u0301')
             {
-                if (vowels.Count == 0) throw VocalMultilingualPhonemizer.Unsupported(word, VocalLanguage.Russian);
+                if (vowels.Count == 0)
+                {
+                    throw VocalMultilingualPhonemizer.Unsupported(word, VocalLanguage.Russian);
+                }
+
                 explicitStress = vowels[^1].Index;
                 continue;
             }
@@ -26,14 +34,21 @@ internal static class VocalRussian
             if (c is 'э' or 'e' or 'é')
             {
                 if (c is 'e' or 'é' && (i == 0 || word[i - 1] != 'y' && word[i - 1] != c))
+                {
                     result.Add(new("y"));
+                }
+
                 AddVowel(result, vowels, "e", c, ref explicitStress, c == 'é');
                 continue;
             }
             if (c is 'и' or 'i' or 'í') { AddVowel(result, vowels, "ee", c, ref explicitStress, c == 'í'); continue; }
             if (c is 'е' or 'ё' or 'ю' or 'я')
             {
-                if (i == 0 || word[i - 1] != c) result.Add(new("y"));
+                if (i == 0 || word[i - 1] != c)
+                {
+                    result.Add(new("y"));
+                }
+
                 string vowel = c switch { 'ё' => "o", 'ю' => "oo", 'я' => "a", _ => "e" };
                 AddVowel(result, vowels, vowel, c, ref explicitStress, c == 'ё');
                 continue;
@@ -81,10 +96,13 @@ internal static class VocalRussian
             if (sound == "long-sh") { result.Add(new("sh")); result.Add(new("sh")); continue; }
             if (sound == "ks") { result.Add(new("k")); result.Add(new("s")); continue; }
             if (i == word.Length - 1 && c is >= 'а' and <= 'я')
+            {
                 sound = sound switch
                 {
                     "b" => "p", "v" => "f", "g" => "k", "d" => "t", "z" => "s", "zh" => "sh", _ => sound,
                 };
+            }
+
             result.Add(new(sound));
         }
 
@@ -102,16 +120,27 @@ internal static class VocalRussian
                 while (end < vowels.Count && vowels[end].Letter == vowels[first].Letter
                     && vowels[end].Index == vowels[end - 1].Index + 1)
                 {
-                    if ((end & 255) == 0) cancellationToken.ThrowIfCancellationRequested();
+                    if ((end & 255) == 0)
+                    {
+                        cancellationToken.ThrowIfCancellationRequested();
+                    }
+
                     stressed |= vowels[end].Index == stress;
                     end++;
                 }
                 if (vowels[first].Letter == 'о' && !stressed)
+                {
                     for (int j = first; j < end; j++)
                     {
-                        if ((j & 255) == 0) cancellationToken.ThrowIfCancellationRequested();
+                        if ((j & 255) == 0)
+                        {
+                            cancellationToken.ThrowIfCancellationRequested();
+                        }
+
                         result[vowels[j].Index] = result[vowels[j].Index] with { Symbol = "ah" };
                     }
+                }
+
                 first = end;
             }
         }
@@ -122,7 +151,11 @@ internal static class VocalRussian
         List<VocalPronunciationPhone> result, List<(int Index, char Letter)> vowels,
         string sound, char letter, ref int stress, bool stressed)
     {
-        if (stressed) stress = result.Count;
+        if (stressed)
+        {
+            stress = result.Count;
+        }
+
         vowels.Add((result.Count, letter));
         result.Add(new(sound));
     }

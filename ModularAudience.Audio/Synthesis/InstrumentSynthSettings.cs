@@ -246,7 +246,10 @@ public sealed class InstrumentSynthSettings
         {
             string name = $"{NoteBeats.ToString("0.###", CultureInfo.InvariantCulture)} beats";
             foreach (var duration in KeyDurations)
+            {
                 if (Math.Abs(duration.Beats - NoteBeats) < 1e-9) { name = duration.Name; break; }
+            }
+
             return DurationMultiplier switch { > 1.25 => name + " Dotted", < 0.8 => name + " Triplet", _ => name };
         }
     }
@@ -295,10 +298,25 @@ public sealed class InstrumentSynthSettings
         if (Family == SynthFamily.SynthPadsAndPoly)
         {
             SustainPercent = 85;
-            if (voice.Name == "Hoover Rave Lead") SustainPercent = 65;
-            if (voice.Name == "Dark Drone Pad") CutoffHz = 2400;
-            if (voice.Name == "Warm Analog Pad") CutoffHz = 6500;
-            if (voice.Name is "Supersaw Stack" or "Wide Unison Saw") CutoffHz = 12000;
+            if (voice.Name == "Hoover Rave Lead")
+            {
+                SustainPercent = 65;
+            }
+
+            if (voice.Name == "Dark Drone Pad")
+            {
+                CutoffHz = 2400;
+            }
+
+            if (voice.Name == "Warm Analog Pad")
+            {
+                CutoffHz = 6500;
+            }
+
+            if (voice.Name is "Supersaw Stack" or "Wide Unison Saw")
+            {
+                CutoffHz = 12000;
+            }
         }
         if (Family == SynthFamily.SynthKeysAndPlucks)
         {
@@ -378,7 +396,10 @@ public sealed class InstrumentSynthSettings
         if (!Enum.IsDefined(Family) || !Enum.IsDefined(Drum) || VoiceIndex < 0 || VoiceIndex >= InstrumentSynthCatalog.Voices(Family).Count
             || KitIndex < 0 || KitIndex >= InstrumentSynthCatalog.DrumKits.Count || MidiNote is < 0 or > 127
             || SampleRate is not (22050 or 44100 or 48000 or 96000) || Channels is < 1 or > 2 || Seed < 0)
+        {
             throw new ArgumentException("Invalid instrument, sample format or note.");
+        }
+
         double[] all = [PitchSemitones, Bpm, NoteBeats, DurationMultiplier, AttackMs, DecaySeconds, SustainPercent, ReleaseSeconds, Brightness, Body,
             Noise, Drive, DetuneCents, VibratoCents, VibratoHz, CutoffHz, Resonance, FilterEnvelope, StrikePosition, DrumSweep, DrumSnap, RoomPercent, StereoWidth, GainPercent];
         if (all.Any(v => !double.IsFinite(v)) || Math.Abs(PitchSemitones) > 64 || Bpm is < 10 or > 400 || NoteBeats is < 0.0001 or > 256
@@ -387,6 +408,8 @@ public sealed class InstrumentSynthSettings
             || DetuneCents is < 0 or > 50 || VibratoCents is < 0 or > 100 || VibratoHz is < 0 or > 20 || CutoffHz is < 20 or > 24000 || Resonance is < 0.1 or > 12
             || FilterEnvelope is < 0 or > 100 || StrikePosition is < 1 or > 99 || DrumSweep is < 0 or > 100 || DrumSnap is < 0 or > 100
             || RoomPercent is < 0 or > 100 || StereoWidth is < 0 or > 100 || GainPercent is < 0 or > 100)
+        {
             throw new ArgumentException("Synthesizer parameters are outside their supported ranges.");
+        }
     }
 }

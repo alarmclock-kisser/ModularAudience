@@ -6,7 +6,11 @@ namespace ModularAudience.Audio.Processors_V4
             int windowSize, CancellationToken token)
         {
             double energy = spectrum.Sum();
-            if (energy <= 0) return (0, 0);
+            if (energy <= 0)
+            {
+                return (0, 0);
+            }
+
             int[] peaks = FindPeaks(spectrum, token);
             double resolution = (double)sampleRate / windowSize;
             double maximum = spectrum.Max();
@@ -19,9 +23,17 @@ namespace ModularAudience.Audio.Processors_V4
                 for (int divisor = 1; divisor <= 6; divisor++)
                 {
                     double candidate = measured / divisor;
-                    if (candidate < Math.Max(25, 1.5 * resolution) || candidate > Math.Min(3000, sampleRate / 4.0)) continue;
+                    if (candidate < Math.Max(25, 1.5 * resolution) || candidate > Math.Min(3000, sampleRate / 4.0))
+                    {
+                        continue;
+                    }
+
                     double score = TemplateScore(spectrum, candidate / resolution, energy, maximum);
-                    if (score <= best) continue;
+                    if (score <= best)
+                    {
+                        continue;
+                    }
+
                     best = score;
                     frequency = candidate;
                 }
@@ -35,7 +47,11 @@ namespace ModularAudience.Audio.Processors_V4
             double threshold = spectrum.Max() * 0.01;
             for (int bin = 1; bin < spectrum.Length - 1; bin++)
             {
-                if ((bin & 255) == 0) token.ThrowIfCancellationRequested();
+                if ((bin & 255) == 0)
+                {
+                    token.ThrowIfCancellationRequested();
+                }
+
                 if (spectrum[bin] >= threshold && spectrum[bin] > spectrum[bin - 1] && spectrum[bin] >= spectrum[bin + 1])
                 {
                     peaks.Add(bin);
@@ -63,12 +79,23 @@ namespace ModularAudience.Audio.Processors_V4
             for (int harmonic = 1; harmonic <= 8; harmonic++)
             {
                 int center = (int)Math.Round(fundamentalBin * harmonic);
-                if (center >= spectrum.Length - 1) break;
+                if (center >= spectrum.Length - 1)
+                {
+                    break;
+                }
+
                 double local = 0;
-                for (int bin = Math.Max(lastBin + 1, center - 1); bin <= center + 1; bin++) local += spectrum[bin];
+                for (int bin = Math.Max(lastBin + 1, center - 1); bin <= center + 1; bin++)
+                {
+                    local += spectrum[bin];
+                }
+
                 lastBin = center + 1;
                 captured += local / Math.Sqrt(harmonic);
-                if (harmonic == 1) fundamental = Math.Min(1, local / Math.Max(maximum, 1e-300));
+                if (harmonic == 1)
+                {
+                    fundamental = Math.Min(1, local / Math.Max(maximum, 1e-300));
+                }
             }
             return Math.Clamp(captured / energy * (0.5 + 0.5 * fundamental), 0, 1);
         }

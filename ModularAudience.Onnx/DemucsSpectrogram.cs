@@ -15,7 +15,11 @@ public static class DemucsSpectrogram
 
     public static DenseTensor<float> Forward(float[] planar, int length, DemucsFourier? fourier = null, CancellationToken token = default)
     {
-        if (length < 2 || planar.Length != 2 * length) throw new ArgumentException("Expected planar stereo audio.");
+        if (length < 2 || planar.Length != 2 * length)
+        {
+            throw new ArgumentException("Expected planar stereo audio.");
+        }
+
         int frames = (length + Hop - 1) / Hop;
         var result = new DenseTensor<float>([1, 4, FftSize / 2, frames]);
         fourier ??= new();
@@ -30,7 +34,11 @@ public static class DemucsSpectrogram
                     int sampleIndex = t * Hop + j - Pad;
                     int period = 2 * (length - 1);
                     sampleIndex = ((sampleIndex % period) + period) % period;
-                    if (sampleIndex >= length) sampleIndex = period - sampleIndex;
+                    if (sampleIndex >= length)
+                    {
+                        sampleIndex = period - sampleIndex;
+                    }
+
                     fft[j] = new Complex(planar[ch * length + sampleIndex] * Window[j], 0);
                 }
             });
@@ -54,7 +62,10 @@ public static class DemucsSpectrogram
         if (spectrum.Dimensions.Length != 5 || spectrum.Dimensions[0] != 1
             || spectrum.Dimensions[2] != 4 || spectrum.Dimensions[3] != FftSize / 2
             || spectrum.Dimensions[4] != frames || stem < 0 || stem >= spectrum.Dimensions[1])
+        {
             throw new NotSupportedException("Expected HTDemucs spectrum [1, stems, 4, 2048, frames].");
+        }
+
         var result = new float[2 * length];
         var weights = new double[length];
         fourier ??= new();
@@ -62,11 +73,17 @@ public static class DemucsSpectrogram
         var parallel = new ParallelOptions { MaxDegreeOfParallelism = fourier.Workers, CancellationToken = token };
         // The two zero frames restored at each end still contribute to ISTFT's window denominator.
         for (int t = -2; t < frames + 2; t++)
+        {
             for (int j = 0; j < FftSize; j++)
             {
                 int index = t * Hop + j - Pad;
-                if ((uint)index < (uint)length) weights[index] += Window[j] * Window[j];
+                if ((uint)index < (uint)length)
+                {
+                    weights[index] += Window[j] * Window[j];
+                }
             }
+        }
+
         Parallel.For(0, 2 * frames, parallel, index =>
             {
                 int ch = index / frames, t = index % frames;
@@ -75,7 +92,10 @@ public static class DemucsSpectrogram
                 for (int f = 0; f < FftSize / 2; f++)
                 {
                     fft[f] = new Complex(spectrum[0, stem, 2 * ch, f, t], spectrum[0, stem, 2 * ch + 1, f, t]);
-                    if (f > 0) fft[FftSize - f] = Complex.Conjugate(fft[f]);
+                    if (f > 0)
+                    {
+                        fft[FftSize - f] = Complex.Conjugate(fft[f]);
+                    }
                 }
             });
         fourier.Transform(spectra, true, token);
@@ -86,13 +106,19 @@ public static class DemucsSpectrogram
             Parallel.For(0, 2 * frames, parallel, index =>
             {
                 int ch = index / frames, t = index % frames;
-                if (t % 4 != activePhase) return;
+                if (t % 4 != activePhase)
+                {
+                    return;
+                }
+
                 var fft = spectra[index];
                 for (int j = 0; j < FftSize; j++)
                 {
                     int sampleIndex = t * Hop + j - Pad;
                     if ((uint)sampleIndex < (uint)length)
+                    {
                         result[2 * sampleIndex + ch] += (float)(fft[j].Real * 64 * Window[j] / weights[sampleIndex]);
+                    }
                 }
             });
         }

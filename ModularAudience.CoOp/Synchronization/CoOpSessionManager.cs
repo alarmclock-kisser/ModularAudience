@@ -151,11 +151,17 @@ public sealed class CoOpSessionManager : IAsyncDisposable
     public void SetSessionPassword(string? password)
     {
         if (!string.IsNullOrEmpty(password) && !CoOpSecurity.IsValidSessionPassword(password))
+        {
             throw new ArgumentException(
                 "A session password must be 8–128 characters. Leave it empty to host or connect without a password on the local network.",
                 nameof(password));
+        }
+
         if (this.IsSessionActive)
+        {
             throw new InvalidOperationException("The session password cannot be changed while a co-op session is active.");
+        }
+
         this.sessionPassword = password ?? string.Empty;
     }
 
@@ -170,8 +176,10 @@ public sealed class CoOpSessionManager : IAsyncDisposable
             }
             bool isLanOnly = string.IsNullOrEmpty(this.sessionPassword);
             if (!isLanOnly && !CoOpSecurity.IsValidSessionPassword(this.sessionPassword))
+            {
                 throw new InvalidOperationException(
                     "A session password must be 8–128 characters. Clear it to host without a password on the local network.");
+            }
 
             this.ClearSessionState();
 
@@ -239,8 +247,10 @@ public sealed class CoOpSessionManager : IAsyncDisposable
         }
         bool hasSessionPassword = !string.IsNullOrEmpty(this.sessionPassword);
         if (hasSessionPassword && !CoOpSecurity.IsValidSessionPassword(this.sessionPassword))
+        {
             throw new InvalidOperationException(
                 "A session password must be 8–128 characters. Clear it only to connect to a passwordless host on the local network.");
+        }
 
         await this.RunExclusiveAsync(() =>
         {
@@ -284,7 +294,10 @@ public sealed class CoOpSessionManager : IAsyncDisposable
             if (challenge.RequiresPassword)
             {
                 if (!CoOpSecurity.IsValidSessionPassword(this.sessionPassword))
+                {
                     throw new CoOpProtocolException("This host requires a session password of 8–128 characters.");
+                }
+
                 passwordProof = CoOpSecurity.CreatePasswordProof(
                     this.sessionPassword!,
                     challenge,
@@ -293,9 +306,15 @@ public sealed class CoOpSessionManager : IAsyncDisposable
             else
             {
                 if (!challenge.IsLanOnly)
+                {
                     throw new CoOpProtocolException("The host does not require a password but is not restricted to the local network.");
+                }
+
                 if (hasSessionPassword)
+                {
                     throw new CoOpProtocolException("This host does not use a session password. Clear the password field and reconnect.");
+                }
+
                 if (this.options.ConfirmPasswordlessSession == null
                     || !this.options.ConfirmPasswordlessSession(host, port))
                 {
@@ -705,7 +724,10 @@ public sealed class CoOpSessionManager : IAsyncDisposable
     {
         AuthChallengeMessage? challenge = peer.AuthChallenge;
         if (challenge == null)
+        {
             return;
+        }
+
         try
         {
             await peer.Connection.SendAsync(challenge);

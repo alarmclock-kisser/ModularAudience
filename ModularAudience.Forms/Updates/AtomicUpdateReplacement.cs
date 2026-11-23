@@ -11,7 +11,10 @@ internal static class AtomicUpdateReplacement
     internal static void ValidatePaths(string targetPath, string stagedPath)
     {
         if (!Path.IsPathFullyQualified(targetPath) || !Path.IsPathFullyQualified(stagedPath))
+        {
             throw new InvalidDataException("Update paths must be absolute.");
+        }
+
         string target = Path.GetFullPath(targetPath);
         string staged = Path.GetFullPath(stagedPath);
         string prefix = target + ".update-";
@@ -19,7 +22,9 @@ internal static class AtomicUpdateReplacement
             !staged.StartsWith(prefix, StringComparison.OrdinalIgnoreCase) ||
             !staged.EndsWith(".tmp", StringComparison.OrdinalIgnoreCase) ||
             !Guid.TryParseExact(staged[prefix.Length..^4], "N", out _))
+        {
             throw new InvalidDataException("The update staging path does not match the executable.");
+        }
     }
 
     internal static string? Apply(string targetPath, string stagedPath, string originalHash, string updateHash)
@@ -34,21 +39,33 @@ internal static class AtomicUpdateReplacement
         {
             try { acquired = mutex.WaitOne(TimeSpan.FromSeconds(30)); }
             catch (AbandonedMutexException) { acquired = true; }
-            if (!acquired) throw new IOException("Another update is already installing this executable.");
+            if (!acquired)
+            {
+                throw new IOException("Another update is already installing this executable.");
+            }
+
             return ReplaceUnderLock(targetPath, stagedPath, originalHash, updateHash);
         }
         finally
         {
-            if (acquired) mutex.ReleaseMutex();
+            if (acquired)
+            {
+                mutex.ReleaseMutex();
+            }
         }
     }
 
     private static string? ReplaceUnderLock(string targetPath, string stagedPath, string originalHash, string updateHash)
     {
         if (!HashMatches(targetPath, originalHash))
+        {
             throw new InvalidDataException("The installed executable changed since the update was offered. No replacement was made.");
+        }
+
         if (!HashMatches(stagedPath, updateHash))
+        {
             throw new InvalidDataException("The staged update failed its SHA256 verification. No replacement was made.");
+        }
 
         string backupPath = targetPath + ".update-backup-" + Guid.NewGuid().ToString("N") + ".bak";
         try
@@ -90,6 +107,8 @@ internal static class AtomicUpdateReplacement
     internal static void ValidateHash(string hash)
     {
         if (hash.Length != 64 || !hash.All(Uri.IsHexDigit))
+        {
             throw new InvalidDataException("An update SHA256 hash is invalid.");
+        }
     }
 }

@@ -16,7 +16,10 @@ public sealed class AudioEffectEditSession
     private AudioEffectEditSession(AudioObj source)
     {
         if (source.SampleRate <= 0 || source.Channels <= 0 || source.Data.Length == 0 || source.Data.Length % source.Channels != 0)
+        {
             throw new ArgumentException("The effect needs non-empty, complete audio frames.", nameof(source));
+        }
+
         this.originalData = source.Data;
         this.SampleRate = source.SampleRate;
         this.Channels = source.Channels;
@@ -24,7 +27,10 @@ public sealed class AudioEffectEditSession
         long start = selected ? Math.Clamp(source.SelectionStart, 0, source.Data.LongLength) : 0;
         long end = selected ? Math.Clamp(source.SelectionEnd, 0, source.Data.LongLength) : source.Data.LongLength;
         if (start % this.Channels != 0 || end % this.Channels != 0 || end <= start)
+        {
             throw new ArgumentException("The selected range must contain complete audio frames.");
+        }
+
         this.StartSample = checked((int)start);
         this.input = this.originalData.AsSpan(this.StartSample, checked((int)(end - start))).ToArray();
         this.contentHash = Hash(this.originalData);
@@ -59,23 +65,38 @@ public sealed class AudioEffectEditSession
         if (processed is null || processed.Length == 0 || result.Channels <= 0 || processed.Length % result.Channels != 0 ||
             processed.Any(value => !float.IsFinite(value)) ||
             (result.TempoMultiplier is double tempo && (!double.IsFinite(tempo) || tempo <= 0)))
+        {
             throw new ArgumentException("Effect output must contain finite, complete audio frames.", nameof(result));
-        if (!this.IsCurrent(target)) throw new InvalidOperationException("The track changed while the effect window was open. Close it and reopen the effect for the current audio.");
+        }
+
+        if (!this.IsCurrent(target))
+        {
+            throw new InvalidOperationException("The track changed while the effect window was open. Close it and reopen the effect for the current audio.");
+        }
 
         int outputChannels = this.IsSelection ? this.Channels : result.Channels;
         int renderedFrames = processed.Length / result.Channels;
         if (this.IsSelection && result.Channels != this.Channels)
         {
-            if (result.Channels != 1) throw new ArgumentException("A selected region cannot change the track's channel format.");
+            if (result.Channels != 1)
+            {
+                throw new ArgumentException("A selected region cannot change the track's channel format.");
+            }
             // A channel format cannot change in the middle of a track. A selected
             // mono conversion therefore writes the mono average to every channel.
             float[] expanded = new float[checked(renderedFrames * this.Channels)];
             for (int frame = 0; frame < renderedFrames; frame++)
+            {
                 expanded.AsSpan(frame * this.Channels, this.Channels).Fill(processed[frame]);
+            }
+
             processed = expanded;
         }
         if (outputChannels == this.Channels &&
-            MemoryMarshal.AsBytes(processed.AsSpan()).SequenceEqual(MemoryMarshal.AsBytes(this.input.AsSpan()))) return false;
+            MemoryMarshal.AsBytes(processed.AsSpan()).SequenceEqual(MemoryMarshal.AsBytes(this.input.AsSpan())))
+        {
+            return false;
+        }
 
         int suffixStart = this.StartSample + this.SampleCount;
         int suffixLength = this.IsSelection ? this.originalData.Length - suffixStart : 0;
@@ -83,7 +104,10 @@ public sealed class AudioEffectEditSession
         float[] replacement = new float[checked(prefixLength + processed.Length + suffixLength)];
         this.originalData.AsSpan(0, prefixLength).CopyTo(replacement);
         processed.CopyTo(replacement, prefixLength);
-        if (suffixLength > 0) this.originalData.AsSpan(suffixStart).CopyTo(replacement.AsSpan(prefixLength + processed.Length));
+        if (suffixLength > 0)
+        {
+            this.originalData.AsSpan(suffixStart).CopyTo(replacement.AsSpan(prefixLength + processed.Length));
+        }
 
         long position = target.Position;
         long selectionStart = target.SelectionStart, selectionEnd = target.SelectionEnd;
@@ -94,8 +118,15 @@ public sealed class AudioEffectEditSession
         int newFrames = replacement.Length / outputChannels;
         bool[]? grid = target.BeatGrid.Length == oldFrames && oldFrames != newFrames ? new bool[newFrames] : null;
         if (grid is not null)
+        {
             for (int frame = 0; frame < target.BeatGrid.Length; frame++)
-                if (target.BeatGrid[frame]) grid[(int)Math.Min(newFrames - 1, this.MapFrame(frame, renderedFrames))] = true;
+            {
+                if (target.BeatGrid[frame])
+                {
+                    grid[(int)Math.Min(newFrames - 1, this.MapFrame(frame, renderedFrames))] = true;
+                }
+            }
+        }
 
         target.CreateUndoStep();
         target.Data = replacement;
@@ -111,12 +142,22 @@ public sealed class AudioEffectEditSession
             long mappedLoopStart = Math.Max(0, MapSample(loopStart)), mappedLoopEnd = Math.Max(0, MapSample(loopEnd));
             target.UpdateLoopFraction(mappedLoopStart, mappedLoopEnd, Math.Max(0, mappedLoopEnd - mappedLoopStart),
                 looping && mappedLoopEnd > mappedLoopStart, adjustPosition: false);
-            if (grid is not null) target.BeatGrid = grid;
+            if (grid is not null)
+            {
+                target.BeatGrid = grid;
+            }
         }
         if (!this.IsSelection && result.TempoMultiplier is double multiplier)
         {
-            if (float.IsFinite(target.Bpm) && target.Bpm > 0) target.Bpm = (float)(target.Bpm * multiplier);
-            if (float.IsFinite(target.ScannedBpm) && target.ScannedBpm > 0) target.ScannedBpm = (float)(target.ScannedBpm * multiplier);
+            if (float.IsFinite(target.Bpm) && target.Bpm > 0)
+            {
+                target.Bpm = (float)(target.Bpm * multiplier);
+            }
+
+            if (float.IsFinite(target.ScannedBpm) && target.ScannedBpm > 0)
+            {
+                target.ScannedBpm = (float)(target.ScannedBpm * multiplier);
+            }
         }
         target.InvalidateWaveformCache();
         return true;

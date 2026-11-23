@@ -24,7 +24,9 @@ public sealed class ApplicationUpdateTests
             var store = new ReleaseUpdateSettingsStore(path);
             Assert.IsTrue(store.LoadAndRecordRunningRelease(127).AskToUpdate);
             using (var json = JsonDocument.Parse(File.ReadAllText(path)))
+            {
                 Assert.AreEqual("AskToUpdate", json.RootElement.EnumerateObject().First().Name);
+            }
 
             store.DisableAsking();
             var updated = store.LoadAndRecordRunningRelease(128);

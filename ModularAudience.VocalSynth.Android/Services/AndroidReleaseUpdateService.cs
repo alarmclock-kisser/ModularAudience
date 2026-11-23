@@ -43,17 +43,27 @@ internal sealed class AndroidReleaseUpdateService
         foreach (JsonElement release in document.RootElement.EnumerateArray())
         {
             if (release.TryGetProperty("draft", out JsonElement draft) && draft.GetBoolean())
+            {
                 continue;
+            }
+
             if (release.TryGetProperty("prerelease", out JsonElement prerelease) && prerelease.GetBoolean())
+            {
                 continue;
+            }
 
             string tag = release.TryGetProperty("tag_name", out JsonElement tagElement)
                 ? tagElement.GetString() ?? string.Empty
                 : string.Empty;
             if (!TryParseBuildNumber(tag, out int releaseBuild))
+            {
                 continue;
+            }
+
             if (!release.TryGetProperty("assets", out JsonElement assets))
+            {
                 continue;
+            }
 
             foreach (JsonElement asset in assets.EnumerateArray())
             {
@@ -135,7 +145,9 @@ internal sealed class AndroidReleaseUpdateService
                     Length: > 1,
                 };
             if (probe.StatusCode == System.Net.HttpStatusCode.PartialContent && !supportsRanges)
+            {
                 throw new InvalidDataException("The update server returned an invalid byte range.");
+            }
 
             totalBytes = supportsRanges
                 ? probe.Content.Headers.ContentRange!.Length!.Value
@@ -178,7 +190,9 @@ internal sealed class AndroidReleaseUpdateService
                 await output.FlushAsync(cancellationToken);
                 long actualBytes = downloadedBytes;
                 if (totalBytes > 0 && actualBytes != totalBytes)
+                {
                     throw new IOException($"The update download was incomplete ({actualBytes} of {totalBytes} bytes).");
+                }
             }
 
             await VerifyDigestAsync(destination, update.Sha256, cancellationToken);
@@ -187,7 +201,10 @@ internal sealed class AndroidReleaseUpdateService
         catch
         {
             if (File.Exists(destination))
+            {
                 File.Delete(destination);
+            }
+
             throw;
         }
     }
@@ -266,7 +283,9 @@ internal sealed class AndroidReleaseUpdateService
                 buffer.AsMemory(0, (int)Math.Min(buffer.Length, remaining)),
                 cancellationToken);
             if (count == 0)
+            {
                 throw new IOException("The update download ended before the requested byte range was complete.");
+            }
 
             await RandomAccess.WriteAsync(output.SafeFileHandle, buffer.AsMemory(0, count), offset, cancellationToken);
             offset += count;
@@ -275,7 +294,9 @@ internal sealed class AndroidReleaseUpdateService
         }
 
         if (await input.ReadAsync(buffer.AsMemory(0, 1), cancellationToken) != 0)
+        {
             throw new InvalidDataException("The update server sent more data than requested.");
+        }
     }
 
     private static async Task CopyToFileAsync(
@@ -289,7 +310,9 @@ internal sealed class AndroidReleaseUpdateService
         {
             int count = await input.ReadAsync(buffer, cancellationToken);
             if (count == 0)
+            {
                 return;
+            }
 
             await output.WriteAsync(buffer.AsMemory(0, count), cancellationToken);
             reportRead(count);
@@ -309,7 +332,10 @@ internal sealed class AndroidReleaseUpdateService
     private static int GetAssetBuildNumber(string assetName, int releaseBuild)
     {
         if (string.Equals(assetName, SignedApkName, StringComparison.Ordinal))
+        {
             return releaseBuild;
+        }
+
         if (!assetName.StartsWith(CarriedApkPrefix, StringComparison.Ordinal) ||
             !assetName.EndsWith(".apk", StringComparison.Ordinal))
         {
@@ -335,11 +361,15 @@ internal sealed class AndroidReleaseUpdateService
         CancellationToken cancellationToken)
     {
         if (string.IsNullOrWhiteSpace(digest))
+        {
             return;
+        }
 
         const string prefix = "sha256:";
         if (!digest.StartsWith(prefix, StringComparison.OrdinalIgnoreCase))
+        {
             throw new InvalidDataException("The update release uses an unsupported digest format.");
+        }
 
         await using FileStream stream = File.OpenRead(filePath);
         byte[] hash = await SHA256.HashDataAsync(stream, cancellationToken);

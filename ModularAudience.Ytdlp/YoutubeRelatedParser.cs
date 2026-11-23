@@ -10,7 +10,11 @@ public static class YoutubeRelatedParser
     internal static JsonDocument? ExtractInitialData(string html)
     {
         var match = Regex.Match(html, @"(?:var\s+ytInitialData|window\[""ytInitialData""\]|ytInitialData)\s*=\s*");
-        if (!match.Success) return null;
+        if (!match.Success)
+        {
+            return null;
+        }
+
         var reader = new Utf8JsonReader(Encoding.UTF8.GetBytes(html[(match.Index + match.Length)..]));
         try { return JsonDocument.ParseValue(ref reader); }
         catch (JsonException) { return null; }
@@ -24,15 +28,34 @@ public static class YoutubeRelatedParser
         string? next = null;
         // Only the watch-page recommendations and their continuation, never comments, ads or the current video.
         if (At(root, "contents", "twoColumnWatchNextResults", "secondaryResults", "secondaryResults") is { } secondary)
+        {
             Visit(secondary);
+        }
+
         foreach (string key in new[] { "onResponseReceivedEndpoints", "onResponseReceivedActions" })
+        {
             if (root.TryGetProperty(key, out var actions) && actions.ValueKind == JsonValueKind.Array)
+            {
                 foreach (var action in actions.EnumerateArray())
                 {
-                    if (At(action, "appendContinuationItemsAction", "continuationItems") is { } items) Visit(items);
-                    if (At(action, "reloadContinuationItemsCommand", "continuationItems") is { } reloaded) Visit(reloaded);
+                    if (At(action, "appendContinuationItemsAction", "continuationItems") is { } items)
+                    {
+                        Visit(items);
+                    }
+
+                    if (At(action, "reloadContinuationItemsCommand", "continuationItems") is { } reloaded)
+                    {
+                        Visit(reloaded);
+                    }
                 }
-        if (At(root, "continuationContents", "itemSectionContinuation") is { } section) Visit(section);
+            }
+        }
+
+        if (At(root, "continuationContents", "itemSectionContinuation") is { } section)
+        {
+            Visit(section);
+        }
+
         continuation = next;
         return videos.AsReadOnly();
 
@@ -40,27 +63,55 @@ public static class YoutubeRelatedParser
         {
             if (element.ValueKind == JsonValueKind.Array)
             {
-                foreach (var item in element.EnumerateArray()) Visit(item);
+                foreach (var item in element.EnumerateArray())
+                {
+                    Visit(item);
+                }
+
                 return;
             }
-            if (element.ValueKind != JsonValueKind.Object) return;
+            if (element.ValueKind != JsonValueKind.Object)
+            {
+                return;
+            }
+
             foreach (var property in element.EnumerateObject())
             {
-                if (property.Name is "adSlotRenderer" or "promotedSparklesWebRenderer" or "promotedVideoRenderer") continue;
+                if (property.Name is "adSlotRenderer" or "promotedSparklesWebRenderer" or "promotedVideoRenderer")
+                {
+                    continue;
+                }
+
                 if (property.Name == "continuationItemRenderer")
+                {
                     next ??= Text(At(property.Value, "continuationEndpoint", "continuationCommand", "token"))
                         ?? Text(At(property.Value, "button", "buttonRenderer", "command", "continuationCommand", "token"));
-                else if (property.Name == "nextContinuationData") next ??= Text(At(property.Value, "continuation"));
+                }
+                else if (property.Name == "nextContinuationData")
+                {
+                    next ??= Text(At(property.Value, "continuation"));
+                }
                 else if (property.Name is "compactVideoRenderer" or "videoRenderer" or "playlistPanelVideoRenderer")
+                {
                     Add(Renderer(property.Value));
-                else if (property.Name == "lockupViewModel") Add(Lockup(property.Value));
-                else Visit(property.Value);
+                }
+                else if (property.Name == "lockupViewModel")
+                {
+                    Add(Lockup(property.Value));
+                }
+                else
+                {
+                    Visit(property.Value);
+                }
             }
         }
 
         void Add(YtdlpVideo? video)
         {
-            if (video is not null && videos.Count < maximum && seen.Add(video.Id)) videos.Add(video);
+            if (video is not null && videos.Count < maximum && seen.Add(video.Id))
+            {
+                videos.Add(video);
+            }
         }
     }
 
@@ -72,19 +123,36 @@ public static class YoutubeRelatedParser
 
     private static YtdlpVideo? Lockup(JsonElement renderer)
     {
-        if (Text(At(renderer, "contentType")) != "LOCKUP_CONTENT_TYPE_VIDEO") return null;
+        if (Text(At(renderer, "contentType")) != "LOCKUP_CONTENT_TYPE_VIDEO")
+        {
+            return null;
+        }
+
         var metadata = At(renderer, "metadata", "lockupMetadataViewModel");
         string? uploader = null, views = null;
         if (At(metadata, "metadata", "contentMetadataViewModel", "metadataRows") is { ValueKind: JsonValueKind.Array } rows)
+        {
             foreach (var row in rows.EnumerateArray())
+            {
                 if (At(row, "metadataParts") is { ValueKind: JsonValueKind.Array } parts)
+                {
                     foreach (var part in parts.EnumerateArray())
                     {
                         if (uploader is null && At(part, "text", "commandRuns") is { } commands && commands.ToString().Contains("browseEndpoint", StringComparison.Ordinal))
+                        {
                             uploader = Text(At(part, "text", "content"));
+                        }
+
                         var content = Text(At(part, "text", "content"));
-                        if (content?.Contains("views", StringComparison.OrdinalIgnoreCase) == true) views = content;
+                        if (content?.Contains("views", StringComparison.OrdinalIgnoreCase) == true)
+                        {
+                            views = content;
+                        }
                     }
+                }
+            }
+        }
+
         string? duration = null;
         FindDuration(renderer);
         return Build(Text(At(renderer, "contentId")), Text(At(metadata, "title", "content")), uploader,
@@ -93,23 +161,48 @@ public static class YoutubeRelatedParser
         void FindDuration(JsonElement node)
         {
             if (node.ValueKind == JsonValueKind.Array)
-                foreach (var item in node.EnumerateArray()) FindDuration(item);
+            {
+                foreach (var item in node.EnumerateArray())
+                {
+                    FindDuration(item);
+                }
+            }
             else if (node.ValueKind == JsonValueKind.Object)
+            {
                 foreach (var property in node.EnumerateObject())
-                    if (property.Name == "thumbnailBadgeViewModel") duration ??= Text(At(property.Value, "text"));
-                    else FindDuration(property.Value);
+                {
+                    if (property.Name == "thumbnailBadgeViewModel")
+                    {
+                        duration ??= Text(At(property.Value, "text"));
+                    }
+                    else
+                    {
+                        FindDuration(property.Value);
+                    }
+                }
+            }
         }
     }
 
     private static YtdlpVideo? Build(string? id, string? title, string? uploader, string? duration, JsonElement? images, string? views)
     {
-        if (id is null || !Regex.IsMatch(id, "^[A-Za-z0-9_-]{11}$")) return null;
+        if (id is null || !Regex.IsMatch(id, "^[A-Za-z0-9_-]{11}$"))
+        {
+            return null;
+        }
+
         double? seconds = null;
         if (duration is not null && Regex.IsMatch(duration, @"^\d+(?::\d{2}){1,2}$"))
+        {
             seconds = duration.Split(':').Aggregate(0d, (total, part) => total * 60 + int.Parse(part, CultureInfo.InvariantCulture));
+        }
+
         string? thumbnail = null;
         if (images is { ValueKind: JsonValueKind.Array } array)
+        {
             thumbnail = array.EnumerateArray().Select(image => Text(At(image, "url"))).LastOrDefault(url => url is not null);
+        }
+
         long? viewCount = null;
         if (views is not null)
         {
@@ -117,7 +210,10 @@ public static class YoutubeRelatedParser
             if (match.Success && double.TryParse(match.Groups[1].Value.Replace(",", ""), CultureInfo.InvariantCulture, out double count))
             {
                 count *= match.Groups[2].Value.ToUpperInvariant() switch { "K" => 1000, "M" => 1000000, "B" => 1000000000, _ => 1 };
-                if (double.IsFinite(count) && count >= 0 && count < long.MaxValue) viewCount = (long)count;
+                if (double.IsFinite(count) && count >= 0 && count < long.MaxValue)
+                {
+                    viewCount = (long)count;
+                }
             }
         }
         return new YtdlpVideo { Id = id, Title = title ?? id, Url = "https://www.youtube.com/watch?v=" + id,
@@ -126,7 +222,11 @@ public static class YoutubeRelatedParser
 
     private static string? Display(JsonElement? element)
     {
-        if (Text(At(element, "simpleText")) is { } simple) return simple;
+        if (Text(At(element, "simpleText")) is { } simple)
+        {
+            return simple;
+        }
+
         return At(element, "runs") is { ValueKind: JsonValueKind.Array } runs
             ? string.Concat(runs.EnumerateArray().Select(run => Text(At(run, "text")))) : null;
     }
@@ -137,7 +237,11 @@ public static class YoutubeRelatedParser
     {
         foreach (var key in path)
         {
-            if (node is not { ValueKind: JsonValueKind.Object } current || !current.TryGetProperty(key, out var value)) return null;
+            if (node is not { ValueKind: JsonValueKind.Object } current || !current.TryGetProperty(key, out var value))
+            {
+                return null;
+            }
+
             node = value;
         }
         return node;

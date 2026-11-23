@@ -65,7 +65,9 @@ public sealed class HintPolicyTests
             .Where(field => typeof(System.Windows.Forms.ToolTip).IsAssignableFrom(field.FieldType)).ToArray();
         Assert.IsTrue(fields.Length >= 20, "The audit must include the editor, settings and main-window tooltip components.");
         foreach (FieldInfo field in fields)
+        {
             Assert.AreEqual(typeof(AppToolTip), field.FieldType, $"{field.DeclaringType?.FullName}.{field.Name} bypasses the global hint policy.");
+        }
     }
 
     [STATestMethod]

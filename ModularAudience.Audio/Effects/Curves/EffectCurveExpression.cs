@@ -13,17 +13,29 @@ internal sealed class EffectCurveExpression
 
     internal static Func<double, double> Parse(string equation, EffectCurve curve, out bool usesTime)
     {
-        if (string.IsNullOrWhiteSpace(equation) || equation.Length > 1024) throw new ArgumentException("Enter an equation of 1–1024 characters.");
+        if (string.IsNullOrWhiteSpace(equation) || equation.Length > 1024)
+        {
+            throw new ArgumentException("Enter an equation of 1–1024 characters.");
+        }
+
         var parser = new EffectCurveExpression(equation, curve);
         Func<double, double> result = parser.Sum(); parser.Space();
-        if (parser.position != equation.Length) throw parser.Error("Unexpected input");
+        if (parser.position != equation.Length)
+        {
+            throw parser.Error("Unexpected input");
+        }
+
         usesTime = parser.usesTime;
         return result;
     }
 
     private Func<double, double> Sum()
     {
-        if (++this.depth > 32) throw this.Error("The equation is nested too deeply");
+        if (++this.depth > 32)
+        {
+            throw this.Error("The equation is nested too deeply");
+        }
+
         try
         {
             var left = this.Product();
@@ -31,7 +43,10 @@ internal sealed class EffectCurveExpression
             {
                 if (this.Take('+')) { var a = left; var b = this.Product(); left = this.Node(x => a(x) + b(x)); }
                 else if (this.Take('-')) { var a = left; var b = this.Product(); left = this.Node(x => a(x) - b(x)); }
-                else return left;
+                else
+                {
+                    return left;
+                }
             }
         }
         finally { this.depth--; }
@@ -45,16 +60,27 @@ internal sealed class EffectCurveExpression
             if (this.Take('*')) { var a = left; var b = this.Unary(); left = this.Node(x => a(x) * b(x)); }
             else if (this.Take('/')) { var a = left; var b = this.Unary(); left = this.Node(x => a(x) / b(x)); }
             else if (this.Take('%')) { var a = left; var b = this.Unary(); left = this.Node(x => a(x) % b(x)); }
-            else return left;
+            else
+            {
+                return left;
+            }
         }
     }
 
     private Func<double, double> Unary()
     {
-        if (++this.depth > 32) throw this.Error("The equation is nested too deeply");
+        if (++this.depth > 32)
+        {
+            throw this.Error("The equation is nested too deeply");
+        }
+
         try
         {
-            if (this.Take('+')) return this.Unary();
+            if (this.Take('+'))
+            {
+                return this.Unary();
+            }
+
             if (this.Take('-')) { var value = this.Unary(); return this.Node(x => -value(x)); }
             var left = this.Primary();
             if (this.Take('^')) { var right = this.Unary(); return this.Node(x => Math.Pow(left(x), right(x))); }
@@ -70,19 +96,41 @@ internal sealed class EffectCurveExpression
         int start = this.position;
         if (this.position < this.text.Length && (char.IsAsciiDigit(this.text[this.position]) || this.text[this.position] == '.'))
         {
-            while (this.position < this.text.Length && (char.IsAsciiDigit(this.text[this.position]) || this.text[this.position] == '.')) this.position++;
+            while (this.position < this.text.Length && (char.IsAsciiDigit(this.text[this.position]) || this.text[this.position] == '.'))
+            {
+                this.position++;
+            }
+
             if (this.position < this.text.Length && this.text[this.position] is 'e' or 'E')
             {
                 this.position++;
-                if (this.position < this.text.Length && this.text[this.position] is '+' or '-') this.position++;
-                while (this.position < this.text.Length && char.IsAsciiDigit(this.text[this.position])) this.position++;
+                if (this.position < this.text.Length && this.text[this.position] is '+' or '-')
+                {
+                    this.position++;
+                }
+
+                while (this.position < this.text.Length && char.IsAsciiDigit(this.text[this.position]))
+                {
+                    this.position++;
+                }
             }
             if (!double.TryParse(this.text[start..this.position], NumberStyles.Float, CultureInfo.InvariantCulture, out double number) || !double.IsFinite(number))
+            {
                 throw this.Error("Invalid number (use a decimal point)");
+            }
+
             return this.Node(_ => number);
         }
-        while (this.position < this.text.Length && (char.IsAsciiLetter(this.text[this.position]) || char.IsAsciiDigit(this.text[this.position]))) this.position++;
-        if (start == this.position) throw this.Error("Expected a number, variable or function");
+        while (this.position < this.text.Length && (char.IsAsciiLetter(this.text[this.position]) || char.IsAsciiDigit(this.text[this.position])))
+        {
+            this.position++;
+        }
+
+        if (start == this.position)
+        {
+            throw this.Error("Expected a number, variable or function");
+        }
+
         string name = this.text[start..this.position].ToLowerInvariant();
         if (!this.Take('('))
         {
@@ -96,7 +144,7 @@ internal sealed class EffectCurveExpression
             return this.Node(_ => constant);
         }
         var args = new List<Func<double, double>> { this.Sum() };
-        while (this.Take(',')) { if (args.Count >= 3) throw this.Error("Too many function arguments"); args.Add(this.Sum()); }
+        while (this.Take(',')) { if (args.Count >= 3) { throw this.Error("Too many function arguments"); } args.Add(this.Sum()); }
         this.Expect(')');
         Func<double, double>? unary = name switch
         {
@@ -109,7 +157,11 @@ internal sealed class EffectCurveExpression
             "smoothstep" => value => { double t = Math.Clamp(value, 0, 1); return t * t * (3 - 2 * t); },
             _ => null
         };
-        if (unary is not null && args.Count == 1) return this.Node(x => unary(args[0](x)));
+        if (unary is not null && args.Count == 1)
+        {
+            return this.Node(x => unary(args[0](x)));
+        }
+
         if (args.Count == 2)
         {
             Func<double, double, double>? binary = name switch
@@ -117,24 +169,42 @@ internal sealed class EffectCurveExpression
                 "min" => Math.Min, "max" => Math.Max, "pow" => Math.Pow,
                 "step" => (edge, value) => value < edge ? 0 : 1, _ => null
             };
-            if (binary is not null) return this.Node(x => binary(args[0](x), args[1](x)));
+            if (binary is not null)
+            {
+                return this.Node(x => binary(args[0](x), args[1](x)));
+            }
         }
-        if (name == "clamp" && args.Count == 3) return this.Node(x =>
+        if (name == "clamp" && args.Count == 3)
+        {
+            return this.Node(x =>
         {
             double value = args[0](x), low = args[1](x), high = args[2](x);
             return low <= high ? Math.Clamp(value, low, high) : double.NaN;
         });
+        }
+
         throw this.Error("Unknown function or wrong number of arguments: " + name);
     }
 
     private Func<double, double> Node(Func<double, double> node)
     {
-        if (++this.nodes > 256) throw this.Error("The equation is too complex (maximum 256 operations)");
+        if (++this.nodes > 256)
+        {
+            throw this.Error("The equation is too complex (maximum 256 operations)");
+        }
         // Do not allow an invalid subexpression to be hidden by min/max/clamp.
-        return x => { double value = node(x); if (!double.IsFinite(value)) throw this.Error("Undefined arithmetic in the curve"); return value; };
+        return x => { double value = node(x); if (!double.IsFinite(value)) { throw this.Error("Undefined arithmetic in the curve"); } return value; };
     }
-    private void Space() { while (this.position < this.text.Length && char.IsWhiteSpace(this.text[this.position])) this.position++; }
-    private bool Take(char value) { this.Space(); if (this.position >= this.text.Length || this.text[this.position] != value) return false; this.position++; return true; }
-    private void Expect(char value) { if (!this.Take(value)) throw this.Error("Expected '" + value + "'"); }
+    private void Space() { while (this.position < this.text.Length && char.IsWhiteSpace(this.text[this.position]))
+        {
+            this.position++;
+        }
+    }
+    private bool Take(char value) { this.Space(); if (this.position >= this.text.Length || this.text[this.position] != value) { return false; } this.position++; return true; }
+    private void Expect(char value) { if (!this.Take(value))
+        {
+            throw this.Error("Expected '" + value + "'");
+        }
+    }
     private ArgumentException Error(string message) => new($"{message} (position {this.position + 1}).");
 }

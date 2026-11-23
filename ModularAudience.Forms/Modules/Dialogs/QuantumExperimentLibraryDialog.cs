@@ -39,12 +39,20 @@ internal sealed class QuantumExperimentLibraryDialog : Form
         load.Click += (_, _) => this.Act(() => { if (this.names.SelectedItem is string selected) { this.editor.LoadNamedExperiment(selected); this.info.Text = "Experiment loaded. This window and the editor remain open."; } });
         rename.Click += (_, _) => this.Act(() =>
         {
-            if (this.names.SelectedItem is not string selected) return;
+            if (this.names.SelectedItem is not string selected)
+            {
+                return;
+            }
+
             string target = this.name.Text.Trim(); this.editor.RenameNamedExperiment(selected, target); this.RefreshNames(target); this.info.Text = "Experiment renamed.";
         });
         this.delete.Click += (_, _) => this.Act(() =>
         {
-            if (!this.confirmDelete.Checked || this.names.SelectedItem is not string selected) return;
+            if (!this.confirmDelete.Checked || this.names.SelectedItem is not string selected)
+            {
+                return;
+            }
+
             this.editor.DeleteNamedExperiment(selected); this.RefreshNames(null); this.confirmDelete.Checked = false; this.info.Text = "Saved experiment deleted. The current editor setup was not reset.";
         });
         close.Click += (_, _) => this.Close();
@@ -54,13 +62,20 @@ internal sealed class QuantumExperimentLibraryDialog : Form
     internal void SelectAction(string action, string? selected)
     {
         this.RefreshNames(selected); this.info.Text = action + " a named experiment. Current editor settings are also restored from AppData.";
-        if (action == "Save" && this.name.Text.Length == 0) this.name.Text = "Quantum experiment";
+        if (action == "Save" && this.name.Text.Length == 0)
+        {
+            this.name.Text = "Quantum experiment";
+        }
+
         if (action == "Rename") { this.name.Focus(); this.name.SelectAll(); }
     }
     private void RefreshNames(string? selected)
     {
         this.names.Items.Clear(); this.names.Items.AddRange(this.store.ExperimentNames());
-        if (selected is not null) this.names.SelectedItem = this.names.Items.Cast<string>().FirstOrDefault(name => string.Equals(name, selected, StringComparison.OrdinalIgnoreCase));
+        if (selected is not null)
+        {
+            this.names.SelectedItem = this.names.Items.Cast<string>().FirstOrDefault(name => string.Equals(name, selected, StringComparison.OrdinalIgnoreCase));
+        }
     }
     private void Act(Action action)
     {

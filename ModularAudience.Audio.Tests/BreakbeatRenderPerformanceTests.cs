@@ -11,7 +11,11 @@ public sealed class BreakbeatRenderPerformanceTests
     public async Task SharedPreviewCacheReusesPitchButInvalidatesChangedSamplesAndPitch()
     {
         using var sample = new AudioObj { Data = new float[4410], Channels = 1, SampleRate = 44100 };
-        for (int i = 0; i < sample.Data.Length; i++) sample.Data[i] = (float)(0.2 * Math.Sin(i * 0.1));
+        for (int i = 0; i < sample.Data.Length; i++)
+        {
+            sample.Data[i] = (float)(0.2 * Math.Sin(i * 0.1));
+        }
+
         using var cache = new PatternRenderCache();
         var note = new BreakbeatPatternNote(0, 0, 128, PitchSemitones: 3);
         using var preview = await BreakbeatGenerator_V2.RenderPatternNotesAsync([note], [sample], 1, 120, 16, 0, renderCache: cache);
@@ -37,7 +41,11 @@ public sealed class BreakbeatRenderPerformanceTests
     public async Task RepeatedPitchTransformsMatchSeparateRendersAndReportElapsedTime()
     {
         using var sample = new AudioObj { Data = new float[22050], Channels = 1, SampleRate = 44100 };
-        for (int i = 0; i < sample.Data.Length; i++) sample.Data[i] = (float)(0.2 * Math.Sin(2 * Math.PI * 220 * i / 44100));
+        for (int i = 0; i < sample.Data.Length; i++)
+        {
+            sample.Data[i] = (float)(0.2 * Math.Sin(2 * Math.PI * 220 * i / 44100));
+        }
+
         var notes = Enumerable.Range(0, 24).Select(i => new BreakbeatPatternNote(0, i * 64, 256,
             PitchSemitones: i % 3 * 2f, VolumePercent: i % 2 == 0 ? 80 : 100)).ToArray();
         using var warm = await BreakbeatGenerator_V2.RenderPatternNotesAsync(notes.Take(3).ToArray(), [sample], 2, 120, 16, 0);
@@ -49,7 +57,10 @@ public sealed class BreakbeatRenderPerformanceTests
         foreach (var note in notes)
         {
             using var individual = await BreakbeatGenerator_V2.RenderPatternNotesAsync([note], [sample], 2, 120, 16, 0);
-            for (int i = 0; i < individual.Data.Length; i++) reference[i] += individual.Data[i];
+            for (int i = 0; i < individual.Data.Length; i++)
+            {
+                reference[i] += individual.Data[i];
+            }
         }
         Console.WriteLine($"24 pitched notes / 3 unique transforms: optimized={combinedMs} ms; separate serial renders={clock.ElapsedMilliseconds} ms; CPUs={Environment.ProcessorCount}");
         CollectionAssert.AreEqual(reference, combined.Data, "Reusing transforms must preserve note gains and deterministic summation.");

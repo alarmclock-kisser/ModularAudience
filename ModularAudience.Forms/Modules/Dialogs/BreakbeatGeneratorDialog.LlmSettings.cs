@@ -23,13 +23,20 @@ public partial class BreakbeatGeneratorDialog
         textBox_prompt.Text = llmSettings.Prompt;
         llmSettingsTimer.Tick += (_, _) => { llmSettingsTimer.Stop(); PersistLlmSettings(); };
         foreach (var text in new[] { textBox_apiUrl, textBox_prompt })
+        {
             text.TextChanged += (_, _) =>
             {
-                if (syncingLlmSettings) return;
+                if (syncingLlmSettings)
+                {
+                    return;
+                }
+
                 llmSettings.Address = textBox_apiUrl.Text.Trim(); llmSettings.Prompt = textBox_prompt.Text;
                 PublishLlmSettings();
                 llmSettingsTimer.Stop(); llmSettingsTimer.Start();
             };
+        }
+
         var menu = new ContextMenuStrip(components!) { IsParameterHelp = true };
         foreach (var definition in BreakbeatLlmSettings.Definitions)
         {
@@ -54,7 +61,7 @@ public partial class BreakbeatGeneratorDialog
                 catch (ArgumentException) { editor.BackColor = Color.MistyRose; }
             };
             editor.Leave += (_, _) => Commit();
-            editor.KeyDown += (_, e) => { if (e.KeyCode == Keys.Enter) { e.SuppressKeyPress = true; if (Commit()) item.HideDropDown(); } };
+            editor.KeyDown += (_, e) => { if (e.KeyCode == Keys.Enter) { e.SuppressKeyPress = true; if (Commit()) { item.HideDropDown(); } } };
             var reset = new ToolStripMenuItem($"Default: {definition.Default}");
             reset.Click += (_, _) => { editor.Text = definition.Default.ToString("R", CultureInfo.InvariantCulture); Commit(); };
             item.DropDownItems.Add(editor); item.DropDownItems.Add(hint); item.DropDownItems.Add(reset);
@@ -103,7 +110,11 @@ public partial class BreakbeatGeneratorDialog
     }
     private void PersistLlmSettings()
     {
-        if (syncingLlmSettings) return;
+        if (syncingLlmSettings)
+        {
+            return;
+        }
+
         llmSettingsTimer.Stop();
         llmSettings.Address = textBox_apiUrl.Text.Trim(); llmSettings.Prompt = textBox_prompt.Text;
         PublishLlmSettings();
@@ -120,7 +131,11 @@ public partial class BreakbeatGeneratorDialog
     }
     private void ReceiveSharedLlmSettings(BreakbeatGeneratorDialog sender, BreakbeatLlmSettings updated)
     {
-        if (ReferenceEquals(sender, this) || this.IsDisposed || this.Disposing) return;
+        if (ReferenceEquals(sender, this) || this.IsDisposed || this.Disposing)
+        {
+            return;
+        }
+
         if (this.InvokeRequired)
         {
             this.BeginInvoke(() => ReceiveSharedLlmSettings(sender, updated));
@@ -140,8 +155,16 @@ public partial class BreakbeatGeneratorDialog
                 llmParameterEditors[definition.Key].Item.Checked = incoming.Enabled;
             }
             llmSettings.KeepContext = updated.KeepContext; llmSettings.JsonResponse = updated.JsonResponse;
-            if (keepContextItem != null) keepContextItem.Checked = updated.KeepContext;
-            if (jsonResponseItem != null) jsonResponseItem.Checked = updated.JsonResponse;
+            if (keepContextItem != null)
+            {
+                keepContextItem.Checked = updated.KeepContext;
+            }
+
+            if (jsonResponseItem != null)
+            {
+                jsonResponseItem.Checked = updated.JsonResponse;
+            }
+
             if (!updated.KeepContext) { llmContext.Clear(); pendingLlmTurn = null; }
         }
         finally { llmSettingsTimer.Stop(); syncingLlmSettings = false; }
@@ -151,7 +174,10 @@ public partial class BreakbeatGeneratorDialog
         foreach (var definition in BreakbeatLlmSettings.Definitions)
         {
             var editor = llmParameterEditors[definition.Key];
-            if (editor.Item.Checked) llmSettings.Parameters[definition.Key].Value = definition.Parse(editor.Editor.Text);
+            if (editor.Item.Checked)
+            {
+                llmSettings.Parameters[definition.Key].Value = definition.Parse(editor.Editor.Text);
+            }
         }
         PersistLlmSettings();
         return llmSettings.Copy();

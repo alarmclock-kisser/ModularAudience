@@ -40,29 +40,50 @@ namespace ModularAudience.Audio.Processors_V4
             for (int bin = 0; bin < this.basis.Length; bin++)
             {
                 options.CancellationToken.ThrowIfCancellationRequested();
-                if (!this.informative[bin]) continue;
+                if (!this.informative[bin])
+                {
+                    continue;
+                }
+
                 double mean = this.Power[bin].Sum() / this.frames;
                 double guide = profile?.SpectralWeight((double)bin * sampleRate / windowSize) ?? 1;
                 for (int component = 0; component < this.components; component++)
+                {
                     this.basis[bin][component] = Math.Max(IlrmaNumerics.Floor,
                         Math.Sqrt(mean) * guide * (0.25 + IlrmaNumerics.Seed(sourceIndex, component, bin, 0x51ed270bu)));
+                }
             }
             for (int frame = 0; frame < this.frames; frame++)
             {
                 options.CancellationToken.ThrowIfCancellationRequested();
                 double energy = 0;
                 for (int bin = 0; bin < this.Power.Length; bin++)
-                    if (this.informative[bin]) energy += this.Power[bin][frame];
+                {
+                    if (this.informative[bin])
+                    {
+                        energy += this.Power[bin][frame];
+                    }
+                }
+
                 for (int component = 0; component < this.components; component++)
+                {
                     this.activation[component][frame] = Math.Max(IlrmaNumerics.Floor,
                         energy / this.components * (0.25 + IlrmaNumerics.Seed(sourceIndex, component, frame, 0x68bc21ebu)));
+                }
             }
             // Initialize each spectral template to unit mass without changing the activation seed.
             for (int component = 0; component < this.components; component++)
             {
                 double sum = 0;
-                for (int bin = 0; bin < this.basis.Length; bin++) sum += this.basis[bin][component];
-                for (int bin = 0; bin < this.basis.Length; bin++) this.basis[bin][component] /= sum;
+                for (int bin = 0; bin < this.basis.Length; bin++)
+                {
+                    sum += this.basis[bin][component];
+                }
+
+                for (int bin = 0; bin < this.basis.Length; bin++)
+                {
+                    this.basis[bin][component] /= sum;
+                }
             }
             this.RefreshVariance(options);
         }
@@ -80,13 +101,21 @@ namespace ModularAudience.Audio.Processors_V4
         {
             Parallel.For(0, this.basis.Length, options, bin =>
             {
-                if (!this.informative[bin]) return;
+                if (!this.informative[bin])
+                {
+                    return;
+                }
+
                 for (int component = 0; component < this.components; component++)
                 {
                     double numerator = 0, denominator = 0;
                     for (int frame = 0; frame < this.frames; frame++)
                     {
-                        if ((frame & 255) == 0) options.CancellationToken.ThrowIfCancellationRequested();
+                        if ((frame & 255) == 0)
+                        {
+                            options.CancellationToken.ThrowIfCancellationRequested();
+                        }
+
                         double inverse = 1 / this.Variance[bin][frame];
                         double weighted = this.activation[component][frame] * inverse;
                         numerator += weighted * (this.Power[bin][frame] * inverse);
@@ -107,8 +136,16 @@ namespace ModularAudience.Audio.Processors_V4
                     double numerator = 0, denominator = 0;
                     for (int bin = 0; bin < this.basis.Length; bin++)
                     {
-                        if ((bin & 255) == 0) options.CancellationToken.ThrowIfCancellationRequested();
-                        if (!this.informative[bin]) continue;
+                        if ((bin & 255) == 0)
+                        {
+                            options.CancellationToken.ThrowIfCancellationRequested();
+                        }
+
+                        if (!this.informative[bin])
+                        {
+                            continue;
+                        }
+
                         double inverse = 1 / this.Variance[bin][frame];
                         double weighted = this.basis[bin][component] * inverse;
                         numerator += weighted * (this.Power[bin][frame] * inverse);
@@ -124,7 +161,10 @@ namespace ModularAudience.Audio.Processors_V4
         private static double Updated(double previous, double numerator, double denominator)
         {
             if (!(denominator > 0) || numerator < 0 || !double.IsFinite(numerator) || !double.IsFinite(denominator))
+            {
                 throw new ArithmeticException("ILRMA IS-NMF has an invalid multiplicative update.");
+            }
+
             return IlrmaNumerics.Positive(previous * Math.Sqrt(numerator / denominator), "IS-NMF update");
         }
 
@@ -134,14 +174,28 @@ namespace ModularAudience.Audio.Processors_V4
             {
                 token.ThrowIfCancellationRequested();
                 double sum = 0;
-                for (int bin = 0; bin < this.basis.Length; bin++) sum += this.basis[bin][component];
-                if (!(sum > 0) || !double.IsFinite(sum)) throw new ArithmeticException("ILRMA has an invalid NMF basis scale.");
-                for (int bin = 0; bin < this.basis.Length; bin++) this.basis[bin][component] /= sum;
+                for (int bin = 0; bin < this.basis.Length; bin++)
+                {
+                    sum += this.basis[bin][component];
+                }
+
+                if (!(sum > 0) || !double.IsFinite(sum))
+                {
+                    throw new ArithmeticException("ILRMA has an invalid NMF basis scale.");
+                }
+
+                for (int bin = 0; bin < this.basis.Length; bin++)
+                {
+                    this.basis[bin][component] /= sum;
+                }
+
                 for (int frame = 0; frame < this.frames; frame++)
                 {
                     this.activation[component][frame] *= sum;
                     if (!double.IsFinite(this.activation[component][frame]))
+                    {
                         throw new ArithmeticException("ILRMA NMF activation normalization overflowed.");
+                    }
                 }
             }
         }
@@ -152,10 +206,17 @@ namespace ModularAudience.Audio.Processors_V4
             {
                 for (int frame = 0; frame < this.frames; frame++)
                 {
-                    if ((frame & 255) == 0) options.CancellationToken.ThrowIfCancellationRequested();
+                    if ((frame & 255) == 0)
+                    {
+                        options.CancellationToken.ThrowIfCancellationRequested();
+                    }
+
                     double value = 0;
                     for (int component = 0; component < this.components; component++)
+                    {
                         value += this.basis[bin][component] * this.activation[component][frame];
+                    }
+
                     this.Variance[bin][frame] = IlrmaNumerics.Positive(value, "variance reconstruction");
                 }
             });
@@ -165,12 +226,23 @@ namespace ModularAudience.Audio.Processors_V4
         {
             Parallel.For(0, this.basis.Length, options, bin =>
             {
-                if (!this.informative[bin]) return;
+                if (!this.informative[bin])
+                {
+                    return;
+                }
+
                 for (int component = 0; component < this.components; component++)
+                {
                     this.basis[bin][component] /= powerScale;
+                }
+
                 for (int frame = 0; frame < this.frames; frame++)
                 {
-                    if ((frame & 255) == 0) options.CancellationToken.ThrowIfCancellationRequested();
+                    if ((frame & 255) == 0)
+                    {
+                        options.CancellationToken.ThrowIfCancellationRequested();
+                    }
+
                     this.Power[bin][frame] /= powerScale;
                 }
             });

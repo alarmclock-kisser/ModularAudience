@@ -82,7 +82,9 @@ namespace ModularAudience.Audio.Tests
             // Duplicate: both channels identical -> rank-deficient spatial model
             float[] mono = new float[4000];
             for (int i = 0; i < mono.Length; i++)
+            {
                 mono[i] = (float)(0.3 * Math.Sin(2 * Math.PI * 400 * i / SampleRate));
+            }
 
             float[] duplicate = AudioTestData.Stereo(mono, oppositePhase: false);
             using AudioTestScope scope = new();
@@ -120,7 +122,9 @@ namespace ModularAudience.Audio.Tests
         {
             float[] mono = new float[4000];
             for (int i = 0; i < mono.Length; i++)
+            {
                 mono[i] = (float)(0.3 * Math.Sin(2 * Math.PI * 400 * i / SampleRate));
+            }
 
             float[] antiphase = AudioTestData.Stereo(mono, oppositePhase: true);
             using AudioTestScope scope = new();
@@ -249,7 +253,10 @@ namespace ModularAudience.Audio.Tests
             float[] mono = new float[4000];
             float[] stereo = AudioTestData.Stereo(mono, oppositePhase: false);
             for (int i = 0; i < mono.Length; i++)
+            {
                 mono[i] = (float)(0.3 * Math.Sin(2 * Math.PI * 400 * i / SampleRate));
+            }
+
             AudioObj audio = scope.Create(stereo, SampleRate, 2);
 
             DeterministicSeparationSettings bad = new()
@@ -274,7 +281,10 @@ namespace ModularAudience.Audio.Tests
             float[] mono = new float[4000];
             float[] stereo = AudioTestData.Stereo(mono, oppositePhase: false);
             for (int i = 0; i < mono.Length; i++)
+            {
                 mono[i] = (float)(0.3 * Math.Sin(2 * Math.PI * 400 * i / SampleRate));
+            }
+
             AudioObj audio = scope.Create(stereo, SampleRate, 2);
 
             DeterministicSeparationSettings bad = new()
@@ -388,7 +398,11 @@ namespace ModularAudience.Audio.Tests
         private static double Dot(float[] first, float[] second)
         {
             double sum = 0;
-            for (int i = 0; i < first.Length; i++) sum += (double)first[i] * second[i];
+            for (int i = 0; i < first.Length; i++)
+            {
+                sum += (double)first[i] * second[i];
+            }
+
             return sum;
         }
 
@@ -411,7 +425,10 @@ namespace ModularAudience.Audio.Tests
             {
                 Assert.AreEqual(original.Length, stem.Data.Length, $"{stem.Name}: sample count changed.");
                 AssertFinite(stem.Data, stem.Name);
-                for (int i = 0; i < sum.Length; i++) sum[i] += stem.Data[i];
+                for (int i = 0; i < sum.Length; i++)
+                {
+                    sum[i] += stem.Data[i];
+                }
             }
             double error = Enumerable.Range(0, sum.Length).Max(i => Math.Abs(sum[i] - original[i]));
             Assert.IsTrue(error <= 1e-4, $"Selected groups plus Residual must reconstruct the snapshot; maximum error={error:E9}.");
@@ -423,7 +440,10 @@ namespace ModularAudience.Audio.Tests
         {
             for (int i = 0; i < samples.Length; i++)
             {
-                if (!float.IsFinite(samples[i])) Assert.Fail($"{context}: non-finite output at interleaved sample {i}: {samples[i]}.");
+                if (!float.IsFinite(samples[i]))
+                {
+                    Assert.Fail($"{context}: non-finite output at interleaved sample {i}: {samples[i]}.");
+                }
             }
         }
 
@@ -435,7 +455,10 @@ namespace ModularAudience.Audio.Tests
             for (int index = 0; index < expected.Length; index++)
             {
                 double error = Math.Abs((double)expected[index] - actual[index]);
-                if (error > maximum) maximum = error;
+                if (error > maximum)
+                {
+                    maximum = error;
+                }
             }
             Assert.IsTrue(maximum <= tolerance, FormattableString.Invariant(
                 $"{context}: maximum error={maximum:E9}, limit={tolerance:E9}."));

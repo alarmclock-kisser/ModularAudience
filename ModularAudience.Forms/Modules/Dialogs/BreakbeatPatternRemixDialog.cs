@@ -275,9 +275,11 @@ namespace ModularAudience.Forms.Modules.Dialogs
             this.check_noteKinds.Checked = options.AllowNoteKindChange;
             this.check_copyToClipboard.Checked = options.CopyToClipboard;
             foreach ((int track, NumericUpDown numeric) in this.trackLoopControls)
+            {
                 numeric.Value = options.TrackLoops.TryGetValue(track, out int loops)
                     ? Math.Clamp(loops, 1, 100000)
                     : 4;
+            }
         }
 
         public BreakbeatRemixOptions Options
@@ -318,7 +320,10 @@ namespace ModularAudience.Forms.Modules.Dialogs
                     CopyToClipboard = this.check_copyToClipboard.Checked
                 });
                 foreach ((int track, NumericUpDown numeric) in this.trackLoopControls)
+                {
                     result.TrackLoops[track] = (int)numeric.Value;
+                }
+
                 return result;
             }
         }

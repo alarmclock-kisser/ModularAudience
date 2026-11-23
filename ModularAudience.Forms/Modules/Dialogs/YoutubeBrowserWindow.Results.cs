@@ -20,16 +20,32 @@ public partial class YoutubeBrowserWindow
         {
             update();
             foreach (var row in selected)
-                if (row.ListView == resultsList && !row.Selected) row.Selected = true;
-            if (focused?.ListView == resultsList && !focused.Focused) focused.Focused = true;
-            if (top?.ListView == resultsList) resultsList.TopItem = top;
+            {
+                if (row.ListView == resultsList && !row.Selected)
+                {
+                    row.Selected = true;
+                }
+            }
+
+            if (focused?.ListView == resultsList && !focused.Focused)
+            {
+                focused.Focused = true;
+            }
+
+            if (top?.ListView == resultsList)
+            {
+                resultsList.TopItem = top;
+            }
         }
         finally
         {
             resultsList.EndUpdate();
             updatingResultRows = false;
             // Restore only focus we owned at the beginning; never steal it from the search field.
-            if (hadFocus && !resultsList.ContainsFocus) resultsList.Focus();
+            if (hadFocus && !resultsList.ContainsFocus)
+            {
+                resultsList.Focus();
+            }
         }
     }
 
@@ -44,7 +60,10 @@ public partial class YoutubeBrowserWindow
     private void Column_Click(object? sender, ColumnClickEventArgs e)
     {
         if (sortColumn != e.Column) { sortColumn = e.Column; sortDescending = true; }
-        else if (sortDescending) sortDescending = false;
+        else if (sortDescending)
+        {
+            sortDescending = false;
+        }
         else { sortColumn = -1; sortDescending = false; }
         UpdateResultRowsPreservingInteraction(ApplySort);
     }
@@ -52,8 +71,11 @@ public partial class YoutubeBrowserWindow
     private void ApplySort()
     {
         for (int index = 0; index < ResultHeaders.Length; index++)
+        {
             resultsList.Columns[index].Text = ResultHeaders[index] +
                 (index == sortColumn ? sortDescending ? " ▼" : " ▲" : "");
+        }
+
         IComparer comparer = sortColumn < 0
             ? new OriginalRowComparer(originalResultOrder)
             : new VideoRowComparer(sortColumn, sortDescending);
@@ -80,18 +102,30 @@ public partial class YoutubeBrowserWindow
 
     private void Metadata_Click(object? sender, EventArgs e)
     {
-        if (SelectedVideo() is not { IsVideo: true } video) return;
+        if (SelectedVideo() is not { IsVideo: true } video)
+        {
+            return;
+        }
+
         StartBrowseOperation("Loading selected-video metadata...", async token =>
         {
             var metadata = await client.GetVideoMetadataAsync(video, token);
             token.ThrowIfCancellationRequested();
             var row = resultsList.Items.Cast<ListViewItem>().FirstOrDefault(item => ((YtdlpVideo)item.Tag!).Id == video.Id);
-            if (row is null) return;
+            if (row is null)
+            {
+                return;
+            }
+
             row.Tag = metadata;
             row.Text = FormatResultTitle(metadata, IsPlayingVideo(metadata));
             string[] values = [metadata.Uploader, FormatDuration(metadata.DurationSeconds),
                 metadata.ViewCount?.ToString("N0") ?? "Unknown", metadata.Id, metadata.Url, FormatUploadDate(metadata.UploadDate)];
-            for (int index = 0; index < values.Length; index++) row.SubItems[index + 1].Text = values[index];
+            for (int index = 0; index < values.Length; index++)
+            {
+                row.SubItems[index + 1].Text = values[index];
+            }
+
             ApplySort();
             Selection_Changed(this, EventArgs.Empty);
             AppendLog(metadata.UploadDate is null ? "Upload date remains unknown; YouTube supplied no date." : "Selected-video metadata loaded.");
@@ -100,7 +134,11 @@ public partial class YoutubeBrowserWindow
 
     private void ShowRelated_Click(object? sender, EventArgs e)
     {
-        if (!CanBrowse || SelectedVideo() is not { IsVideo: true } video) return;
+        if (!CanBrowse || SelectedVideo() is not { IsVideo: true } video)
+        {
+            return;
+        }
+
         int limit = (int)resultLimit.Value;
         dateCancellation?.Cancel();
         ++dateGeneration;
@@ -118,13 +156,25 @@ public partial class YoutubeBrowserWindow
     {
         public int Compare(object? x, object? y)
         {
-            if (x is not ListViewItem { Tag: YtdlpVideo a } || y is not ListViewItem { Tag: YtdlpVideo b }) return 0;
+            if (x is not ListViewItem { Tag: YtdlpVideo a } || y is not ListViewItem { Tag: YtdlpVideo b })
+            {
+                return 0;
+            }
+
             object? left = Key(a), right = Key(b);
             // Unknown values remain last in both directions.
-            if (left is null || right is null) return left is null ? right is null ? 0 : 1 : -1;
+            if (left is null || right is null)
+            {
+                return left is null ? right is null ? 0 : 1 : -1;
+            }
+
             int result = left is string text ? StringComparer.CurrentCultureIgnoreCase.Compare(text, (string)right)
                 : ((IComparable)left).CompareTo(right);
-            if (result == 0) result = StringComparer.Ordinal.Compare(a.Id, b.Id);
+            if (result == 0)
+            {
+                result = StringComparer.Ordinal.Compare(a.Id, b.Id);
+            }
+
             return descending ? -Math.Sign(result) : Math.Sign(result);
         }
 

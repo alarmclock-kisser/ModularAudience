@@ -626,7 +626,10 @@ this.MouseWheel += this.pictureBox_pattern_MouseWheel;
                 ReplaceContents(this.notes, state.Notes);
                 this.instrumentSettingsBySample.Clear();
                 foreach (var pair in state.InstrumentSettings)
+                {
                     this.instrumentSettingsBySample.Add(pair.Key, pair.Value.Clone());
+                }
+
                 for (int row = 0; row < this.samples.Count; row++)
                 {
                     int sourceIndex = this.GetOriginalTrackIndex(row);
@@ -641,7 +644,10 @@ this.MouseWheel += this.pictureBox_pattern_MouseWheel;
                 this.soloTracks.Clear(); this.soloTracks.UnionWith(state.SoloTracks);
                 this.mutedTracks.Clear(); this.mutedTracks.UnionWith(state.MutedTracks);
                 foreach (var pair in state.AutoRerolls)
+                {
                     this.autoRerolls[pair.Key] = new TrackAutoRerollState { Options = pair.Value.Clone() };
+                }
+
                 if (this.selectedLoopSections.RemoveWhere(section => section / 4 >= state.Bars) > 0)
                 {
                     this.loopSelectionRevision++;
@@ -1101,8 +1107,16 @@ this.MouseWheel += this.pictureBox_pattern_MouseWheel;
 
         internal static string ResolveTrackHeaderLabel(string? rowLabel, string? sampleName, int row)
         {
-            if (!string.IsNullOrWhiteSpace(rowLabel)) return rowLabel.Trim();
-            if (!string.IsNullOrWhiteSpace(sampleName)) return sampleName.Trim();
+            if (!string.IsNullOrWhiteSpace(rowLabel))
+            {
+                return rowLabel.Trim();
+            }
+
+            if (!string.IsNullOrWhiteSpace(sampleName))
+            {
+                return sampleName.Trim();
+            }
+
             return $"Track {row + 1}";
         }
 
@@ -1113,7 +1127,10 @@ this.MouseWheel += this.pictureBox_pattern_MouseWheel;
         {
             float maxNameHeight = Math.Min(rowBounds.Height, lineHeight * 3f);
             RectangleF nameBounds = new(rowBounds.X, rowBounds.Y, rowBounds.Width, maxNameHeight);
-            if (!hasSummary) return (nameBounds, RectangleF.Empty);
+            if (!hasSummary)
+            {
+                return (nameBounds, RectangleF.Empty);
+            }
 
             float summaryTop = rowBounds.Y + (rowBounds.Height - (lineHeight * 2f + 1f)) / 2f + lineHeight + 1f;
             RectangleF summaryBounds = new(rowBounds.X, summaryTop, rowBounds.Width, lineHeight);
@@ -1307,8 +1324,15 @@ this.MouseWheel += this.pictureBox_pattern_MouseWheel;
             this.pictureBox_pattern.Focus();
             this.lastPatternPointer = e.Location;
             this.hasPatternPointer = true;
-            if (this.TryClickTrackButtons(e)) return;
-            if (this.TryClickAutoReroll(e)) return;
+            if (this.TryClickTrackButtons(e))
+            {
+                return;
+            }
+
+            if (this.TryClickAutoReroll(e))
+            {
+                return;
+            }
 
             if (this.generatingRect)
             {
@@ -1939,7 +1963,11 @@ this.MouseWheel += this.pictureBox_pattern_MouseWheel;
 
         private void pictureBox_pattern_MouseDoubleClick(object? sender, MouseEventArgs e)
         {
-            if (this.samples.Count > 0 && e.X < this.TrackButtonBounds(0, 2).Right + 6) return;
+            if (this.samples.Count > 0 && e.X < this.TrackButtonBounds(0, 2).Right + 6)
+            {
+                return;
+            }
+
             if (e.Button != MouseButtons.Left)
             {
                 return;
@@ -2014,7 +2042,10 @@ this.MouseWheel += this.pictureBox_pattern_MouseWheel;
             BreakbeatTrackSettingsDialog dialog = new(
                 sampleName, this.trackSettings[row], canRemoveTrack: true, canEditInstrument);
             if (canEditInstrument)
+            {
                 dialog.EditInstrumentRequested += (_, _) => this.EditInstrumentTrack(row, dialog);
+            }
+
             dialog.FormClosed += (_, _) =>
             {
                 if (this.IsDisposed || this.Disposing)
@@ -2061,11 +2092,17 @@ this.MouseWheel += this.pictureBox_pattern_MouseWheel;
 
         private void EditInstrumentTrack(int row, IWin32Window owner)
         {
-            if (row < 0 || row >= this.samples.Count) return;
+            if (row < 0 || row >= this.samples.Count)
+            {
+                return;
+            }
+
             int sourceIndex = this.GetOriginalTrackIndex(row);
             if (sourceIndex < 0 || sourceIndex >= this.sourceSampleOrder.Count
                 || !this.instrumentSettingsBySample.TryGetValue(this.sourceSampleOrder[sourceIndex], out var settings))
+            {
                 return;
+            }
 
             using InstrumentSampleSynthDialog dialog = new(
                 settings.Family,
@@ -2076,11 +2113,22 @@ this.MouseWheel += this.pictureBox_pattern_MouseWheel;
 
         private void UpdateInstrumentTrackSettings(int row, InstrumentSynthSettings settings)
         {
-            if (row < 0 || row >= this.samples.Count) return;
+            if (row < 0 || row >= this.samples.Count)
+            {
+                return;
+            }
+
             int sourceIndex = this.GetOriginalTrackIndex(row);
-            if (sourceIndex < 0 || sourceIndex >= this.sourceSampleOrder.Count) return;
+            if (sourceIndex < 0 || sourceIndex >= this.sourceSampleOrder.Count)
+            {
+                return;
+            }
+
             AudioObj sourceSample = this.sourceSampleOrder[sourceIndex];
-            if (!this.instrumentSettingsBySample.ContainsKey(sourceSample)) return;
+            if (!this.instrumentSettingsBySample.ContainsKey(sourceSample))
+            {
+                return;
+            }
 
             InstrumentSynthSettings snapshot = settings.Clone();
             snapshot.Validate();
@@ -2099,7 +2147,11 @@ this.MouseWheel += this.pictureBox_pattern_MouseWheel;
             }
 
             string label = $"{InstrumentSynthCatalog.FamilyName(snapshot.Family)} - {snapshot.VoiceName}";
-            while (this.rowLabels.Count <= row) this.rowLabels.Add($"Track {this.rowLabels.Count + 1}");
+            while (this.rowLabels.Count <= row)
+            {
+                this.rowLabels.Add($"Track {this.rowLabels.Count + 1}");
+            }
+
             this.rowLabels[row] = label;
             this.deadGroupNotes.Clear();
             this.pictureBox_pattern.Invalidate();
@@ -2223,8 +2275,16 @@ this.MouseWheel += this.pictureBox_pattern_MouseWheel;
             bool isInstrumentTrack = this.instrumentSettingsBySample.TryGetValue(sourceOriginal, out InstrumentSynthSettings? instrumentSettings);
             AudioObj newSourceSample = CloneSampleWithMetadata(sourceOriginal);
             AudioObj newEditorSample = CloneSampleWithMetadata(newSourceSample);
-            if (this.soloTracks.Contains(this.samples[row])) this.soloTracks.Add(newEditorSample);
-            if (this.mutedTracks.Contains(this.samples[row])) this.mutedTracks.Add(newEditorSample);
+            if (this.soloTracks.Contains(this.samples[row]))
+            {
+                this.soloTracks.Add(newEditorSample);
+            }
+
+            if (this.mutedTracks.Contains(this.samples[row]))
+            {
+                this.mutedTracks.Add(newEditorSample);
+            }
+
             BreakbeatTrackSettings clonedSettings = this.trackSettings[row];
             string clonedLabel = (row < this.rowLabels.Count ? this.rowLabels[row] : this.samples[row].Name) + " (Copy)";
             int displayIndex = row + 1;
@@ -2380,7 +2440,10 @@ this.MouseWheel += this.pictureBox_pattern_MouseWheel;
                     control.DragLeave += this.pictureBox_pattern_DragLeave;
                     control.DragDrop += this.pictureBox_pattern_DragDrop;
                 }
-                foreach (Control child in control.Controls) Register(child);
+                foreach (Control child in control.Controls)
+                {
+                    Register(child);
+                }
             }
             Register(this);
         }
@@ -2566,7 +2629,11 @@ this.MouseWheel += this.pictureBox_pattern_MouseWheel;
             }
 
             this.TrackAdded?.Invoke(sourceSample, this.GetExternalTrackIndex(displayIndex));
-            if (this.TrackAdded is not null) this.droppedSourceSamples.Remove(sourceSample);
+            if (this.TrackAdded is not null)
+            {
+                this.droppedSourceSamples.Remove(sourceSample);
+            }
+
             this.RegisterPatternNotesChanged(originalNotes
                 .Concat(this.notes)
                 .Select(note => (BreakbeatPatternNote?)note)
@@ -2926,7 +2993,10 @@ this.MouseWheel += this.pictureBox_pattern_MouseWheel;
                 if (!this.automaticGeneration)
                 {
                     this.selectedNotes.Clear();
-                    foreach (BreakbeatPatternNote note in placed) this.selectedNotes.Add(note);
+                    foreach (BreakbeatPatternNote note in placed)
+                    {
+                        this.selectedNotes.Add(note);
+                    }
                 }
 
                 if (!this.automaticGeneration && this.checkBox_preHear.Checked && placed.Count == 1 && this.hearCancellationTokenSource is null)
@@ -2935,17 +3005,26 @@ this.MouseWheel += this.pictureBox_pattern_MouseWheel;
                 }
             }
             if (!this.automaticGeneration)
+            {
                 this.lastGenerate = new(rowStart, rowEnd, colStart, colEnd, this.bars, this.currentResolution,
                     this.samples.ToArray(), options.Clone(), placed.ToArray());
+            }
+
             this.pictureBox_pattern.Invalidate();
-            if (!this.automaticGeneration) this.CommitHistoryAction();
+            if (!this.automaticGeneration)
+            {
+                this.CommitHistoryAction();
+            }
         }
 
         private void RerollLastGenerate()
         {
             if (this.lastGenerate is not { } last || this.generatingRect || this.generateDragging || this.saveInProgress
                 || last.Bars != this.bars || last.Resolution != this.currentResolution
-                || !last.Samples.SequenceEqual(this.samples, ReferenceEqualityComparer.Instance)) return;
+                || !last.Samples.SequenceEqual(this.samples, ReferenceEqualityComparer.Instance))
+            {
+                return;
+            }
             // Never undo unrelated edits. Only the exact notes produced by the preceding roll
             // are replaced; pre-existing notes and notes added afterwards remain untouched.
             var generated = new HashSet<BreakbeatPatternNote>(last.Generated, ReferenceEqualityComparer.Instance);
@@ -2990,9 +3069,21 @@ this.MouseWheel += this.pictureBox_pattern_MouseWheel;
             // Checkboxes are eligible kinds, not a priority chain. Choose per note so
             // hard-cut cannot swallow all short stretch/varispeed candidates.
             var eligibleKinds = new List<int>();
-            if (options.AllowTruncated && targetTicks < minimumDurationTicks) eligibleKinds.Add(0);
-            if (options.AllowTimeStretch) eligibleKinds.Add(1);
-            if (options.AllowVarispeed) eligibleKinds.Add(2);
+            if (options.AllowTruncated && targetTicks < minimumDurationTicks)
+            {
+                eligibleKinds.Add(0);
+            }
+
+            if (options.AllowTimeStretch)
+            {
+                eligibleKinds.Add(1);
+            }
+
+            if (options.AllowVarispeed)
+            {
+                eligibleKinds.Add(2);
+            }
+
             if (eligibleKinds.Count > 1)
             {
                 int kind = eligibleKinds[(random ?? Random.Shared).Next(eligibleKinds.Count)];
@@ -5487,8 +5578,12 @@ this.MouseWheel += this.pictureBox_pattern_MouseWheel;
                     e.Cancel = true;
                     this.hearCancellationTokenSource?.Cancel();
                     await this.autoSaveWork;
-                    if (!this.IsDisposed) this.Close();
-                    return;
+                    if (!this.IsDisposed)
+                {
+                    this.Close();
+                }
+
+                return;
                 }
                 CancellationTokenSource? hearCancellationTokenSource = this.hearCancellationTokenSource;
                 this.autoRerollClosing = true;
@@ -5603,7 +5698,11 @@ this.MouseWheel += this.pictureBox_pattern_MouseWheel;
                 this.instrumentSampleCache,
                 this.noteRenderCache,
                 attackMilliseconds: this.AttackMilliseconds);
-            if (rendered == null) return;
+            if (rendered == null)
+            {
+                return;
+            }
+
             try
             {
                 if (quarters.Length > 0)
@@ -5612,13 +5711,20 @@ this.MouseWheel += this.pictureBox_pattern_MouseWheel;
                     rendered.Dispose();
                     rendered = excerpt;
                 }
-                if (this.IsDisposed || this.Disposing) return;
+                if (this.IsDisposed || this.Disposing)
+                {
+                    return;
+                }
+
                 string? successfulTemplate;
                 string savedName = this.GetSavedPatternName(notes, this.Bpm, out successfulTemplate);
                 savedName = this.GetUniqueSavedAudioName(savedName);
                 rendered.Name = savedName;
                 if (this.savedCollection == null || this.savedCollection.IsDisposed)
+                {
                     this.savedCollection = new AudioCollectionView([]);
+                }
+
                 this.savedCollection.AudioC.Audios.Add(rendered);
                 rendered = null; // Collection owns the rendered result, independent of this editor.
                 this.savedCollection.Show();

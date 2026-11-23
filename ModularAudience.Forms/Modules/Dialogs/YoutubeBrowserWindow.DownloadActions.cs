@@ -24,14 +24,24 @@ public partial class YoutubeBrowserWindow
     private void DeleteJobs_Click(object? sender, EventArgs e)
     {
         foreach (var job in SelectedDownloadJobs().Where(job => job.Terminal))
+        {
             downloadJobsList.Items.Remove(job.Row);
+        }
     }
 
     private void RetryJobs_Click(object? sender, EventArgs e)
     {
-        if (busy || closing || !binariesReady) return;
+        if (busy || closing || !binariesReady)
+        {
+            return;
+        }
+
         var jobs = SelectedDownloadJobs().Where(CanRetryJob).ToArray();
-        if (jobs.Length == 0) return;
+        if (jobs.Length == 0)
+        {
+            return;
+        }
+
         YtdlpDownloadOptions options;
         try { options = CaptureDownloadOptions(); }
         catch (ArgumentException error) { ReportError("Invalid download settings", error); return; }

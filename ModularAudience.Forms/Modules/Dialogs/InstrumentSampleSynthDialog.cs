@@ -78,13 +78,26 @@ public sealed partial class InstrumentSampleSynthDialog : Form
         this.family = family;
         settings = initialSettings?.Clone() ?? new() { Family = family };
         if (settings.Family != family)
+        {
             throw new ArgumentException("The initial instrument settings must match the selected synthesizer family.", nameof(initialSettings));
-        if (initialSettings is null) settings.ApplyVoiceDefaults();
-        else settings.Validate();
+        }
+
+        if (initialSettings is null)
+        {
+            settings.ApplyVoiceDefaults();
+        }
+        else
+        {
+            settings.Validate();
+        }
+
         if (initialBpm is double bpm)
         {
             if (!double.IsFinite(bpm) || bpm is < 10 or > 400)
+            {
                 throw new ArgumentOutOfRangeException(nameof(initialBpm), "The initial BPM must be between 10 and 400.");
+            }
+
             settings.Bpm = bpm;
         }
         else if (initialSettings is null)
@@ -123,13 +136,20 @@ public sealed partial class InstrumentSampleSynthDialog : Form
             }, voice);
         }
         note.Items.AddRange(noteNames.Reverse().Cast<object>().ToArray()); note.SelectedItem = InstrumentSampleSynth.NoteName(settings.MidiNote);
-        if (family != SynthFamily.DrumSet) Field("Key Note", note);
+        if (family != SynthFamily.DrumSet)
+        {
+            Field("Key Note", note);
+        }
+
         duration.Items.AddRange(Durations.Reverse().Select(d => (object)d.Name).ToArray());
         int durationIndex = initialSettings is null
             ? family == SynthFamily.OtherSoundFx ? 5 : 4
             : Array.FindIndex(Durations, item => Math.Abs(item.Beats - settings.NoteBeats) < 1e-8);
         if (durationIndex < 0)
+        {
             throw new ArgumentException("The initial key duration is not supported by this dialog.", nameof(initialSettings));
+        }
+
         duration.SelectedIndex = Durations.Length - 1 - durationIndex;
         articulation.Items.AddRange(["Straight", "Dotted", "Triplet"]);
         articulation.SelectedIndex = initialSettings is null ? 0
@@ -187,11 +207,20 @@ public sealed partial class InstrumentSampleSynthDialog : Form
         Number(nameof(settings.Resonance), "Filter resonance Q", 0.1m, 12, 0.1m, "Resonance at the filter cutoff.");
         Number(nameof(settings.FilterEnvelope), "Filter envelope (%)", 0, 100, 1, "Initial cutoff lift, falling with decay; Wobble Bass also uses it as filter-LFO depth.");
         if (family is SynthFamily.PluckedStrings or SynthFamily.BowedStrings)
+        {
             Number(nameof(settings.StrikePosition), "Pluck / bow position (%)", 1, 99, 1, "Excitation position changes the harmonic notches and body response.");
+        }
+
         if (family is SynthFamily.DrumSet or SynthFamily.Organ)
+        {
             Number(nameof(settings.DrumSnap), family == SynthFamily.Organ ? "Percussion level (%)" : "Transient / snap (%)", 0, 100, 1, "Attack click / percussion component.");
+        }
+
         if (family == SynthFamily.DrumSet)
+        {
             Number(nameof(settings.DrumSweep), "Pitch sweep (%)", 0, 100, 1, "Exponential downward pitch sweep for membranes and kick attacks.");
+        }
+
         Number(nameof(settings.RoomPercent), "Room / early reflections (%)", 0, 100, 1, "Short stereo reflections; included in the release tail.");
         Number(nameof(settings.StereoWidth), "Stereo width (%)", 0, 100, 1, "Detuned spatial component and channel-offset reflections.");
         Number(nameof(settings.GainPercent), "Output level (%)", 0, 100, 1, "Final amplitude; peak protection attenuates only.");
@@ -209,7 +238,10 @@ public sealed partial class InstrumentSampleSynthDialog : Form
         {
             prehearDelay.ForeColor = prehearDelay.Value == 0 ? SystemColors.GrayText : SystemColors.WindowText;
             CancelAutoHear();
-            if (!syncingPreference) Safe(() => this.store.SavePrehearDelay((int)prehearDelay.Value));
+            if (!syncingPreference)
+            {
+                Safe(() => this.store.SavePrehearDelay((int)prehearDelay.Value));
+            }
         };
         picture.Paint += PaintWave;
         var bottom = new FlowLayoutPanel { Dock = DockStyle.Fill, AutoSize = true, WrapContents = true };
@@ -229,7 +261,7 @@ public sealed partial class InstrumentSampleSynthDialog : Form
         PresetButton("Load preset", LoadPreset);
         PresetButton("Rename preset", RenamePreset);
         PresetButton("Delete preset", DeletePreset);
-        savedPresets.SelectedIndexChanged += (_, _) => { if (savedPresets.SelectedItem is string name) presetName.Text = name; };
+        savedPresets.SelectedIndexChanged += (_, _) => { if (savedPresets.SelectedItem is string name) { presetName.Text = name; } };
         tips.SetToolTip(presetName, "Save creates or updates this named preset. Rename renames the selected preset to this name.");
         root.Controls.Add(top, 0, 0); root.Controls.Add(presetBar, 0, 1); root.Controls.Add(picture, 0, 2); root.Controls.Add(parameters, 0, 3); root.Controls.Add(bottom, 0, 4); Controls.Add(root);
         tips.SetToolTip(voice, "Choose the instrument voice within this family. Changing it loads voice-specific sound defaults; subsequent parameter changes customize the new voice.");
@@ -243,22 +275,30 @@ public sealed partial class InstrumentSampleSynthDialog : Form
         Shown += (_, _) => FitInitialParameterHeight(parameters);
         voice.SelectedIndexChanged += (_, _) =>
         {
-            if (syncing) return;
+            if (syncing)
+            {
+                return;
+            }
+
             settings.VoiceIndex = voice.SelectedIndex;
             settings.ApplyVoiceDefaults();
             ApplyNumbers();
             ResetRandomizationBaselines();
             QueueRender();
         };
-        foreach (var combo in new[] { kit, drum, duration, articulation, format }) combo.SelectedIndexChanged += (_, _) => QueueRender();
+        foreach (var combo in new[] { kit, drum, duration, articulation, format })
+        {
+            combo.SelectedIndexChanged += (_, _) => QueueRender();
+        }
+
         note.SelectedItemChanged += (_, _) => QueueRender();
         hear.Click += async (_, _) => await ToggleHearAsync(); create.Click += async (_, _) => await CreateAsync();
-        loop.CheckedChanged += (_, _) => { if (provider != null) provider.Loop = loop.Checked; };
+        loop.CheckedChanged += (_, _) => { if (provider != null) { provider.Loop = loop.Checked; } };
         autoHearTimer.Tick += (_, _) =>
         {
             autoHearTimer.Stop(); autoHearDue = true; TryAutoHear();
         };
-        playbackTimer.Tick += (_, _) => { if (provider?.Finished == true) StopHear(); picture.Invalidate(); };
+        playbackTimer.Tick += (_, _) => { if (provider?.Finished == true) { StopHear(); } picture.Invalidate(); };
         FormClosing += (_, _) =>
         {
             prehearRequestVersion++;
@@ -276,7 +316,10 @@ public sealed partial class InstrumentSampleSynthDialog : Form
         ResetRandomizationBaselines();
         QueueRender();
         initialized = true;
-        lock (ActiveDialogsGate) ActiveDialogs.Add(this);
+        lock (ActiveDialogsGate)
+        {
+            ActiveDialogs.Add(this);
+        }
     }
     private void FitInitialParameterHeight(FlowLayoutPanel parameters)
     {
@@ -289,7 +332,11 @@ public sealed partial class InstrumentSampleSynthDialog : Form
             int preferredHeight = parameters.GetPreferredSize(new Size(parameters.Width, 0)).Height;
             // Waveform and parameters each receive half of the flexible height.
             int height = Math.Clamp(Height + 2 * (preferredHeight - parameters.ClientSize.Height), MinimumSize.Height, maximumHeight);
-            if (height == Height) break;
+            if (height == Height)
+            {
+                break;
+            }
+
             Height = height;
         }
         Location = new Point(workingArea.Left + Math.Max(0, (workingArea.Width - Width) / 2),
@@ -297,10 +344,14 @@ public sealed partial class InstrumentSampleSynthDialog : Form
         // Shown runs only once. Later user resizes retain the normal AutoScroll behavior.
     }
     private void Safe(Action action)
-    { try { action(); } catch (Exception error) { if (!disposed) status.Text = error.Message; } }
+    { try { action(); } catch (Exception error) { if (!disposed) { status.Text = error.Message; } } }
     private void ReceivePrehearDelay(int milliseconds)
     {
-        if (disposed || IsDisposed) return;
+        if (disposed || IsDisposed)
+        {
+            return;
+        }
+
         if (InvokeRequired) { BeginInvoke(() => ReceivePrehearDelay(milliseconds)); return; }
         syncingPreference = true;
         try
@@ -313,7 +364,11 @@ public sealed partial class InstrumentSampleSynthDialog : Form
     }
     private void ReceivePresetsChanged(SynthFamily changedFamily)
     {
-        if (disposed || IsDisposed || changedFamily != family) return;
+        if (disposed || IsDisposed || changedFamily != family)
+        {
+            return;
+        }
+
         if (InvokeRequired) { BeginInvoke(() => ReceivePresetsChanged(changedFamily)); return; }
         Safe(RefreshPresets);
     }
@@ -322,7 +377,10 @@ public sealed partial class InstrumentSampleSynthDialog : Form
         string? selected = savedPresets.SelectedItem as string;
         string[] names = store.Names(family);
         savedPresets.Items.Clear(); savedPresets.Items.AddRange(names);
-        if (selected != null && names.Contains(selected)) savedPresets.SelectedItem = selected;
+        if (selected != null && names.Contains(selected))
+        {
+            savedPresets.SelectedItem = selected;
+        }
     }
     private void SavePreset()
     {
@@ -346,18 +404,30 @@ public sealed partial class InstrumentSampleSynthDialog : Form
     private void ApplyPreset(InstrumentSynthPreset preset)
     {
         var next = preset.Settings.Clone(); next.Validate();
-        if (next.Family != family) throw new ArgumentException("This preset belongs to a different instrument family.");
+        if (next.Family != family)
+        {
+            throw new ArgumentException("This preset belongs to a different instrument family.");
+        }
+
         int durationIndex = Array.FindIndex(Durations, d => Math.Abs(d.Beats - next.NoteBeats) < 1e-8);
         int timing = Math.Abs(next.DurationMultiplier - 1) < 1e-8 ? 0 : Math.Abs(next.DurationMultiplier - 1.5) < 1e-8 ? 1
             : Math.Abs(next.DurationMultiplier - 2d / 3) < 1e-8 ? 2 : -1;
         int formatIndex = (next.SampleRate, next.Channels) switch { (44100, 2) => 0, (48000, 2) => 1, (22050, 1) => 2, (44100, 1) => 3, (96000, 2) => 4, _ => -1 };
-        if (durationIndex < 0 || timing < 0 || formatIndex < 0) throw new ArgumentException("This preset uses timing or an audio format not supported by this dialog.");
+        if (durationIndex < 0 || timing < 0 || formatIndex < 0)
+        {
+            throw new ArgumentException("This preset uses timing or an audio format not supported by this dialog.");
+        }
+
         StopHear(); CancelAutoHear(); syncing = true;
         try
         {
             settings = next;
             if (family == SynthFamily.DrumSet) { kit.SelectedIndex = next.KitIndex; drum.SelectedIndex = (int)next.Drum; }
-            else voice.SelectedIndex = next.VoiceIndex;
+            else
+            {
+                voice.SelectedIndex = next.VoiceIndex;
+            }
+
             note.SelectedItem = InstrumentSampleSynth.NoteName(next.MidiNote);
             duration.SelectedIndex = Durations.Length - 1 - durationIndex;
             articulation.SelectedIndex = timing; format.SelectedIndex = formatIndex;
@@ -372,7 +442,11 @@ public sealed partial class InstrumentSampleSynthDialog : Form
     private void ApplyNumbers()
     {
         bool previousSyncing = syncing; syncing = true;
-        try { foreach (var pair in numbers) pair.Value.Value = Math.Clamp(Convert.ToDecimal(typeof(InstrumentSynthSettings).GetProperty(pair.Key)!.GetValue(settings)), pair.Value.Minimum, pair.Value.Maximum); }
+        try { foreach (var pair in numbers)
+            {
+                pair.Value.Value = Math.Clamp(Convert.ToDecimal(typeof(InstrumentSynthSettings).GetProperty(pair.Key)!.GetValue(settings)), pair.Value.Minimum, pair.Value.Maximum);
+            }
+        }
         finally { syncing = previousSyncing; }
     }
 
@@ -588,7 +662,11 @@ public sealed partial class InstrumentSampleSynthDialog : Form
             property.SetValue(snapshot, Convert.ChangeType(pair.Value.Value, property.PropertyType));
         }
         if (family == SynthFamily.DrumSet) { snapshot.KitIndex = kit.SelectedIndex; snapshot.Drum = (SynthDrum)drum.SelectedIndex; }
-        else snapshot.VoiceIndex = voice.SelectedIndex;
+        else
+        {
+            snapshot.VoiceIndex = voice.SelectedIndex;
+        }
+
         snapshot.MidiNote = Math.Max(0, Array.IndexOf(noteNames, note.Text)) + 12;
         int durationIndex = duration.SelectedIndex < 0 ? 0 : Durations.Length - 1 - duration.SelectedIndex;
         snapshot.NoteBeats = Durations[durationIndex].Beats;
@@ -599,7 +677,11 @@ public sealed partial class InstrumentSampleSynthDialog : Form
     }
     private void QueueRender()
     {
-        if (syncing || disposed) return;
+        if (syncing || disposed)
+        {
+            return;
+        }
+
         revision++; rendering?.Cancel(); status.Text = "Updating sample…";
         CancelAutoHear();
         if (initialized && prehearDelay.Value > 0)
@@ -613,16 +695,31 @@ public sealed partial class InstrumentSampleSynthDialog : Form
     { autoHearTimer.Stop(); autoHearPending = false; autoHearDue = false; }
     private void TryAutoHear()
     {
-        if (disposed || !autoHearPending || !autoHearDue || prehearDelay.Value == 0 || ready != revision || audio == null) return;
+        if (disposed || !autoHearPending || !autoHearDue || prehearDelay.Value == 0 || ready != revision || audio == null)
+        {
+            return;
+        }
+
         CancelAutoHear();
         try { StopHear(); StartHear(); }
-        catch (Exception error) { StopHear(); if (!disposed) status.Text = error.Message; }
+        catch (Exception error) { StopHear(); if (!disposed)
+            {
+                status.Text = error.Message;
+            }
+        }
     }
     private Task RenderAsync()
     {
-        if (disposed || ready == revision) return Task.CompletedTask;
+        if (disposed || ready == revision)
+        {
+            return Task.CompletedTask;
+        }
+
         if (renderTask is Task activeTask && !activeTask.IsCompleted && renderTaskRevision == revision)
+        {
             return activeTask;
+        }
+
         rendering?.Cancel();
         var cts = new CancellationTokenSource();
         rendering = cts;
@@ -640,7 +737,11 @@ public sealed partial class InstrumentSampleSynthDialog : Form
             var next = await Task.Run(() => RenderWithOverview(snapshot, cts.Token), cts.Token);
             if (disposed || version != revision || cts.IsCancellationRequested) { next.Audio.Dispose(); return; }
             var old = audio; audio = next.Audio; ready = version;
-            if (provider != null && (provider.WaveFormat.SampleRate != next.Audio.SampleRate || provider.WaveFormat.Channels != next.Audio.Channels)) StopHear();
+            if (provider != null && (provider.WaveFormat.SampleRate != next.Audio.SampleRate || provider.WaveFormat.Channels != next.Audio.Channels))
+            {
+                StopHear();
+            }
+
             overviewMin = next.Minimum; overviewMax = next.Maximum; peak = next.Peak;
             provider?.Update(next.Audio.Data); old?.Dispose(); picture.Invalidate();
             status.Text = $"{snapshot.VoiceName} · Gate {snapshot.GateSeconds:0.###} s + tail {snapshot.ReleaseSeconds:0.##} s · {next.Audio.Duration.TotalSeconds:0.###} s · {next.Audio.SampleRate} Hz";
@@ -655,7 +756,7 @@ public sealed partial class InstrumentSampleSynthDialog : Form
                 CancelAutoHear();
             }
         }
-        finally { if (ReferenceEquals(rendering, cts)) rendering = null; cts.Dispose(); }
+        finally { if (ReferenceEquals(rendering, cts)) { rendering = null; } cts.Dispose(); }
     }
 
     private static (AudioObj Audio, double[] Minimum, double[] Maximum, float Peak) RenderWithOverview(
@@ -676,7 +777,11 @@ public sealed partial class InstrumentSampleSynthDialog : Form
 
     private async Task<bool> EnsureRendered()
     {
-        if (ready != revision) await RenderAsync();
+        if (ready != revision)
+        {
+            await RenderAsync();
+        }
+
         return !disposed && audio != null && ready == revision;
     }
     private async Task ToggleHearAsync()
@@ -761,10 +866,18 @@ public sealed partial class InstrumentSampleSynthDialog : Form
         int requestVersion = ++prehearRequestVersion;
         try
         {
-            if (!await EnsureRendered() || requestVersion != prehearRequestVersion) return;
+            if (!await EnsureRendered() || requestVersion != prehearRequestVersion)
+            {
+                return;
+            }
+
             StartHear();
         }
-        catch (Exception error) { StopHear(); if (!disposed) status.Text = error.Message; }
+        catch (Exception error) { StopHear(); if (!disposed)
+            {
+                status.Text = error.Message;
+            }
+        }
     }
 
     private static Exception? StopAllPrehearPlayback()
@@ -821,24 +934,43 @@ public sealed partial class InstrumentSampleSynthDialog : Form
     private void StopHear() { playbackTimer.Stop(); output?.Stop(); output?.Dispose(); output = null; provider = null; hear.Text = "Prehear"; }
     private async Task CreateAsync(bool closeAfterCreate = false)
     {
-        if (creating) return; creating = true; create.Enabled = false;
-        if (closeAfterCreate) this.button_ok.Enabled = false;
+        if (creating)
+        {
+            return;
+        }
+
+        creating = true; create.Enabled = false;
+        if (closeAfterCreate)
+        {
+            this.button_ok.Enabled = false;
+        }
+
         try
         {
             if (await EnsureRendered())
             {
                 AddToCollection();
-                if (closeAfterCreate) Close();
+                if (closeAfterCreate)
+                {
+                    Close();
+                }
             }
         }
-        catch (Exception error) { if (!disposed) status.Text = error.Message; }
+        catch (Exception error) { if (!disposed)
+            {
+                status.Text = error.Message;
+            }
+        }
         finally
         {
             creating = false;
             if (!disposed)
             {
                 create.Enabled = true;
-                if (closeAfterCreate) this.button_ok.Enabled = true;
+                if (closeAfterCreate)
+                {
+                    this.button_ok.Enabled = true;
+                }
             }
         }
     }
@@ -856,23 +988,36 @@ public sealed partial class InstrumentSampleSynthDialog : Form
 
     private void Confirm()
     {
-        if (creating) return;
+        if (creating)
+        {
+            return;
+        }
+
         creating = true;
         this.button_ok.Enabled = false;
         try
         {
             if (this.onInstrumentConfirmed is not null)
+            {
                 this.onInstrumentConfirmed(CaptureSettings());
+            }
+
             Close();
         }
         catch (Exception error)
         {
-            if (!disposed) status.Text = error.Message;
+            if (!disposed)
+            {
+                status.Text = error.Message;
+            }
         }
         finally
         {
             creating = false;
-            if (!disposed) this.button_ok.Enabled = true;
+            if (!disposed)
+            {
+                this.button_ok.Enabled = true;
+            }
         }
     }
 
@@ -956,7 +1101,11 @@ public sealed partial class InstrumentSampleSynthDialog : Form
 
     private async Task CreateOctaveAsync()
     {
-        if (this.octaveCreating) return;
+        if (this.octaveCreating)
+        {
+            return;
+        }
+
         this.octaveCreating = true;
         this.button_createOctave.Enabled = false;
         CancellationTokenSource cancellation = new();
@@ -1003,7 +1152,10 @@ public sealed partial class InstrumentSampleSynthDialog : Form
             }
 
             cancellation.Token.ThrowIfCancellationRequested();
-            if (disposed || IsDisposed) return;
+            if (disposed || IsDisposed)
+            {
+                return;
+            }
 
             AudioCollectionView octaveCollection = new(
                 generated,
@@ -1023,31 +1175,63 @@ public sealed partial class InstrumentSampleSynthDialog : Form
         }
         catch (OperationCanceledException)
         {
-            if (!disposed) status.Text = "Octave generation cancelled.";
+            if (!disposed)
+            {
+                status.Text = "Octave generation cancelled.";
+            }
         }
         catch (Exception error)
         {
-            if (!disposed) status.Text = error.Message;
+            if (!disposed)
+            {
+                status.Text = error.Message;
+            }
         }
         finally
         {
-            foreach (AudioObj sample in generated) sample.Dispose();
-            if (ReferenceEquals(this.octaveRendering, cancellation)) this.octaveRendering = null;
+            foreach (AudioObj sample in generated)
+            {
+                sample.Dispose();
+            }
+
+            if (ReferenceEquals(this.octaveRendering, cancellation))
+            {
+                this.octaveRendering = null;
+            }
+
             cancellation.Dispose();
             this.octaveCreating = false;
-            if (!disposed) this.button_createOctave.Enabled = true;
+            if (!disposed)
+            {
+                this.button_createOctave.Enabled = true;
+            }
         }
     }
 
     private void AddToCollection()
     {
-        if (audio == null) throw new InvalidOperationException("Render a valid sample first.");
-        if (collection == null || collection.IsDisposed) collection = new AudioCollectionView([], "Synthesized " + InstrumentSynthCatalog.FamilyName(family));
+        if (audio == null)
+        {
+            throw new InvalidOperationException("Render a valid sample first.");
+        }
+
+        if (collection == null || collection.IsDisposed)
+        {
+            collection = new AudioCollectionView([], "Synthesized " + InstrumentSynthCatalog.FamilyName(family));
+        }
+
         var created = audio.Clone();
         if (family == SynthFamily.DrumSet)
+        {
             created.Tag = GetDrumsetElement((SynthDrum)drum.SelectedIndex);
+        }
+
         string basis = audio.Name, name = basis; int index = 2;
-        while (collection.AudioC.Audios.Any(a => a.Name == name)) name = basis + " " + index++;
+        while (collection.AudioC.Audios.Any(a => a.Name == name))
+        {
+            name = basis + " " + index++;
+        }
+
         created.Rename(name); collection.AudioC.Audios.Add(created); collection.Show();
         status.Text = "Created: " + name;
     }
@@ -1080,6 +1264,7 @@ public sealed partial class InstrumentSampleSynthDialog : Form
         {
             token.ThrowIfCancellationRequested();
             for (int i = b * frames / bins; i < (b + 1) * frames / bins; i++)
+            {
                 for (int c = 0; c < value.Channels; c++)
                 {
                     float sample = value.Data[i * value.Channels + c];
@@ -1087,6 +1272,7 @@ public sealed partial class InstrumentSampleSynthDialog : Form
                     maximum[b] = Math.Max(maximum[b], sample);
                     peak = Math.Max(peak, Math.Abs(sample));
                 }
+            }
         }
         return (minimum, maximum, peak);
     }
@@ -1094,7 +1280,11 @@ public sealed partial class InstrumentSampleSynthDialog : Form
     {
         var g = e.Graphics; float middle = picture.Height / 2f, scale = Math.Max(1, picture.Height / 2f - 18);
         using var grid = new Pen(Color.FromArgb(55, 60, 70)); using var wave = new Pen(Color.Turquoise);
-        for (int i = 0; i <= 8; i++) g.DrawLine(grid, i * picture.Width / 8, 0, i * picture.Width / 8, picture.Height);
+        for (int i = 0; i <= 8; i++)
+        {
+            g.DrawLine(grid, i * picture.Width / 8, 0, i * picture.Width / 8, picture.Height);
+        }
+
         g.DrawLine(grid, 0, middle, picture.Width, middle);
         for (int x = 0; x < picture.Width && overviewMin.Length > 0; x++)
         {
@@ -1115,7 +1305,11 @@ public sealed partial class InstrumentSampleSynthDialog : Form
             disposed = true; store.PrehearDelayChanged -= ReceivePrehearDelay; store.PresetsChanged -= ReceivePresetsChanged;
             prehearRequestVersion++;
             spaceKeyHeld = false;
-            lock (ActiveDialogsGate) ActiveDialogs.Remove(this);
+            lock (ActiveDialogsGate)
+            {
+                ActiveDialogs.Remove(this);
+            }
+
             CancelAutoHear(); autoHearTimer.Dispose(); rendering?.Cancel(); this.octaveRendering?.Cancel();
             StopHear(); playbackTimer.Dispose(); tips.Dispose(); audio?.Dispose(); this.components?.Dispose();
         }
@@ -1130,7 +1324,7 @@ public sealed partial class InstrumentSampleSynthDialog : Form
         public WaveFormat WaveFormat { get; }
         public bool Loop { get; set; }
         public bool Finished { get; private set; }
-        public float Progress { get { lock (gate) return position / (float)Math.Max(1, data.Length); } }
+        public float Progress { get { lock (gate) { return position / (float)Math.Max(1, data.Length); } } }
         public SynthPreview(int rate, int channels) => WaveFormat = WaveFormat.CreateIeeeFloatWaveFormat(rate, channels);
         public void Update(float[] next) { lock (gate) { data = next; position = 0; fade = 0; Finished = false; } }
         public int Read(Span<float> buffer)
@@ -1140,11 +1334,21 @@ public sealed partial class InstrumentSampleSynthDialog : Form
                 int channels = WaveFormat.Channels;
                 for (int i = 0; i < buffer.Length; i += channels)
                 {
-                    if (position >= data.Length) { if (Loop) { position = 0; fade = 0; } else Finished = true; }
+                    if (position >= data.Length) { if (Loop) { position = 0; fade = 0; } else
+                        {
+                            Finished = true;
+                        }
+                    }
                     fade = Math.Min(1, fade + 1f / Math.Max(1, WaveFormat.SampleRate / 250));
                     for (int c = 0; c < channels && i + c < buffer.Length; c++)
+                    {
                         buffer[i + c] = !Finished && position + c < data.Length ? data[position + c] * fade : 0;
-                    if (!Finished) position += channels;
+                    }
+
+                    if (!Finished)
+                    {
+                        position += channels;
+                    }
                 }
                 return buffer.Length;
             }

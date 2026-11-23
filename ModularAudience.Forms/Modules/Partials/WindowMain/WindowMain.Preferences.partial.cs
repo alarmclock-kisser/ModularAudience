@@ -64,14 +64,21 @@ public partial class WindowMain
 
     private void PreferencesFileChanged(object? sender, EventArgs e)
     {
-        if (this.IsDisposed || this.Disposing || this._coOpShutdownStarted || !this.IsHandleCreated) return;
+        if (this.IsDisposed || this.Disposing || this._coOpShutdownStarted || !this.IsHandleCreated)
+        {
+            return;
+        }
+
         try { this.BeginInvoke((Action)this.ReloadApplicationPreferences); }
         catch (InvalidOperationException) { }
     }
 
     private void ReloadApplicationPreferences()
     {
-        if (this.IsDisposed || this.Disposing || this._coOpShutdownStarted) return;
+        if (this.IsDisposed || this.Disposing || this._coOpShutdownStarted)
+        {
+            return;
+        }
         // Read at dispatch time, not on the watcher thread, so queued events
         // cannot restore an older snapshot over a newer local preference.
         try { this.ApplyApplicationPreferences(this._preferencesStore.Load()); }
@@ -83,7 +90,11 @@ public partial class WindowMain
 
     private void SaveApplicationPreference(Func<ApplicationPreferences> save)
     {
-        if (this._applyingPreferences) return;
+        if (this._applyingPreferences)
+        {
+            return;
+        }
+
         try { this.ApplyApplicationPreferences(save()); }
         catch (Exception error) when (IsPreferenceError(error))
         {
@@ -115,7 +126,11 @@ public partial class WindowMain
             this.checkBox_oneBag.Checked = settings.AllInOneBag;
             this.button_newBag.Enabled = !settings.AllInOneBag;
             Hints.HintPolicy.SetEnabled(settings.EnableToolTips);
-            if (this.enableToolTipsMenuItem is { } item) item.Checked = settings.EnableToolTips;
+            if (this.enableToolTipsMenuItem is { } item)
+            {
+                item.Checked = settings.EnableToolTips;
+            }
+
             this._applicationPreferences = settings;
             this.UpdateWorkingDirectoryToolTip();
         }

@@ -16,7 +16,11 @@ public static class QuantumExperimentSerializer
     public static QuantumExperimentDocument Deserialize(string json)
     {
         ArgumentException.ThrowIfNullOrWhiteSpace(json);
-        if (json.Length > 1_048_576) throw new ArgumentException("Quantum project files must not exceed 1 MiB.");
+        if (json.Length > 1_048_576)
+        {
+            throw new ArgumentException("Quantum project files must not exceed 1 MiB.");
+        }
+
         var document = JsonSerializer.Deserialize(json, QuantumExperimentJsonContext.Default.QuantumExperimentDocument)
             ?? throw new JsonException("The quantum project is empty.");
         Validate(document);
@@ -27,7 +31,10 @@ public static class QuantumExperimentSerializer
     {
         ArgumentNullException.ThrowIfNull(document);
         if (document.Version != 1 || document.Circuit is null || document.Options is null || document.Randomization is null)
+        {
             throw new ArgumentException("This quantum project version or document structure is not supported.");
+        }
+
         _ = QuantumCircuitComposer.Build(document.Circuit);
         document.Options.Validate(document.Circuit.QubitCount, document.Tracks);
         _ = QuantumCircuitComposer.Randomize(document.Circuit.QubitCount, document.Randomization);

@@ -91,11 +91,23 @@ namespace ModularAudience.Forms.Modules.Dialogs
 
         private async Task GenerateSequenceAsync(string nodeId, bool createEngine)
         {
-            if (this.isGenerating || this.isTraining || this.isSessionIo || this.closing) return;
+            if (this.isGenerating || this.isTraining || this.isSessionIo || this.closing)
+            {
+                return;
+            }
+
             try
             {
-                if (this.engine is not null && !this.EnsureSessionCompatible()) return;
-                if (!this.PrepareSessionForGeneration(ref nodeId)) return;
+                if (this.engine is not null && !this.EnsureSessionCompatible())
+                {
+                    return;
+                }
+
+                if (!this.PrepareSessionForGeneration(ref nodeId))
+                {
+                    return;
+                }
+
                 this.SetGenerationControlsEnabled(false);
                 await this.StopPlaybackAsync();
                 this.CancelGeneration();
@@ -187,7 +199,11 @@ namespace ModularAudience.Forms.Modules.Dialogs
 
                 TimeSpan duration = beat.Duration > TimeSpan.Zero ? beat.Duration : TimeSpan.FromSeconds(1);
                 await Task.Delay(duration, cancellationToken);
-                if (cancellationToken.IsCancellationRequested || this.closing) return;
+                if (cancellationToken.IsCancellationRequested || this.closing)
+                {
+                    return;
+                }
+
                 this.SetFeedbackEnabled(true);
                 this.label_status.Text = this.checkBox_loopUntilFeedback.Checked
                     ? "Beat is looping. Choose feedback to train the engine."
@@ -271,7 +287,10 @@ namespace ModularAudience.Forms.Modules.Dialogs
             {
                 return;
             }
-            if (this.isGenerating || this.isTraining || this.isSessionIo || this.feedbackGiven || !this.EnsureSessionCompatible()) return;
+            if (this.isGenerating || this.isTraining || this.isSessionIo || this.feedbackGiven || !this.EnsureSessionCompatible())
+            {
+                return;
+            }
 
             try
             {
@@ -310,7 +329,10 @@ namespace ModularAudience.Forms.Modules.Dialogs
             {
                 return;
             }
-            if (this.isGenerating || this.isTraining || this.isSessionIo || !this.EnsureSessionCompatible()) return;
+            if (this.isGenerating || this.isTraining || this.isSessionIo || !this.EnsureSessionCompatible())
+            {
+                return;
+            }
 
             try
             {
@@ -331,7 +353,11 @@ namespace ModularAudience.Forms.Modules.Dialogs
 
         private async void NeuralBeatEngineDialog_FormClosing(object sender, FormClosingEventArgs e)
         {
-            if (this.closing) return;
+            if (this.closing)
+            {
+                return;
+            }
+
             e.Cancel = true;
             if (this.isGenerating || this.isTraining || this.isSessionIo)
             {
@@ -368,7 +394,10 @@ namespace ModularAudience.Forms.Modules.Dialogs
             int stepsPerBeat = this.sessionLocked && this.engine is not null ? this.engine.Config.StepsPerBeat : (int)this.numericUpDown_stepsPerBeat.Value;
             double duration = pattern[0].Length * 60d / (double)this.numericUpDown_bpm.Value / stepsPerBeat;
             if (duration * 44100 * 2 * sizeof(float) > 512L * 1024 * 1024)
+            {
                 throw new InvalidOperationException("The rendered beat would exceed 512 MiB. Use fewer bars/steps or a faster BPM in a new session.");
+            }
+
             this.ShowBeatMap(pattern);
             this.label_status.Text = "Rendering beat audio...";
             var previousBeat = this.renderedBeat;
@@ -395,13 +424,19 @@ namespace ModularAudience.Forms.Modules.Dialogs
 
         private void ShowBeatMap(IReadOnlyList<bool[]> pattern)
         {
-            if (this.drawingBeatMap) return;
+            if (this.drawingBeatMap)
+            {
+                return;
+            }
+
             this.drawingBeatMap = true;
             try
             {
                 this.RenderBeatMap(pattern);
                 if (this.pictureBox_beatMap.Parent is Panel viewport)
+                {
                     this.pictureBox_beatMap.Bounds = viewport.ClientRectangle;
+                }
             }
             finally { this.drawingBeatMap = false; }
         }
@@ -455,7 +490,11 @@ namespace ModularAudience.Forms.Modules.Dialogs
 
         private async void removeToolStripMenuItem_Click(object sender, EventArgs e)
         {
-            if (!this.EditingAvailable) return;
+            if (!this.EditingAvailable)
+            {
+                return;
+            }
+
             if (this.listBox_samples.SelectedItem is AudioObj selectedAudio)
             {
                 this.isSessionIo = true; this.UpdateSessionAvailability();

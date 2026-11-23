@@ -51,7 +51,10 @@ public sealed record QuantumBeatOptions
         if (qubits is < 4 or > 16 || tracks.Count is < 1 or > 32 ||
             this.Bars is < 1 or > 16 || this.StepsPerBar is < 4 or > 64 || this.Bars * this.StepsPerBar > 1024 ||
             !Enum.IsDefined(this.Arrangement) || this.ModifierQubit < 0 || this.ModifierQubit >= qubits)
+        {
             throw new ArgumentException("Use 4 to 16 qubits, 1 to 32 sample tracks and at most 1,024 arrangement steps.");
+        }
+
         CheckRange(this.Bpm, 20, 400, "Tempo");
         CheckRange(this.Density, 0, 1, "Density");
         CheckRange(this.Swing, 0, 0.49, "Swing");
@@ -74,7 +77,10 @@ public sealed record QuantumBeatOptions
         {
             if (track is null || string.IsNullOrWhiteSpace(track.Name) || track.Name.Length > 256 ||
                 track.TriggerQubit < 0 || track.TriggerQubit >= qubits || Math.Abs((long)track.StepOffset) > 1024)
+            {
                 throw new ArgumentException("Every sample track needs a name, a valid trigger qubit and a step offset within the arrangement limit.");
+            }
+
             CheckRange(track.DensityScale, 0, 2, "Track density");
             CheckRange(track.Gain, 0, 1, "Track gain");
             CheckRange(track.PitchOffsetCents, -1200, 1200, "Track pitch");
@@ -84,6 +90,8 @@ public sealed record QuantumBeatOptions
     private static void CheckRange(double value, double minimum, double maximum, string name)
     {
         if (!double.IsFinite(value) || value < minimum || value > maximum)
+        {
             throw new ArgumentException(name + " is outside its supported range.");
+        }
     }
 }

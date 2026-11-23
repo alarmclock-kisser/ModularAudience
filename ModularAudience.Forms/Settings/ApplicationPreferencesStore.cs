@@ -15,7 +15,11 @@ internal sealed class ApplicationPreferencesStore
         get
         {
             string appData = Environment.GetFolderPath(Environment.SpecialFolder.ApplicationData, Environment.SpecialFolderOption.DoNotVerify);
-            if (!Path.IsPathFullyQualified(appData)) throw new DirectoryNotFoundException("The AppData directory is unavailable.");
+            if (!Path.IsPathFullyQualified(appData))
+            {
+                throw new DirectoryNotFoundException("The AppData directory is unavailable.");
+            }
+
             return Path.Combine(appData, "ModularAudience", "application-settings.json");
         }
     }
@@ -33,7 +37,11 @@ internal sealed class ApplicationPreferencesStore
     {
         bool exists = File.Exists(this.FilePath);
         ApplicationPreferences settings = this.Read();
-        if (!exists) this.Write(settings);
+        if (!exists)
+        {
+            this.Write(settings);
+        }
+
         return settings;
     });
 
@@ -63,8 +71,16 @@ internal sealed class ApplicationPreferencesStore
 
     private ApplicationPreferences Read()
     {
-        if (!File.Exists(this.FilePath)) return new ApplicationPreferences();
-        if (new FileInfo(this.FilePath).Length > 65536) throw new InvalidDataException("Application preferences exceed 64 KiB.");
+        if (!File.Exists(this.FilePath))
+        {
+            return new ApplicationPreferences();
+        }
+
+        if (new FileInfo(this.FilePath).Length > 65536)
+        {
+            throw new InvalidDataException("Application preferences exceed 64 KiB.");
+        }
+
         return (JsonSerializer.Deserialize<ApplicationPreferences>(File.ReadAllText(this.FilePath))
             ?? throw new InvalidDataException("The application preferences file is empty.")).Normalize();
     }
@@ -80,10 +96,20 @@ internal sealed class ApplicationPreferencesStore
                 JsonSerializer.Serialize(stream, settings, JsonOptions);
                 stream.Flush(flushToDisk: true);
             }
-            if (File.Exists(this.FilePath)) File.Replace(temporary, this.FilePath, null);
-            else File.Move(temporary, this.FilePath);
+            if (File.Exists(this.FilePath))
+            {
+                File.Replace(temporary, this.FilePath, null);
+            }
+            else
+            {
+                File.Move(temporary, this.FilePath);
+            }
         }
-        finally { if (File.Exists(temporary)) File.Delete(temporary); }
+        finally { if (File.Exists(temporary))
+            {
+                File.Delete(temporary);
+            }
+        }
     }
 
     private T WithLock<T>(Func<T> action)
@@ -94,9 +120,17 @@ internal sealed class ApplicationPreferencesStore
         {
             try { acquired = mutex.WaitOne(TimeSpan.FromSeconds(5)); }
             catch (AbandonedMutexException) { acquired = true; }
-            if (!acquired) throw new IOException("Another instance is busy saving application preferences.");
+            if (!acquired)
+            {
+                throw new IOException("Another instance is busy saving application preferences.");
+            }
+
             return action();
         }
-        finally { if (acquired) mutex.ReleaseMutex(); }
+        finally { if (acquired)
+            {
+                mutex.ReleaseMutex();
+            }
+        }
     }
 }

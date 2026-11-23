@@ -26,11 +26,15 @@ internal sealed class CurveBindingControl : UserControl
         row.Controls.AddRange([this.enabled, this.edit, this.equation]); this.Controls.Add(row);
         this.enabled.CheckedChanged += (_, _) =>
         {
-            if (this.syncing || this.binding is null) return;
+            if (this.syncing || this.binding is null)
+            {
+                return;
+            }
+
             this.binding = this.binding with { Enabled = this.enabled.Checked }; this.UpdateLabel(); this.SettingsChanged?.Invoke(this, EventArgs.Empty);
         };
         this.edit.Click += (_, _) => this.EditCurve(); this.Apply(null);
-        this.EnabledChanged += (_, _) => { if (this.dialog is { IsDisposed: false }) this.dialog.Enabled = this.Enabled; };
+        this.EnabledChanged += (_, _) => { if (this.dialog is { IsDisposed: false }) { this.dialog.Enabled = this.Enabled; } };
     }
     internal event EventHandler? SettingsChanged;
     internal EffectParameterCurve? CaptureSettings() => this.binding?.Copy();
@@ -45,11 +49,20 @@ internal sealed class CurveBindingControl : UserControl
     {
         if (this.dialog is { IsDisposed: false }) { this.dialog.Activate(); return; }
         var child = new CurveEditorDialog(this.target, this.binding, this.currentValue, this.AcceptCurve);
-        this.dialog = child; child.FormClosed += (_, _) => { if (ReferenceEquals(this.dialog, child)) this.dialog = null; };
+        this.dialog = child; child.FormClosed += (_, _) => { if (ReferenceEquals(this.dialog, child)) { this.dialog = null; } };
         Form? owner = this.FindForm();
-        if (owner is null) child.Show();
-        else if (this.showChildDialog is not null) this.showChildDialog(child, owner);
-        else child.Show(owner);
+        if (owner is null)
+        {
+            child.Show();
+        }
+        else if (this.showChildDialog is not null)
+        {
+            this.showChildDialog(child, owner);
+        }
+        else
+        {
+            child.Show(owner);
+        }
     }
     private void UpdateLabel()
     {

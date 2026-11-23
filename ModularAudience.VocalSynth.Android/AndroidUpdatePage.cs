@@ -31,7 +31,10 @@ internal sealed class AndroidUpdatePage : ContentPage
         this.closeButton.Clicked += async (_, _) =>
         {
             if (this.apkPath == null)
+            {
                 this.cancellation.Cancel();
+            }
+
             await Shell.Current.Navigation.PopModalAsync();
         };
         this.Content = new VerticalStackLayout
@@ -98,7 +101,10 @@ internal sealed class AndroidUpdatePage : ContentPage
     private void UpdateProgress(AndroidUpdateProgress progress)
     {
         if (progress.TotalBytes > 0)
+        {
             this.progressBar.Progress = Math.Clamp(progress.DownloadedBytes / (double)progress.TotalBytes, 0, 1);
+        }
+
         string total = progress.TotalBytes > 0 ? FormatBytes(progress.TotalBytes) : "unknown size";
         string remaining = progress.Remaining?.ToString(@"mm\:ss") ?? "--:--";
         this.statusLabel.Text = $"{FormatBytes(progress.DownloadedBytes)} / {total}";
@@ -109,7 +115,9 @@ internal sealed class AndroidUpdatePage : ContentPage
     private async Task InstallAsync()
     {
         if (this.apkPath == null)
+        {
             return;
+        }
 
         try
         {
@@ -121,7 +129,10 @@ internal sealed class AndroidUpdatePage : ContentPage
                     "Open settings",
                     "Cancel");
                 if (openSettings)
+                {
                     AndroidUpdateInstaller.OpenInstallPermissionSettings();
+                }
+
                 return;
             }
 
@@ -154,7 +165,10 @@ internal static class AndroidUpdateInstaller
     internal static bool CanInstallFromThisSource()
     {
         if (Build.VERSION.SdkInt < BuildVersionCodes.O)
+        {
             return true;
+        }
+
         Context context = global::Android.App.Application.Context;
         return context.PackageManager?.CanRequestPackageInstalls() == true;
     }

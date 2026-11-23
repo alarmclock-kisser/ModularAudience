@@ -58,8 +58,14 @@ namespace ModularAudience.Audio.Processors_V4
             List<AudioObj> result = [];
             for (int i = 0; i < atomics.Count; i++)
             {
-                if (selected.Contains(i)) result.Add(atomics[i]);
-                else atomics[i].Dispose();
+                if (selected.Contains(i))
+                {
+                    result.Add(atomics[i]);
+                }
+                else
+                {
+                    atomics[i].Dispose();
+                }
             }
 
             return result;
@@ -211,7 +217,10 @@ namespace ModularAudience.Audio.Processors_V4
         {
             int windowFrames = Math.Max(1, audio.SampleRate / 100);
             int windowCount = (frames + windowFrames - 1) / windowFrames;
-            if (windowCount < 5 || peak <= 0.0) return 0.0;
+            if (windowCount < 5 || peak <= 0.0)
+            {
+                return 0.0;
+            }
 
             double[] levels = new double[windowCount];
             for (int window = 0; window < windowCount; window++)
@@ -233,7 +242,10 @@ namespace ModularAudience.Audio.Processors_V4
 
             double peakLevel = levels.Max();
             int firstActive = Array.FindIndex(levels, level => level >= peakLevel * 0.12);
-            if (firstActive < 0) return 0.0;
+            if (firstActive < 0)
+            {
+                return 0.0;
+            }
 
             double penalty = 0.0;
             for (int window = Math.Max(firstActive + 3, 2); window < levels.Length; window++)
@@ -367,8 +379,14 @@ namespace ModularAudience.Audio.Processors_V4
             {
                 List<int>? cluster = clusters.FirstOrDefault(group =>
                     BelongToSameFamily(fingerprints[index], fingerprints[group[0]], threshold));
-                if (cluster == null) clusters.Add([index]);
-                else cluster.Add(index);
+                if (cluster == null)
+                {
+                    clusters.Add([index]);
+                }
+                else
+                {
+                    cluster.Add(index);
+                }
             }
 
             return clusters;
@@ -490,7 +508,11 @@ namespace ModularAudience.Audio.Processors_V4
         private static void Normalize(double[] values)
         {
             double length = Math.Sqrt(values.Sum(value => value * value));
-            if (length <= 0.0) return;
+            if (length <= 0.0)
+            {
+                return;
+            }
+
             for (int i = 0; i < values.Length; i++)
             {
                 values[i] /= length;

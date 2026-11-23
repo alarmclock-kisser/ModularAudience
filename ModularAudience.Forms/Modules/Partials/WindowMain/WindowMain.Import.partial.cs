@@ -863,7 +863,11 @@ namespace ModularAudience.Forms
                 target ??= new AudioCollectionView([]);
                 target.RememberImportDirectory(group.Key);
                 string folderName = Path.GetFileName(group.Key);
-                if (created) target.Rename(string.IsNullOrWhiteSpace(folderName) ? group.Key : folderName);
+                if (created)
+                {
+                    target.Rename(string.IsNullOrWhiteSpace(folderName) ? group.Key : folderName);
+                }
+
                 int number = GetCollectionNumber(target);
                 foreach (var (_, audio) in group)
                 {

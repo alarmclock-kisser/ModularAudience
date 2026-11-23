@@ -15,7 +15,11 @@ public sealed class AudioEffectProcessorTests
     public async Task EveryFactoryProfile_RendersStableFiniteAudio(AudioEffectKind effect, string id)
     {
         AudioEffectSettings settings = AudioEffectCatalog.Get(effect).BuiltInPresets.Single(preset => preset.Id == id).Parameters.Copy();
-        if (settings.Parameters.ContainsKey("TailSeconds")) settings = settings.With(("TailSeconds", 0.05));
+        if (settings.Parameters.ContainsKey("TailSeconds"))
+        {
+            settings = settings.With(("TailSeconds", 0.05));
+        }
+
         AudioEffectResult result = await AudioEffectProcessor.ProcessAsync(StereoTone(8000, 0.15, 433), 8000, 2, settings);
         Assert.IsTrue(result.Samples.All(float.IsFinite), effect + "/" + id);
         Assert.IsTrue(result.Samples.Any(sample => Math.Abs(sample) > 1e-7), effect + "/" + id);
@@ -30,7 +34,11 @@ public sealed class AudioEffectProcessorTests
         foreach (AudioEffectDefinition definition in AudioEffectCatalog.All.Where(effect => effect.Kind != AudioEffectKind.AutoTune))
         {
             definition.CreateDefaults().Validate();
-            if (!definition.OpensOptions) continue;
+            if (!definition.OpensOptions)
+            {
+                continue;
+            }
+
             Assert.IsGreaterThanOrEqualTo(3, definition.BuiltInPresets.Count, definition.Name);
             Assert.AreEqual(definition.BuiltInPresets.Count, definition.BuiltInPresets.Select(preset => preset.Id).Distinct().Count());
             foreach (EffectPresetDefinition preset in definition.BuiltInPresets)
@@ -40,8 +48,12 @@ public sealed class AudioEffectProcessorTests
                 Assert.AreNotSame(copy.Parameters, preset.Parameters.Parameters);
             }
             for (int i = 0; i < definition.BuiltInPresets.Count; i++)
+            {
                 for (int j = i + 1; j < definition.BuiltInPresets.Count; j++)
+                {
                     Assert.IsFalse(definition.BuiltInPresets[i].Parameters.SoundEquals(definition.BuiltInPresets[j].Parameters), definition.Name);
+                }
+            }
         }
     }
 
@@ -51,10 +63,25 @@ public sealed class AudioEffectProcessorTests
     {
         float[] input = StereoTone(8000, 0.12, 330); input[0] = 0.8f;
         float[] before = (float[])input.Clone(); AudioEffectSettings settings = Defaults(effect);
-        if (settings.Parameters.ContainsKey("TailSeconds")) settings = settings.With(("TailSeconds", 0.2));
-        if (effect == AudioEffectKind.Limiter) settings = settings.With(("InputGainDb", 12));
-        if (effect == AudioEffectKind.Expander) settings = settings.With(("ThresholdDb", -6));
-        if (effect == AudioEffectKind.SampleRateReducer) settings = settings.With(("RateHz", 4000));
+        if (settings.Parameters.ContainsKey("TailSeconds"))
+        {
+            settings = settings.With(("TailSeconds", 0.2));
+        }
+
+        if (effect == AudioEffectKind.Limiter)
+        {
+            settings = settings.With(("InputGainDb", 12));
+        }
+
+        if (effect == AudioEffectKind.Expander)
+        {
+            settings = settings.With(("ThresholdDb", -6));
+        }
+
+        if (effect == AudioEffectKind.SampleRateReducer)
+        {
+            settings = settings.With(("RateHz", 4000));
+        }
 
         AudioEffectResult result = await AudioEffectProcessor.ProcessAsync(input, 8000, 2, settings);
 
@@ -64,7 +91,9 @@ public sealed class AudioEffectProcessorTests
         Assert.IsTrue(result.Samples.All(float.IsFinite), effect.ToString());
         Assert.AreEqual(effect == AudioEffectKind.ConvertToMono ? 1 : 2, result.Channels);
         if (effect is not (AudioEffectKind.PitchShift or AudioEffectKind.Gain))
+        {
             Assert.IsFalse(before.SequenceEqual(result.Samples), "Missing audible DSP route: " + effect);
+        }
     }
 
     [TestMethod]
@@ -72,7 +101,11 @@ public sealed class AudioEffectProcessorTests
     public async Task EveryEffect_ProcessesDigitalSilenceWithoutInventingAudio(AudioEffectKind effect)
     {
         AudioEffectSettings settings = Defaults(effect);
-        if (settings.Parameters.ContainsKey("TailSeconds")) settings = settings.With(("TailSeconds", 0.01));
+        if (settings.Parameters.ContainsKey("TailSeconds"))
+        {
+            settings = settings.With(("TailSeconds", 0.01));
+        }
+
         AudioEffectResult result = await AudioEffectProcessor.ProcessAsync(new float[1024], 8000, 2, settings);
         Assert.IsTrue(result.Samples.All(sample => sample == 0), effect.ToString());
     }
@@ -121,7 +154,10 @@ public sealed class AudioEffectProcessorTests
         double inputPeak = source.Max(sample => (double)Math.Abs(sample));
         double outputPeak = result.Samples.Max(sample => (double)Math.Abs(sample));
         Assert.AreEqual(inputPeak, outputPeak, 0.001, "Pitch shifting should preserve the source peak level.");
-        for (int i = 0; i < result.Samples.Length; i += 2) Assert.AreEqual(-0.5f * result.Samples[i], result.Samples[i + 1], 0.0001f);
+        for (int i = 0; i < result.Samples.Length; i += 2)
+        {
+            Assert.AreEqual(-0.5f * result.Samples[i], result.Samples[i + 1], 0.0001f);
+        }
     }
 
     [TestMethod]
@@ -134,7 +170,10 @@ public sealed class AudioEffectProcessorTests
         AudioEffectResult result = await AudioEffectProcessor.ProcessAsync(source, 16000, 2, Defaults(AudioEffectKind.TimeStretch).With(("Factor", factor)));
         Assert.AreEqual((int)(source.Length * factor), result.Samples.Length);
         Assert.IsGreaterThan(0.1, Amplitude(result.Samples, 16000, 440));
-        for (int i = 0; i < result.Samples.Length; i += 2) Assert.AreEqual(-0.5f * result.Samples[i], result.Samples[i + 1], 0.0001f);
+        for (int i = 0; i < result.Samples.Length; i += 2)
+        {
+            Assert.AreEqual(-0.5f * result.Samples[i], result.Samples[i + 1], 0.0001f);
+        }
     }
 
     [TestMethod]
@@ -160,7 +199,11 @@ public sealed class AudioEffectProcessorTests
             AudioEffectResult result = await Process(impulse, settings);
             Assert.AreEqual(7200, result.Samples.Length);
             Assert.IsTrue(result.Samples.Skip(impulse.Length).Any(sample => Math.Abs(sample) > 1e-6), kind.ToString());
-            foreach (float[] previous in responses) Assert.IsFalse(previous.SequenceEqual(result.Samples), kind.ToString());
+            foreach (float[] previous in responses)
+            {
+                Assert.IsFalse(previous.SequenceEqual(result.Samples), kind.ToString());
+            }
+
             responses.Add(result.Samples);
             Assert.AreEqual(impulse.Length, (await Process(impulse, settings.With(("TailSeconds", 0)))).Samples.Length);
         }
@@ -173,7 +216,10 @@ public sealed class AudioEffectProcessorTests
         AudioEffectResult result = await Process(source, AudioEffectKind.Limiter, ("CeilingDb", -3));
         Assert.AreEqual(source.Length, result.Samples.Length);
         Assert.IsTrue(result.Samples.All(sample => Math.Abs(sample) <= Math.Pow(10, -3d / 20) + 1e-6));
-        for (int i = 0; i < result.Samples.Length; i += 2) Assert.AreEqual(-0.5f * result.Samples[i], result.Samples[i + 1], 1e-6f);
+        for (int i = 0; i < result.Samples.Length; i += 2)
+        {
+            Assert.AreEqual(-0.5f * result.Samples[i], result.Samples[i + 1], 1e-6f);
+        }
     }
 
     [TestMethod]
@@ -211,7 +257,11 @@ public sealed class AudioEffectProcessorTests
         {
             AudioEffectSettings settings = Defaults(AudioEffectKind.Bitcrusher).With(("Bits", 4), ("Mode", mode), ("WetPercent", 100));
             AudioEffectResult result = await Process(source, settings);
-            foreach (float[] previous in variants) Assert.IsFalse(previous.SequenceEqual(result.Samples));
+            foreach (float[] previous in variants)
+            {
+                Assert.IsFalse(previous.SequenceEqual(result.Samples));
+            }
+
             CollectionAssert.AreEqual(result.Samples, (await Process(source, settings)).Samples); variants.Add(result.Samples);
         }
         AudioEffectResult held = await Process(source, AudioEffectKind.SampleRateReducer, ("RateHz", 4000), ("WetPercent", 100));
@@ -223,7 +273,11 @@ public sealed class AudioEffectProcessorTests
     public async Task HumRemoval_AttenuatesMainsButRetainsUnrelatedTone()
     {
         float[] source = StereoTone(8000, 3, 50), tone = StereoTone(8000, 3, 1000);
-        for (int i = 0; i < source.Length; i++) source[i] += tone[i];
+        for (int i = 0; i < source.Length; i++)
+        {
+            source[i] += tone[i];
+        }
+
         AudioEffectResult result = await Process(source, AudioEffectKind.HumRemoval);
         Assert.IsLessThan(0.01, Amplitude(result.Samples, 8000, 50));
         Assert.IsGreaterThan(0.20, Amplitude(result.Samples, 8000, 1000));

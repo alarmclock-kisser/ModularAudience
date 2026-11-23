@@ -32,7 +32,11 @@ internal sealed class EffectPreviewPlayer : IEffectPreviewPlayer
     {
         WaveOut? previous = this.output;
         this.output = null;
-        if (previous is null) return;
+        if (previous is null)
+        {
+            return;
+        }
+
         try { previous.Stop(); }
         finally { previous.Dispose(); }
     }
@@ -49,7 +53,11 @@ internal sealed class EffectPreviewSamples : ISampleProvider
     internal EffectPreviewSamples(float[] samples, int sampleRate, int channels, bool loop)
     {
         ArgumentNullException.ThrowIfNull(samples);
-        if (sampleRate <= 0 || channels <= 0 || samples.Length % channels != 0) throw new ArgumentException("Invalid preview format.");
+        if (sampleRate <= 0 || channels <= 0 || samples.Length % channels != 0)
+        {
+            throw new ArgumentException("Invalid preview format.");
+        }
+
         this.samples = samples;
         this.loop = loop;
         this.WaveFormat = WaveFormat.CreateIeeeFloatWaveFormat(sampleRate, channels);
@@ -59,7 +67,11 @@ internal sealed class EffectPreviewSamples : ISampleProvider
 
     public int Read(float[] buffer, int offset, int count)
     {
-        if (offset < 0 || count < 0 || offset > buffer.Length - count) throw new ArgumentOutOfRangeException(nameof(count));
+        if (offset < 0 || count < 0 || offset > buffer.Length - count)
+        {
+            throw new ArgumentOutOfRangeException(nameof(count));
+        }
+
         return this.Read(buffer.AsSpan(offset, count));
     }
 
@@ -70,7 +82,11 @@ internal sealed class EffectPreviewSamples : ISampleProvider
         {
             if (this.position == this.samples.Length)
             {
-                if (!this.loop) break;
+                if (!this.loop)
+                {
+                    break;
+                }
+
                 this.position = 0;
             }
             int copy = Math.Min(buffer.Length - written, this.samples.Length - this.position);

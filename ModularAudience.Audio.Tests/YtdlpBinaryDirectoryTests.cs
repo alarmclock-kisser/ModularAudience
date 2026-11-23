@@ -19,7 +19,11 @@ public sealed class YtdlpBinaryDirectoryTests
         string user = Path.Combine(root, "yt-dlp-my-backup");
         try
         {
-            foreach (string folder in new[] { active, old, other, user }) Directory.CreateDirectory(folder);
+            foreach (string folder in new[] { active, old, other, user })
+            {
+                Directory.CreateDirectory(folder);
+            }
+
             File.WriteAllText(Path.Combine(old, "yt-dlp.exe"), "historical binary");
             var manager = new YtdlpBinaryManager(root);
             var cleanup = typeof(YtdlpBinaryManager).GetMethod("CleanupOldVersions", BindingFlags.Instance | BindingFlags.NonPublic)!;
@@ -35,7 +39,11 @@ public sealed class YtdlpBinaryDirectoryTests
             Assert.IsTrue(Directory.Exists(other));
             Assert.IsTrue(Directory.Exists(user));
         }
-        finally { if (Directory.Exists(root)) Directory.Delete(root, true); }
+        finally { if (Directory.Exists(root))
+            {
+                Directory.Delete(root, true);
+            }
+        }
     }
 
     [TestMethod]
@@ -53,7 +61,11 @@ public sealed class YtdlpBinaryDirectoryTests
             {
                 string payload = Path.Combine(first, $"{tool.Item1}-{hash}-{install}");
                 Directory.CreateDirectory(payload);
-                foreach (string file in tool.Item2) File.WriteAllBytes(Path.Combine(payload, file), [77, 90]);
+                foreach (string file in tool.Item2)
+                {
+                    File.WriteAllBytes(Path.Combine(payload, file), [77, 90]);
+                }
+
                 File.WriteAllText(Path.Combine(first, tool.Item1 + ".installed.json"), JsonSerializer.Serialize(new
                 {
                     PackageHash = hash, InstallId = install, FileHashes = tool.Item2.ToDictionary(file => file, _ => hash)
@@ -70,7 +82,11 @@ public sealed class YtdlpBinaryDirectoryTests
             Assert.IsFalse(manager.HasInstalledTools);
             Assert.IsNull(typeof(YtdlpBinaryManager).GetMethod("FindDeno", BindingFlags.Instance | BindingFlags.NonPublic)!.Invoke(manager, null));
         }
-        finally { if (Directory.Exists(root)) Directory.Delete(root, true); }
+        finally { if (Directory.Exists(root))
+            {
+                Directory.Delete(root, true);
+            }
+        }
     }
 
     [TestMethod]

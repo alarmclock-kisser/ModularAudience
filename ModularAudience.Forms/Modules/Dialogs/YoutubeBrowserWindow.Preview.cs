@@ -14,7 +14,11 @@ public partial class YoutubeBrowserWindow
 
     private async void Selection_Changed(object? sender, EventArgs e)
     {
-        if (updatingResultRows) return;
+        if (updatingResultRows)
+        {
+            return;
+        }
+
         previewCancellation?.Cancel();
         HideThumbnailPopup();
         ClearThumbnail();
@@ -35,7 +39,11 @@ public partial class YoutubeBrowserWindow
               $"{Environment.NewLine}Upload date: {FormatUploadDate(video.UploadDate)}" +
               $"{Environment.NewLine}ID: {video.Id}{Environment.NewLine}{video.Url}{Environment.NewLine}{Environment.NewLine}" +
               (string.IsNullOrWhiteSpace(video.Description) ? "No description was provided by the metadata service." : video.Description);
-        if (closing || restoringSettings || !thumbnailCheck.Checked || video is null) return;
+        if (closing || restoringSettings || !thumbnailCheck.Checked || video is null)
+        {
+            return;
+        }
+
         var source = new CancellationTokenSource(TimeSpan.FromSeconds(15));
         previewCancellation = source;
         var task = LoadPreviewAsync(video, source);
@@ -52,21 +60,32 @@ public partial class YoutubeBrowserWindow
             await Task.Delay(180, source.Token);
             using var preview = await YoutubeThumbnailLoader.LoadAsync(thumbnailClient, video, message =>
             {
-                if (previewCancellation == source && !closing && !IsDisposed) AppendLog(message);
+                if (previewCancellation == source && !closing && !IsDisposed)
+                {
+                    AppendLog(message);
+                }
             }, source.Token);
             source.Token.ThrowIfCancellationRequested();
             if (previewCancellation == source && !closing && !IsDisposed)
+            {
                 thumbnailPicture.Image = new Bitmap(preview);
+            }
         }
         catch (OperationCanceledException) { }
         catch (Exception error)
         {
             if (previewCancellation == source && !closing && !IsDisposed)
+            {
                 AppendLog($"Warning: Thumbnail unavailable. {error.Message}");
+            }
         }
         finally
         {
-            if (previewCancellation == source) previewCancellation = null;
+            if (previewCancellation == source)
+            {
+                previewCancellation = null;
+            }
+
             source.Dispose();
         }
     }

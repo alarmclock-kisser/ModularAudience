@@ -133,7 +133,10 @@ public sealed class MixArrangement : IDisposable
     public MixSource AddSource(AudioObj audio)
     {
         if (audio.SampleRate <= 0 || audio.Channels <= 0 || audio.Data.Length % audio.Channels != 0)
+        {
             throw new ArgumentException("The audio has an invalid sample format.");
+        }
+
         var source = new MixSource { Name = audio.Name, Data = (float[])audio.Data.Clone(), SampleRate = audio.SampleRate,
             Channels = audio.Channels, Bpm = audio.Bpm > 0 ? audio.Bpm : audio.ScannedBpm };
         Sources.Add(source.Id, source); return source;
@@ -145,13 +148,19 @@ public sealed class MixArrangement : IDisposable
         ArgumentNullException.ThrowIfNull(lane);
         ArgumentNullException.ThrowIfNull(source);
         if (lane.IsVideo != source.IsVideo)
+        {
             throw new InvalidOperationException("Video sources can only be placed on the video lane.");
+        }
+
         double sourceDuration = source.IsVideo ? source.VideoDuration : source.Duration;
         offset = Math.Clamp(offset, 0, sourceDuration);
         duration = Math.Clamp(duration, 0, sourceDuration - offset);
         if (lane.IsVideo && lane.Clips.Any(existing => start < existing.Start + ClipDuration(existing)
             && start + duration > existing.Start))
+        {
             throw new InvalidOperationException("Video segments cannot overlap.");
+        }
+
         var clip = new MixClip { SourceId = source.Id, Name = source.Name, Start = start,
             SourceOffset = offset, SourceDuration = duration, IsVideo = source.IsVideo };
         lane.Clips.Add(clip); return clip;
@@ -180,7 +189,10 @@ public sealed class MixArrangement : IDisposable
         {
             string[] omitted = type.Type == typeof(MixArrangement) ? [nameof(LoopStart), nameof(LoopEnd)] :
                 type.Type == typeof(MixVisualOptions) ? [nameof(MixVisualOptions.HorizontalScrollSeconds), nameof(MixVisualOptions.FirstVisibleTrack)] : [];
-            foreach (var property in type.Properties.Where(property => omitted.Contains(property.Name)).ToArray()) type.Properties.Remove(property);
+            foreach (var property in type.Properties.Where(property => omitted.Contains(property.Name)).ToArray())
+            {
+                type.Properties.Remove(property);
+            }
         });
         return new JsonSerializerOptions { TypeInfoResolver = resolver };
     }
@@ -191,14 +203,32 @@ public sealed class MixArrangement : IDisposable
         var result = new Dictionary<Guid, MixSource>();
         void Add(Guid id, HashSet<Guid> path)
         {
-            if (!path.Add(id)) throw new InvalidDataException("Cyclic tempo origin references.");
-            if (!Sources.TryGetValue(id, out MixSource? source)) throw new InvalidDataException("Missing tempo origin audio.");
+            if (!path.Add(id))
+            {
+                throw new InvalidDataException("Cyclic tempo origin references.");
+            }
+
+            if (!Sources.TryGetValue(id, out MixSource? source))
+            {
+                throw new InvalidDataException("Missing tempo origin audio.");
+            }
+
             foreach (Guid dependency in MixTempoRecipe.Dependencies(source))
-                if (!result.ContainsKey(dependency)) Add(dependency, path);
+            {
+                if (!result.ContainsKey(dependency))
+                {
+                    Add(dependency, path);
+                }
+            }
+
             result.TryAdd(id, source); path.Remove(id);
         }
         foreach (Guid id in Lanes.Where(lane => !lane.IsVideo).SelectMany(lane => lane.Clips)
-            .Where(clip => !clip.IsVideo).Select(clip => clip.SourceId).Distinct()) Add(id, []);
+            .Where(clip => !clip.IsVideo).Select(clip => clip.SourceId).Distinct())
+        {
+            Add(id, []);
+        }
+
         return result.Values.ToArray();
     }
     public void Restore(string json)
@@ -210,53 +240,101 @@ public sealed class MixArrangement : IDisposable
     public void Validate()
     {
         if (Lanes.Count(lane => lane.IsVideo) > 1)
+        {
             throw new InvalidDataException("An arrangement can contain at most one video lane.");
+        }
+
         if (!double.IsFinite(Bpm) || Bpm is < 10 or > 400
             || SnapDivision is not (1 or 2 or 4 or 8 or 16 or 32 or 64 or 128 or 256))
+        {
             throw new InvalidDataException("Invalid tempo or snap division.");
-        if (DisplayLaneHeight is < 32 or > 600) throw new InvalidDataException("Invalid track display height.");
+        }
+
+        if (DisplayLaneHeight is < 32 or > 600)
+        {
+            throw new InvalidDataException("Invalid track display height.");
+        }
+
         if (Visual == null || !double.IsFinite(Visual.Hue) || Visual.Hue is < 0 or > 360
             || !Enum.IsDefined(Visual.ScrollMode)
             || !double.IsFinite(Visual.HueSpeed) || Visual.HueSpeed is < -720 or > 720
             || !double.IsFinite(Visual.PixelsPerSecond) || Visual.PixelsPerSecond is < 8 or > 2000)
+        {
             throw new InvalidDataException("Invalid visual options.");
-        if (!Enum.IsDefined(OverlapMode)) throw new InvalidDataException("Invalid overlap mode.");
+        }
+
+        if (!Enum.IsDefined(OverlapMode))
+        {
+            throw new InvalidDataException("Invalid overlap mode.");
+        }
+
         if (!double.IsFinite(Visual.HorizontalScrollSeconds) || Visual.FirstVisibleTrack < 0)
+        {
             throw new InvalidDataException("Invalid viewport position.");
+        }
+
         foreach (var property in typeof(MixVisualOptions).GetProperties().Where(p => p.PropertyType == typeof(string)))
         {
             string? color = property.GetValue(Visual) as string;
             if (color == null || color.Length != 7 || color[0] != '#' || !uint.TryParse(color.AsSpan(1), System.Globalization.NumberStyles.HexNumber,
-                System.Globalization.CultureInfo.InvariantCulture, out _)) throw new InvalidDataException("Use #RRGGBB visual colors.");
+                System.Globalization.CultureInfo.InvariantCulture, out _))
+            {
+                throw new InvalidDataException("Use #RRGGBB visual colors.");
+            }
         }
         if (!double.IsFinite(LoopStart) || !double.IsFinite(LoopEnd) || LoopStart < 0 || LoopEnd < LoopStart)
+        {
             throw new InvalidDataException("Invalid loop range.");
+        }
+
         foreach (var s in Sources.Values)
         {
             if (s.SampleRate is < 1000 or > 768000 || s.Channels is < 1 or > 64 || s.Data.Length % s.Channels != 0 || s.Data.Any(v => !float.IsFinite(v)))
+            {
                 throw new InvalidDataException("Invalid source audio.");
+            }
+
             if (s.IsVideo && (!double.IsFinite(s.VideoDuration) || s.VideoDuration <= 0
                 || s.VideoWidth <= 0 || s.VideoHeight <= 0 || !double.IsFinite(s.VideoFrameRate) || s.VideoFrameRate <= 0))
+            {
                 throw new InvalidDataException("Invalid video source metadata.");
+            }
+
             if (!double.IsFinite(s.TempoOriginScale) || s.TempoOriginScale <= 0 || !float.IsFinite(s.TempoOriginBpm) || s.TempoOriginBpm < 0 ||
                 s.TempoOriginId is Guid origin && (origin == s.Id || !Sources.ContainsKey(origin)))
+            {
                 throw new InvalidDataException("Invalid or missing tempo origin.");
+            }
         }
-        foreach (var s in Sources.Values) s.TempoRecipe?.Validate(this.Sources);
+        foreach (var s in Sources.Values)
+        {
+            s.TempoRecipe?.Validate(this.Sources);
+        }
+
         _ = ProjectSources();
         foreach (var lane in Lanes)
         {
-            if (!double.IsFinite(lane.Gain) || lane.Gain is < 0 or > 4) throw new InvalidDataException("Invalid track gain.");
+            if (!double.IsFinite(lane.Gain) || lane.Gain is < 0 or > 4)
+            {
+                throw new InvalidDataException("Invalid track gain.");
+            }
+
             if (lane.IsVideo && lane.Clips.Any(clip => !clip.IsVideo
                 || !Sources.TryGetValue(clip.SourceId, out MixSource? source) || !source.IsVideo))
+            {
                 throw new InvalidDataException("The video lane can contain only video segments.");
+            }
+
             if (lane.IsVideo)
             {
                 MixClip? previous = null;
                 foreach (MixClip clip in lane.Clips.OrderBy(clip => clip.Start))
                 {
                     if (previous != null && clip.Start < previous.Start + ClipDuration(previous) - 0.000001)
+                    {
                         throw new InvalidDataException("Video segments cannot overlap.");
+                    }
+
                     previous = clip;
                 }
             }
@@ -265,12 +343,20 @@ public sealed class MixArrangement : IDisposable
                 if (!Sources.TryGetValue(c.SourceId, out var s) || c.IsVideo != s.IsVideo || c.IsVideo != lane.IsVideo || !Enum.IsDefined(c.TempoMode)
                     || !double.IsFinite(c.Start) || new[] { c.SourceOffset, c.SourceDuration, c.Gain, c.FadeIn, c.FadeOut }.Any(v => !double.IsFinite(v) || v < 0)
                     || c.Gain > 4)
+                {
                     throw new InvalidDataException("Invalid segment.");
+                }
 
                 double sourceDuration = c.IsVideo ? s.VideoDuration : s.Duration;
-                if (sourceDuration <= 0) sourceDuration = s.Duration;
+                if (sourceDuration <= 0)
+                {
+                    sourceDuration = s.Duration;
+                }
+
                 if (c.SourceOffset + c.SourceDuration > sourceDuration + 0.0001)
+                {
                     throw new InvalidDataException("Invalid segment.");
+                }
             }
         }
     }
@@ -287,11 +373,19 @@ public sealed class MixArrangement : IDisposable
             {
                 using var file = File.Create(temp);
                 using var zip = new ZipArchive(file, ZipArchiveMode.Create);
-                using (var writer = new StreamWriter(zip.CreateEntry("arrangement.json").Open())) writer.Write(metadata);
+                using (var writer = new StreamWriter(zip.CreateEntry("arrangement.json").Open()))
+                {
+                    writer.Write(metadata);
+                }
+
                 foreach (var s in sources)
                 {
                     token.ThrowIfCancellationRequested();
-                    using (var writer = new StreamWriter(zip.CreateEntry($"sources/{s.Id}.json").Open())) writer.Write(JsonSerializer.Serialize(s));
+                    using (var writer = new StreamWriter(zip.CreateEntry($"sources/{s.Id}.json").Open()))
+                    {
+                        writer.Write(JsonSerializer.Serialize(s));
+                    }
+
                     using var stream = zip.CreateEntry($"sources/{s.Id}.f32", CompressionLevel.Fastest).Open();
                     byte[] bytes = new byte[65536 * sizeof(float)];
                     for (int i = 0; i < s.Data.Length; i += 65536)
@@ -304,7 +398,11 @@ public sealed class MixArrangement : IDisposable
             }, token).ConfigureAwait(false);
             token.ThrowIfCancellationRequested(); File.Move(temp, path, true);
         }
-        finally { if (File.Exists(temp)) File.Delete(temp); }
+        finally { if (File.Exists(temp))
+            {
+                File.Delete(temp);
+            }
+        }
     }
     private static Task<MixArrangement> LoadLegacyAsync(string path, CancellationToken token = default) => Task.Run(() =>
     {
@@ -317,7 +415,11 @@ public sealed class MixArrangement : IDisposable
             using var sourceReader = new StreamReader(entry.Open());
             var source = JsonSerializer.Deserialize<MixSource>(sourceReader.ReadToEnd()) ?? throw new InvalidDataException("Invalid source.");
             var pcm = zip.GetEntry($"sources/{source.Id}.f32") ?? throw new InvalidDataException("Missing embedded audio.");
-            if (pcm.Length % 4 != 0 || pcm.Length > int.MaxValue) throw new InvalidDataException("Invalid audio size.");
+            if (pcm.Length % 4 != 0 || pcm.Length > int.MaxValue)
+            {
+                throw new InvalidDataException("Invalid audio size.");
+            }
+
             source.Data = new float[(int)(pcm.Length / 4)];
             using var stream = pcm.Open();
             byte[] bytes = new byte[65536 * 4];

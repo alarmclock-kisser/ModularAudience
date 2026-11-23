@@ -10,7 +10,7 @@ public sealed class MidiSampleRenderCache : IDisposable
     private bool disposed;
     public long MaximumBytes { get; }
     public long Hits { get; private set; }
-    public int Count { get { lock (gate) return entries.Count; } }
+    public int Count { get { lock (gate) { return entries.Count; } } }
     public MidiSampleRenderCache(long maximumBytes = 1024L * 1024 * 1024) => MaximumBytes = Math.Max(0, maximumBytes);
 
     internal AudioObj GetOrCreate(string key, Func<AudioObj> prepare, CancellationToken token)

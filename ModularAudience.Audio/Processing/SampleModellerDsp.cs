@@ -9,13 +9,20 @@ public static class SampleModellerDsp
     {
         settings.Validate();
         if (source.SampleRate <= 0 || source.Channels <= 0 || source.Data.Length < source.Channels)
+        {
             throw new ArgumentException("The sample contains no complete audio frames.");
+        }
+
         int channels = source.Channels, rate = source.SampleRate;
         var data = source.Data[..(source.Data.Length / channels * channels)];
         foreach (var effect in settings.Effects.Where(e => e.Enabled))
         {
             token.ThrowIfCancellationRequested();
-            if (effect.MixPercent == 0) continue;
+            if (effect.MixPercent == 0)
+            {
+                continue;
+            }
+
             int frames = data.Length / channels;
             int first = Math.Clamp((int)(frames * effect.StartPercent / 100), 0, frames - 1);
             int last = Math.Clamp((int)Math.Ceiling(frames * effect.EndPercent / 100), first + 1, frames);
@@ -29,7 +36,11 @@ public static class SampleModellerDsp
             int dryFrames = last - first, wetFrames = wet.Length / channels;
             for (int i = 0; i < wetFrames; i++)
             {
-                if ((i & 4095) == 0) token.ThrowIfCancellationRequested();
+                if ((i & 4095) == 0)
+                {
+                    token.ThrowIfCancellationRequested();
+                }
+
                 double dryPosition = i * (double)dryFrames / Math.Max(1, wetFrames);
                 int a = Math.Min(dryFrames - 1, (int)dryPosition), b = Math.Min(dryFrames - 1, a + 1);
                 for (int c = 0; c < channels; c++)
@@ -62,8 +73,16 @@ public static class SampleModellerDsp
         }
         if (e.Kind is SampleEffectKind.Varispeed or SampleEffectKind.PitchShift or SampleEffectKind.TimeStretch)
         {
-            if (e.Kind == SampleEffectKind.Varispeed) return Resample(data, ch, Math.Max(1, (int)(frames / e.Factor)), token);
-            if (e.Kind == SampleEffectKind.TimeStretch) return Stretch(data, ch, rate, Math.Max(1, (int)(frames * e.Factor)), token);
+            if (e.Kind == SampleEffectKind.Varispeed)
+            {
+                return Resample(data, ch, Math.Max(1, (int)(frames / e.Factor)), token);
+            }
+
+            if (e.Kind == SampleEffectKind.TimeStretch)
+            {
+                return Stretch(data, ch, rate, Math.Max(1, (int)(frames * e.Factor)), token);
+            }
+
             var pitched = Resample(data, ch, Math.Max(1, (int)(frames / Math.Pow(2, e.Semitones / 12))), token);
             return Stretch(pitched, ch, rate, frames, token);
         }
@@ -71,8 +90,15 @@ public static class SampleModellerDsp
         {
             for (int i = 0; i < frames / 2; i++)
             {
-                if ((i & 4095) == 0) token.ThrowIfCancellationRequested();
-                for (int c = 0; c < ch; c++) (data[i * ch + c], data[(frames - i - 1) * ch + c]) = (data[(frames - i - 1) * ch + c], data[i * ch + c]);
+                if ((i & 4095) == 0)
+                {
+                    token.ThrowIfCancellationRequested();
+                }
+
+                for (int c = 0; c < ch; c++)
+                {
+                    (data[i * ch + c], data[(frames - i - 1) * ch + c]) = (data[(frames - i - 1) * ch + c], data[i * ch + c]);
+                }
             }
             return data;
         }
@@ -80,8 +106,15 @@ public static class SampleModellerDsp
         {
             for (int c = 0; c < ch; c++)
             {
-                double mean = 0; for (int i = 0; i < frames; i++) mean += data[i * ch + c];
-                mean /= frames; for (int i = 0; i < frames; i++) data[i * ch + c] -= (float)mean;
+                double mean = 0; for (int i = 0; i < frames; i++)
+                {
+                    mean += data[i * ch + c];
+                }
+
+                mean /= frames; for (int i = 0; i < frames; i++)
+                {
+                    data[i * ch + c] -= (float)mean;
+                }
             }
             return data;
         }
@@ -95,8 +128,15 @@ public static class SampleModellerDsp
             var filters = Enumerable.Range(0, ch).Select(_ => new Biquad(e, rate)).ToArray();
             for (int i = 0; i < frames; i++)
             {
-                if ((i & 4095) == 0) token.ThrowIfCancellationRequested();
-                for (int c = 0; c < ch; c++) data[i * ch + c] = (float)filters[c].Apply(data[i * ch + c]);
+                if ((i & 4095) == 0)
+                {
+                    token.ThrowIfCancellationRequested();
+                }
+
+                for (int c = 0; c < ch; c++)
+                {
+                    data[i * ch + c] = (float)filters[c].Apply(data[i * ch + c]);
+                }
             }
             return data;
         }
@@ -111,18 +151,30 @@ public static class SampleModellerDsp
         double feedback = Math.Clamp(e.Feedback / 100, 0, 0.95);
         for (int i = 0; i < frames; i++)
         {
-            if ((i & 4095) == 0) token.ThrowIfCancellationRequested();
+            if ((i & 4095) == 0)
+            {
+                token.ThrowIfCancellationRequested();
+            }
+
             double position = i / (double)Math.Max(1, frames - 1), time = i / (double)rate;
             double lfo = Math.Sin(2 * Math.PI * e.Rate * time);
             double drawn = 1;
             if (points.Length > 0)
             {
-                while (pointIndex + 1 < points.Length && points[pointIndex + 1].Position <= position) pointIndex++;
+                while (pointIndex + 1 < points.Length && points[pointIndex + 1].Position <= position)
+                {
+                    pointIndex++;
+                }
+
                 var a = points[pointIndex]; var b = points[Math.Min(pointIndex + 1, points.Length - 1)];
                 drawn = position <= points[0].Position ? points[0].Value : b.Position > a.Position
                     ? a.Value + (b.Value - a.Value) * Math.Clamp((position - a.Position) / (b.Position - a.Position), 0, 1) : a.Value;
             }
-            double level = 0; for (int c = 0; c < ch; c++) level = Math.Max(level, Math.Abs(dry[i * ch + c]));
+            double level = 0; for (int c = 0; c < ch; c++)
+            {
+                level = Math.Max(level, Math.Abs(dry[i * ch + c]));
+            }
+
             envelope = level > envelope ? attack * envelope + (1 - attack) * level : release * envelope + (1 - release) * level;
             for (int c = 0; c < ch; c++)
             {
@@ -156,8 +208,8 @@ public static class SampleModellerDsp
                         value = ch >= 2 && c < 2 ? x * (c == 0 ? Math.Min(1, 1 - pan) : Math.Min(1, 1 + pan)) : x; break;
                     case SampleEffectKind.StereoWidth:
                         if (ch >= 2 && c < 2) { double mid = (dry[i * ch] + dry[i * ch + 1]) / 2d, side = (dry[i * ch] - dry[i * ch + 1]) / 2d * e.Amount; value = mid + (c == 0 ? side : -side); } break;
-                    case SampleEffectKind.SwapChannels: if (ch >= 2 && c < 2) value = dry[i * ch + 1 - c]; break;
-                    case SampleEffectKind.Mono: value = 0; for (int k = 0; k < ch; k++) value += dry[i * ch + k] / (double)ch; break;
+                    case SampleEffectKind.SwapChannels: if (ch >= 2 && c < 2) { value = dry[i * ch + 1 - c]; } break;
+                    case SampleEffectKind.Mono: value = 0; for (int k = 0; k < ch; k++) { value += dry[i * ch + k] / (double)ch; } break;
                     case SampleEffectKind.Delay: case SampleEffectKind.PingPongDelay:
                         int sourceChannel = e.Kind == SampleEffectKind.PingPongDelay && ch >= 2 && c < 2 ? 1 - c : c;
                         value = i >= delayFrames ? dry[(i - delayFrames) * ch + sourceChannel]
@@ -167,7 +219,10 @@ public static class SampleModellerDsp
                         for (int tap = 0; tap < 8; tap++)
                         {
                             int offset = Math.Max(1, (int)(rate * (e.TimeMs / 1000 + (tap * 0.017 + c * 0.003))));
-                            if (i >= offset) value += dry[(i - offset) * ch + c] * Math.Exp(-(tap + 1) / Math.Max(0.1, e.Amount)) * 0.4;
+                            if (i >= offset)
+                            {
+                                value += dry[(i - offset) * ch + c] * Math.Exp(-(tap + 1) / Math.Max(0.1, e.Amount)) * 0.4;
+                            }
                         }
                         break;
                     case SampleEffectKind.Chorus: case SampleEffectKind.Flanger:
@@ -189,7 +244,11 @@ public static class SampleModellerDsp
     private static double Read(float[] data, int ch, int channel, double frame)
     {
         int frames = data.Length / ch;
-        if (frame < 0 || frame > frames - 1) return 0;
+        if (frame < 0 || frame > frames - 1)
+        {
+            return 0;
+        }
+
         int a = (int)frame, b = Math.Min(frames - 1, a + 1);
         return data[a * ch + channel] + (data[b * ch + channel] - data[a * ch + channel]) * (frame - a);
     }
@@ -198,8 +257,15 @@ public static class SampleModellerDsp
         var result = new float[checked(frames * ch)]; int oldFrames = data.Length / ch;
         for (int i = 0; i < frames; i++)
         {
-            if ((i & 4095) == 0) token.ThrowIfCancellationRequested();
-            for (int c = 0; c < ch; c++) result[i * ch + c] = (float)Read(data, ch, c, Math.Min(oldFrames - 1, i * (double)oldFrames / frames));
+            if ((i & 4095) == 0)
+            {
+                token.ThrowIfCancellationRequested();
+            }
+
+            for (int c = 0; c < ch; c++)
+            {
+                result[i * ch + c] = (float)Read(data, ch, c, Math.Min(oldFrames - 1, i * (double)oldFrames / frames));
+            }
         }
         return result;
     }
@@ -207,9 +273,17 @@ public static class SampleModellerDsp
     private static float[] Stretch(float[] data, int ch, int rate, int frames, CancellationToken token)
     {
         int oldFrames = data.Length / ch;
-        if (oldFrames == frames) return data;
+        if (oldFrames == frames)
+        {
+            return data;
+        }
+
         int grain = Math.Min(oldFrames, Math.Max(32, rate / 25));
-        if (grain < 8) return Resample(data, ch, frames, token);
+        if (grain < 8)
+        {
+            return Resample(data, ch, frames, token);
+        }
+
         int hop = Math.Max(1, grain / 4);
         var result = new float[checked(frames * ch)]; var weights = new double[frames];
         for (int start = -grain + hop; start < frames; start += hop)
@@ -218,13 +292,29 @@ public static class SampleModellerDsp
             int source = Math.Clamp((int)(start * (double)oldFrames / frames), 0, Math.Max(0, oldFrames - grain));
             for (int j = 0; j < grain; j++)
             {
-                int target = start + j; if (target < 0 || target >= frames) continue;
+                int target = start + j; if (target < 0 || target >= frames)
+                {
+                    continue;
+                }
+
                 double window = 0.5 - 0.5 * Math.Cos(2 * Math.PI * j / Math.Max(1, grain - 1)); weights[target] += window;
-                for (int c = 0; c < ch; c++) result[target * ch + c] += (float)(data[(source + j) * ch + c] * window);
+                for (int c = 0; c < ch; c++)
+                {
+                    result[target * ch + c] += (float)(data[(source + j) * ch + c] * window);
+                }
             }
         }
-        for (int i = 0; i < frames; i++) for (int c = 0; c < ch; c++)
-            if (weights[i] > 1e-9) result[i * ch + c] /= (float)weights[i];
+        for (int i = 0; i < frames; i++)
+        {
+            for (int c = 0; c < ch; c++)
+            {
+                if (weights[i] > 1e-9)
+                {
+                    result[i * ch + c] /= (float)weights[i];
+                }
+            }
+        }
+
         return result;
     }
 

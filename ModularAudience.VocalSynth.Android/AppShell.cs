@@ -27,17 +27,24 @@ internal sealed class AppShell : Shell
     {
         this.Loaded -= this.AppShell_Loaded;
         if (this.updateCheckStarted)
+        {
             return;
+        }
+
         this.updateCheckStarted = true;
         if (Preferences.Default.Get(UpdatesDisabledPreference, false))
+        {
             return;
+        }
 
         try
         {
             await Task.Delay(500);
             AndroidReleaseUpdate? update = await this.updateService.FindLatestSignedUpdateAsync();
             if (update == null)
+            {
                 return;
+            }
 
             if (update.BuildNumber <= GetInstalledBuildNumber() ||
                 update.BuildNumber == Preferences.Default.Get(SkippedBuildPreference, 0))

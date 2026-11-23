@@ -39,7 +39,11 @@ namespace ModularAudience.Audio.Processors_V4
             for (int phase = 0; phase < 4; phase++)
             {
                 long firstSlice = phase;
-                if (firstSlice >= total) break;
+                if (firstSlice >= total)
+                {
+                    break;
+                }
+
                 long phaseSlices = (total - firstSlice + 3) / 4;
                 long completedPhaseSlices = 0;
                 long progressStep = Math.Max(1, phaseSlices / 100);
@@ -58,10 +62,18 @@ namespace ModularAudience.Audio.Processors_V4
             }
 
             for (int src = 0; src < selected.Length; src++)
+            {
                 for (int i = 0; i < normLen; i++)
+                {
                     if (norm[i] > 0)
+                    {
                         for (int ch = 0; ch < channels; ch++)
+                        {
                             output[src][i * channels + ch] /= (float)norm[i];
+                        }
+                    }
+                }
+            }
 
             progress?.Report(new(0.96, "CQT synthesis complete"));
         }
@@ -92,7 +104,10 @@ namespace ModularAudience.Audio.Processors_V4
             {
                 slices[channel] = new double[sliceLength];
                 for (int sample = 0; sample < active; sample++)
+                {
                     slices[channel][sample] = source.Samples[(start + sample) * channels + channel];
+                }
+
                 coefficients[channel] = cqt.Forward(slices[channel], token);
             }
 
@@ -121,7 +136,10 @@ namespace ModularAudience.Audio.Processors_V4
         {
             double[] w = new double[n];
             for (int i = 0; i < n; i++)
+            {
                 w[i] = Math.Cos(Math.PI * i / n) * Math.Cos(Math.PI * i / n);
+            }
+
             return w;
         }
 
@@ -137,17 +155,38 @@ namespace ModularAudience.Audio.Processors_V4
             for (int s = 0; s < selected.Length; s++)
             {
                 m[s] = new float[nb][];
-                for (int b = 0; b < nb; b++) m[s][b] = new float[cqt.Bands[b].CoefficientCount];
+                for (int b = 0; b < nb; b++)
+                {
+                    m[s][b] = new float[cqt.Bands[b].CoefficientCount];
+                }
             }
             for (int b = 1; b <= np; b++)
             {
-                if ((b & 15) == 0) token.ThrowIfCancellationRequested();
+                if ((b & 15) == 0)
+                {
+                    token.ThrowIfCancellationRequested();
+                }
+
                 int bin = Math.Clamp((int)Math.Round(Math.Abs(cqt.Bands[b].CenterHz) * cqt.Length / sampleRate), 0, bins - 1);
                 double[] sp = new double[selected.Length];
                 for (int r = 0; r < rank; r++)
-                    for (int s = 0; s < selected.Length; s++) sp[s] += model.Dictionary[bin][r];
-                double t = 0; for (int s = 0; s < selected.Length; s++) t += sp[s];
-                if (t <= 0) continue;
+                {
+                    for (int s = 0; s < selected.Length; s++)
+                    {
+                        sp[s] += model.Dictionary[bin][r];
+                    }
+                }
+
+                double t = 0; for (int s = 0; s < selected.Length; s++)
+                {
+                    t += sp[s];
+                }
+
+                if (t <= 0)
+                {
+                    continue;
+                }
+
                 int c = cqt.Bands[b].CoefficientCount;
                 for (int s = 0; s < selected.Length; s++)
                 {
@@ -157,7 +196,11 @@ namespace ModularAudience.Audio.Processors_V4
             }
             float u = selected.Length > 0 ? 1f / selected.Length : 0;
             for (int s = 0; s < selected.Length; s++)
-            { m[s][0][0] = u; if (nb > 1) m[s][nb / 2][0] = u; }
+            { m[s][0][0] = u; if (nb > 1)
+                {
+                    m[s][nb / 2][0] = u;
+                }
+            }
             return m;
         }
 
@@ -165,8 +208,15 @@ namespace ModularAudience.Audio.Processors_V4
         {
             for (int b = 0; b < nb; b++)
             {
-                if ((b & 31) == 0) token.ThrowIfCancellationRequested();
-                for (int i = 0; i < c[b].Length; i++) c[b][i] *= m[b][i];
+                if ((b & 31) == 0)
+                {
+                    token.ThrowIfCancellationRequested();
+                }
+
+                for (int i = 0; i < c[b].Length; i++)
+                {
+                    c[b][i] *= m[b][i];
+                }
             }
         }
     }

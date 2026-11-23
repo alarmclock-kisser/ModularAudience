@@ -43,47 +43,118 @@ public static class MixAudioHistory
         Entry entry = JsonSerializer.Deserialize<Entry>(entryJson) ?? throw new InvalidDataException("Invalid audio history.");
         State from = undo ? entry.After : entry.Before, to = undo ? entry.Before : entry.After;
         var fromLanes = from.Lanes.ToDictionary(lane => lane.Id); var toLanes = to.Lanes.ToDictionary(lane => lane.Id);
-        foreach (MixLane removed in from.Lanes.Where(lane => !toLanes.ContainsKey(lane.Id))) mix.Lanes.RemoveAll(lane => lane.Id == removed.Id);
+        foreach (MixLane removed in from.Lanes.Where(lane => !toLanes.ContainsKey(lane.Id)))
+        {
+            mix.Lanes.RemoveAll(lane => lane.Id == removed.Id);
+        }
+
         foreach (MixLane added in to.Lanes.Where(lane => !fromLanes.ContainsKey(lane.Id)))
-            if (!mix.Lanes.Any(lane => lane.Id == added.Id)) mix.Lanes.Insert(Math.Min(to.Lanes.IndexOf(added), mix.Lanes.Count), Clone(added));
+        {
+            if (!mix.Lanes.Any(lane => lane.Id == added.Id))
+            {
+                mix.Lanes.Insert(Math.Min(to.Lanes.IndexOf(added), mix.Lanes.Count), Clone(added));
+            }
+        }
 
         var fromClips = from.Lanes.SelectMany(lane => lane.Clips.Select(clip => (Lane: lane.Id, Clip: clip))).ToDictionary(part => part.Clip.Id);
         var toClips = to.Lanes.SelectMany(lane => lane.Clips.Select(clip => (Lane: lane.Id, Clip: clip))).ToDictionary(part => part.Clip.Id);
         foreach (Guid id in fromClips.Keys.Except(toClips.Keys))
-            foreach (MixLane lane in mix.Lanes) lane.Clips.RemoveAll(clip => clip.Id == id);
+        {
+            foreach (MixLane lane in mix.Lanes)
+            {
+                lane.Clips.RemoveAll(clip => clip.Id == id);
+            }
+        }
+
         foreach (var (id, part) in toClips)
         {
-            MixLane? lane = mix.Lanes.FirstOrDefault(lane => lane.Id == part.Lane); if (lane is null) continue;
+            MixLane? lane = mix.Lanes.FirstOrDefault(lane => lane.Id == part.Lane); if (lane is null)
+            {
+                continue;
+            }
+
             MixClip? live = mix.Lanes.SelectMany(value => value.Clips).FirstOrDefault(clip => clip.Id == id);
             if (!fromClips.TryGetValue(id, out var old))
-            { if (live is null) lane.Clips.Add(Clone(part.Clip)); continue; }
+            { if (live is null) { lane.Clips.Add(Clone(part.Clip)); } continue; }
             if (live is null) { lane.Clips.Add(Clone(part.Clip)); continue; }
-            if (old.Lane != part.Lane) { foreach (MixLane value in mix.Lanes) value.Clips.Remove(live); lane.Clips.Add(live); }
+            if (old.Lane != part.Lane) { foreach (MixLane value in mix.Lanes) { value.Clips.Remove(live); } lane.Clips.Add(live); }
             SetClipDelta(live, old.Clip, part.Clip);
         }
         foreach (var (id, value) in toLanes)
         {
-            if (!fromLanes.TryGetValue(id, out MixLane? old)) continue;
-            MixLane? live = mix.Lanes.FirstOrDefault(lane => lane.Id == id); if (live is null) continue;
-            if (old.Gain != value.Gain) live.Gain = value.Gain;
+            if (!fromLanes.TryGetValue(id, out MixLane? old))
+            {
+                continue;
+            }
+
+            MixLane? live = mix.Lanes.FirstOrDefault(lane => lane.Id == id); if (live is null)
+            {
+                continue;
+            }
+
+            if (old.Gain != value.Gain)
+            {
+                live.Gain = value.Gain;
+            }
             // Solo/Mute are intentionally kept out of undo/redo steps; they are
             // persisted via the project file / auto-save instead. Undo/redo therefore
             // preserves the current solo/mute state.
-            if (old.AutoCrossfade != value.AutoCrossfade) live.AutoCrossfade = value.AutoCrossfade;
+            if (old.AutoCrossfade != value.AutoCrossfade)
+            {
+                live.AutoCrossfade = value.AutoCrossfade;
+            }
         }
-        if (entry.RestoreTempo) mix.Bpm = to.Bpm;
+        if (entry.RestoreTempo)
+        {
+            mix.Bpm = to.Bpm;
+        }
     }
     private static void SetClipDelta(MixClip live, MixClip before, MixClip after)
     {
-        if (before.SourceId != after.SourceId) live.SourceId = after.SourceId;
-        if (before.Start != after.Start) live.Start = after.Start;
-        if (before.SourceOffset != after.SourceOffset) live.SourceOffset = after.SourceOffset;
-        if (before.SourceDuration != after.SourceDuration) live.SourceDuration = after.SourceDuration;
-        if (before.Gain != after.Gain) live.Gain = after.Gain;
-        if (before.FadeIn != after.FadeIn) live.FadeIn = after.FadeIn;
-        if (before.FadeOut != after.FadeOut) live.FadeOut = after.FadeOut;
-        if (before.TempoMode != after.TempoMode) live.TempoMode = after.TempoMode;
-        if (before.HasRenderedEnvelope != after.HasRenderedEnvelope) live.HasRenderedEnvelope = after.HasRenderedEnvelope;
+        if (before.SourceId != after.SourceId)
+        {
+            live.SourceId = after.SourceId;
+        }
+
+        if (before.Start != after.Start)
+        {
+            live.Start = after.Start;
+        }
+
+        if (before.SourceOffset != after.SourceOffset)
+        {
+            live.SourceOffset = after.SourceOffset;
+        }
+
+        if (before.SourceDuration != after.SourceDuration)
+        {
+            live.SourceDuration = after.SourceDuration;
+        }
+
+        if (before.Gain != after.Gain)
+        {
+            live.Gain = after.Gain;
+        }
+
+        if (before.FadeIn != after.FadeIn)
+        {
+            live.FadeIn = after.FadeIn;
+        }
+
+        if (before.FadeOut != after.FadeOut)
+        {
+            live.FadeOut = after.FadeOut;
+        }
+
+        if (before.TempoMode != after.TempoMode)
+        {
+            live.TempoMode = after.TempoMode;
+        }
+
+        if (before.HasRenderedEnvelope != after.HasRenderedEnvelope)
+        {
+            live.HasRenderedEnvelope = after.HasRenderedEnvelope;
+        }
     }
     private static State Read(string state) => JsonSerializer.Deserialize<State>(state) ?? throw new InvalidDataException("Invalid audio snapshot.");
     private static T Clone<T>(T value) => JsonSerializer.Deserialize<T>(JsonSerializer.Serialize(value))!;

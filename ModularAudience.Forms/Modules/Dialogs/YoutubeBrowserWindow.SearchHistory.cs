@@ -16,11 +16,15 @@ public partial class YoutubeBrowserWindow
             // Rebuilding Shell autocomplete while Enter or a suggestion click is being
             // dispatched can block the UI in native autocomplete/COM code.
             if (this.searchSuggestionsDirty && this.IsHandleCreated && !this.IsDisposed)
+            {
                 this.BeginInvoke((Action)(() =>
                 {
                     if (!this.IsDisposed && !this.resourcesReleased && !this.queryText.ContainsFocus)
+                    {
                         this.RefreshSearchSuggestions();
+                    }
                 }));
+            }
         };
     }
     private void RefreshSearchSuggestions()
@@ -34,7 +38,11 @@ public partial class YoutubeBrowserWindow
     }
     private void RememberSearch(string query)
     {
-        if (string.IsNullOrWhiteSpace(query)) return;
+        if (string.IsNullOrWhiteSpace(query))
+        {
+            return;
+        }
+
         try
         {
             this.searchHistory ??= new();
@@ -46,13 +54,20 @@ public partial class YoutubeBrowserWindow
     }
     private void ShowSearchHistory()
     {
-        if (this.closing || this.IsDisposed || this.resourcesReleased) return;
+        if (this.closing || this.IsDisposed || this.resourcesReleased)
+        {
+            return;
+        }
+
         if (this.searchHistoryMenu?.Visible == true)
         {
             this.searchHistoryMenu.Close();
             return;
         }
-        if (this.searchHistory?.Entries.Count is not > 0) return;
+        if (this.searchHistory?.Entries.Count is not > 0)
+        {
+            return;
+        }
         // Keep the dropdown alive until the browser is disposed. Disposing from Closed
         // destroys its native handle while ToolStrip is still finishing dismissal.
         var menu = this.searchHistoryMenu ??= new ContextMenuStrip { ShowImageMargin = false, AutoSize = true };

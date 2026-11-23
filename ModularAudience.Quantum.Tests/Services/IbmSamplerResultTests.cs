@@ -120,7 +120,10 @@ public sealed class IbmSamplerResultTests
             Numpy([9, 6, 9, 6], shots: 5), Numpy([9, 6]), Numpy([25, 6, 9, 6]), new byte[20_000]
         ];
         foreach (byte[] bytes in malformed)
+        {
             await Assert.ThrowsExactlyAsync<JsonException>(() => ExecuteResultAsync(EncodedResult(Compress(bytes))));
+        }
+
         await Assert.ThrowsExactlyAsync<JsonException>(() => ExecuteResultAsync(EncodedResult(Convert.ToBase64String([1, 2, 3]))));
     }
 
@@ -141,7 +144,15 @@ public sealed class IbmSamplerResultTests
         using var stream = new MemoryStream();
         using var writer = new BinaryWriter(stream, Encoding.ASCII, leaveOpen: true);
         writer.Write((byte)0x93); writer.Write("NUMPY"u8); writer.Write((byte)version); writer.Write((byte)0);
-        if (version == 1) writer.Write((ushort)header.Length); else writer.Write(header.Length);
+        if (version == 1)
+        {
+            writer.Write((ushort)header.Length);
+        }
+        else
+        {
+            writer.Write(header.Length);
+        }
+
         writer.Write(Encoding.ASCII.GetBytes(header)); writer.Write(samples);
         return stream.ToArray();
     }
@@ -149,7 +160,11 @@ public sealed class IbmSamplerResultTests
     private static string Compress(byte[] bytes)
     {
         using var stream = new MemoryStream();
-        using (var zlib = new ZLibStream(stream, CompressionMode.Compress, leaveOpen: true)) zlib.Write(bytes);
+        using (var zlib = new ZLibStream(stream, CompressionMode.Compress, leaveOpen: true))
+        {
+            zlib.Write(bytes);
+        }
+
         return Convert.ToBase64String(stream.ToArray());
     }
 }

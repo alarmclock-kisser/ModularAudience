@@ -21,10 +21,21 @@ public partial class YoutubeBrowserWindow
 
     private void PublishResults(IReadOnlyList<YtdlpVideo> videos, string query, string summary, bool recommendationOrder = false)
     {
-        if (historyPosition >= 0) resultsHistory[historyPosition] = CaptureResultsPage();
+        if (historyPosition >= 0)
+        {
+            resultsHistory[historyPosition] = CaptureResultsPage();
+        }
+
         if (historyPosition + 1 < resultsHistory.Count)
+        {
             resultsHistory.RemoveRange(historyPosition + 1, resultsHistory.Count - historyPosition - 1);
-        if (recommendationOrder) sortColumn = -1;
+        }
+
+        if (recommendationOrder)
+        {
+            sortColumn = -1;
+        }
+
         PopulateResults(videos);
         displayedQuery = query;
         displayedChannel = null;
@@ -32,15 +43,27 @@ public partial class YoutubeBrowserWindow
         displayedResultType = (YtdlpResultType)Math.Max(0, resultTypeCombo.SelectedIndex);
         resultsSummary.Text = summary + (videos.Count < displayedLimit ? " | YouTube returned fewer usable videos than requested." : "");
         resultsHistory.Add(CaptureResultsPage());
-        if (resultsHistory.Count > 50) resultsHistory.RemoveAt(0);
+        if (resultsHistory.Count > 50)
+        {
+            resultsHistory.RemoveAt(0);
+        }
+
         historyPosition = resultsHistory.Count - 1;
     }
 
     private void NavigateResultsHistory(int direction)
     {
-        if (closing || historyPosition < 0) return;
+        if (closing || historyPosition < 0)
+        {
+            return;
+        }
+
         int next = historyPosition + direction;
-        if (next < 0 || next >= resultsHistory.Count) return;
+        if (next < 0 || next >= resultsHistory.Count)
+        {
+            return;
+        }
+
         browseCancellation?.Cancel();
         resultsHistory[historyPosition] = CaptureResultsPage();
         dateCancellation?.Cancel();
@@ -60,9 +83,16 @@ public partial class YoutubeBrowserWindow
         PopulateResults(page.Videos);
         resultsSummary.Text = page.Summary;
         var selected = page.SelectedIds.ToHashSet(StringComparer.Ordinal);
-        foreach (ListViewItem row in resultsList.Items) row.Selected = selected.Contains(((YtdlpVideo)row.Tag!).Id);
+        foreach (ListViewItem row in resultsList.Items)
+        {
+            row.Selected = selected.Contains(((YtdlpVideo)row.Tag!).Id);
+        }
+
         if (resultsList.Items.Count > 0)
+        {
             resultsList.TopItem = resultsList.Items[Math.Clamp(page.TopIndex, 0, resultsList.Items.Count - 1)];
+        }
+
         browsingTabs.SelectedTab = resultsTab;
         RefreshAvailability();
     }

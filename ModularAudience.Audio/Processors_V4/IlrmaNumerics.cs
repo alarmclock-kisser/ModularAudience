@@ -17,7 +17,10 @@ namespace ModularAudience.Audio.Processors_V4
         internal static double Positive(double value, string operation)
         {
             if (!double.IsFinite(value) || value < 0)
+            {
                 throw new ArithmeticException($"ILRMA {operation} produced an invalid nonnegative value.");
+            }
+
             return Math.Max(Floor, value);
         }
 
@@ -26,7 +29,9 @@ namespace ModularAudience.Audio.Processors_V4
             long available = GC.GetGCMemoryInfo().TotalAvailableMemoryBytes;
             long budget = available > 0 ? Math.Min(MaximumWorkingBytes, available / 2) : MaximumWorkingBytes;
             if (bytes > budget)
+            {
                 throw new ArgumentException($"ILRMA {stage} needs an estimated {bytes} working bytes; the limit is {budget}. Reduce AnalysisFrames, WindowSize or Threads.");
+            }
         }
 
         internal static void Transform(Complex[] values, bool inverse, CancellationToken token)
@@ -34,12 +39,26 @@ namespace ModularAudience.Audio.Processors_V4
             token.ThrowIfCancellationRequested();
             // A private managed provider: no process-wide MathNet provider/thread changes.
             ManagedFourierTransformProvider provider = new();
-            if (inverse) provider.Backward(values, FourierTransformScaling.BackwardScaling);
-            else provider.Forward(values, FourierTransformScaling.NoScaling);
+            if (inverse)
+            {
+                provider.Backward(values, FourierTransformScaling.BackwardScaling);
+            }
+            else
+            {
+                provider.Forward(values, FourierTransformScaling.NoScaling);
+            }
+
             for (int i = 0; i < values.Length; i++)
             {
-                if ((i & 255) == 0) token.ThrowIfCancellationRequested();
-                if (!IsFinite(values[i])) throw new ArithmeticException("ILRMA FFT produced a non-finite value.");
+                if ((i & 255) == 0)
+                {
+                    token.ThrowIfCancellationRequested();
+                }
+
+                if (!IsFinite(values[i]))
+                {
+                    throw new ArithmeticException("ILRMA FFT produced a non-finite value.");
+                }
             }
         }
 

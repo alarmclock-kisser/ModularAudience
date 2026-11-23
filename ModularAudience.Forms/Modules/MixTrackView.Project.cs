@@ -14,17 +14,32 @@ public sealed partial class MixTrackView
 
     private void AddEmptyTrack()
     {
-        if (busy || PlaybackLocksEdits) return;
+        if (busy || PlaybackLocksEdits)
+        {
+            return;
+        }
+
         Arrangement.Lanes.Add(new() { Name = NextLaneName() }); Changed();
     }
     private void EnsureTrackLayout()
     {
         bool laneCountChanged = Arrangement.Lanes.Count != layoutLaneCount;
-        if (Arrangement.Visual.AutoTrackHeight && !laneCountChanged) ApplyAutoTrackHeight();
+        if (Arrangement.Visual.AutoTrackHeight && !laneCountChanged)
+        {
+            ApplyAutoTrackHeight();
+        }
+
         UpdateVerticalScrollbar();
-        if (!laneCountChanged) return;
+        if (!laneCountChanged)
+        {
+            return;
+        }
+
         layoutLaneCount = Arrangement.Lanes.Count;
-        if (layoutLaneCount == 0) return;
+        if (layoutLaneCount == 0)
+        {
+            return;
+        }
         // All lanes use one shared pixel height. Grow the client area on insertion;
         // if the screen is full, use the existing vertical scrollbar, never squeeze the new lane.
         int extra = ClientSize.Height - canvas.ClientSize.Height;
@@ -39,7 +54,11 @@ public sealed partial class MixTrackView
             requested = extra + Ruler + layoutLaneCount * LaneHeight + 4;
         }
         automaticSizing = true;
-        try { if (requested > ClientSize.Height) ClientSize = new(ClientSize.Width, Math.Min(requested, maximumClientHeight)); }
+        try { if (requested > ClientSize.Height)
+            {
+                ClientSize = new(ClientSize.Width, Math.Min(requested, maximumClientHeight));
+            }
+        }
         finally { previousClientHeight = ClientSize.Height; automaticSizing = false; }
         UpdateVerticalScrollbar();
         canvas.Invalidate();
@@ -56,26 +75,45 @@ public sealed partial class MixTrackView
     }
     private void JumpToManualCaret(bool reset)
     {
-        if (reset) manualCaret = 0;
+        if (reset)
+        {
+            manualCaret = 0;
+        }
+
         caret = manualCaret;
         playback?.SetPosition((long)(caret * playback.SampleRate));
         double width = Math.Max(1, canvas.Width - Header) / pixelsPerSecond;
         if (caret < ViewStart || caret >= ViewStart + width)
+        {
             scroll.Value = Math.Clamp((int)(caret * 100), scroll.Minimum, scroll.Maximum - scroll.LargeChange + 1);
+        }
+
         canvas.Invalidate();
     }
     private void QueueProjectSave(bool force = false)
     {
-        if (restoring || released || projectPath == null || (!Arrangement.AutoSave && !force)) return;
+        if (restoring || released || projectPath == null || (!Arrangement.AutoSave && !force))
+        {
+            return;
+        }
+
         string state = Arrangement.CaptureProject();
-        if (pendingProjectSave is { } pending && pending.Path == projectPath && pending.State == state) return;
+        if (pendingProjectSave is { } pending && pending.Path == projectPath && pending.State == state)
+        {
+            return;
+        }
+
         pendingProjectSave = (projectPath, state, Arrangement.ProjectSources().ToArray());
         projectSaveTimer.Stop(); projectSaveTimer.Start();
     }
     private async Task FlushProjectSaveAsync()
     {
-        if (!projectSaveWork.IsCompleted) { try { await projectSaveWork; } catch { } if (pendingProjectSave != null) await FlushProjectSaveAsync(); return; }
-        if (pendingProjectSave is not { } save) return;
+        if (!projectSaveWork.IsCompleted) { try { await projectSaveWork; } catch { } if (pendingProjectSave != null) { await FlushProjectSaveAsync(); } return; }
+        if (pendingProjectSave is not { } save)
+        {
+            return;
+        }
+
         pendingProjectSave = null;
         projectSaveWork = MixProjectFile.SaveSnapshotAsync(save.Path, save.State, save.Sources);
         try
@@ -84,7 +122,11 @@ public sealed partial class MixTrackView
             if (!released && projectPath == save.Path && Arrangement.CaptureProject() == save.State)
             { dirty = false; status.Text = "Auto-saved project metadata; existing audio assets reused."; }
         }
-        catch (Exception error) { if (!released) status.Text = "Auto-save failed: " + error.Message; }
+        catch (Exception error) { if (!released)
+            {
+                status.Text = "Auto-save failed: " + error.Message;
+            }
+        }
         if (pendingProjectSave != null && !released) { projectSaveTimer.Stop(); projectSaveTimer.Start(); }
     }
     private async Task SaveToPathAsync(string path, CancellationToken token = default)
@@ -93,7 +135,11 @@ public sealed partial class MixTrackView
         // Saving "with a name" makes that name the mix's current project name, so
         // it shows up in the window title (and in the saved project data).
         string baseName = Path.GetFileNameWithoutExtension(path);
-        if (!string.IsNullOrWhiteSpace(baseName)) Arrangement.Name = baseName.Trim();
+        if (!string.IsNullOrWhiteSpace(baseName))
+        {
+            Arrangement.Name = baseName.Trim();
+        }
+
         string state = Arrangement.CaptureProject();
         var sources = Arrangement.ProjectSources();
         await MixProjectFile.SaveSnapshotAsync(path, state, sources, token);
@@ -102,7 +148,10 @@ public sealed partial class MixTrackView
         committedProject = state;
         dirty = false;
         status.Text = "Project saved — journal metadata and reusable Float32 assets.";
-        if (dirty) QueueProjectSave();
+        if (dirty)
+        {
+            QueueProjectSave();
+        }
     }
     private async Task LoadFromPathAsync(string path, CancellationToken token = default)
     {
@@ -112,7 +161,10 @@ public sealed partial class MixTrackView
         _videoUndo.Clear(); _videoRedo.Clear(); _videoLane = null; _hoveredVideoClip = null; videoDragBefore = null;
         ClearVideoThumbnailCache();
         ResetWavePeakCache(); Arrangement.Sources.Clear();
-        foreach (var source in loaded.Sources) Arrangement.Sources[source.Key] = source.Value;
+        foreach (var source in loaded.Sources)
+        {
+            Arrangement.Sources[source.Key] = source.Value;
+        }
         // Project loading begins a fresh undo session; assets from the previous project
         // cannot be referenced by later undo operations.
         undo.Clear(); redo.Clear(); projectPath = null;

@@ -48,13 +48,20 @@ public sealed class QuantumStudioCoreTests
         QuantumGateOperation[] invalid = [null!, new((QuantumGateKind)99, 0), new(QuantumGateKind.Hadamard, -1),
             new(QuantumGateKind.Hadamard, 4), new(QuantumGateKind.ControlledNot, 0, 0), new(QuantumGateKind.ControlledNot, 0, 4),
             new(QuantumGateKind.RotationY, 0, AngleRadians: double.NaN)];
-        foreach (var gate in invalid) Assert.ThrowsExactly<ArgumentException>(() => QuantumCircuitComposer.Build(new(4, [gate])));
+        foreach (var gate in invalid)
+        {
+            Assert.ThrowsExactly<ArgumentException>(() => QuantumCircuitComposer.Build(new(4, [gate])));
+        }
+
         Assert.ThrowsExactly<ArgumentException>(() => QuantumCircuitComposer.CreatePreset("unknown", 4));
         Assert.ThrowsExactly<ArgumentOutOfRangeException>(() => QuantumCircuitComposer.CreatePreset("Weighted groove", 4, double.NaN));
         Assert.ThrowsExactly<ArgumentNullException>(() => QuantumCircuitComposer.Randomize(4, null!));
         QuantumCircuitRandomization[] bad = [new(Layers: 0), new(HadamardChance: 2), new(EntanglementChance: double.NaN),
             new(MinimumAngleRadians: -10), new(MaximumAngleRadians: 10), new(MinimumAngleRadians: 2, MaximumAngleRadians: 1)];
-        foreach (var settings in bad) Assert.ThrowsExactly<ArgumentException>(() => QuantumCircuitComposer.Randomize(4, settings));
+        foreach (var settings in bad)
+        {
+            Assert.ThrowsExactly<ArgumentException>(() => QuantumCircuitComposer.Randomize(4, settings));
+        }
     }
 
     [TestMethod]
@@ -91,7 +98,11 @@ public sealed class QuantumStudioCoreTests
             Assert.AreEqual(1, note.Velocity);
         }
         var firstBar = result.Notes.Take(8).ToArray(); var secondBar = result.Notes.Skip(8).ToArray();
-        for (int i = 0; i < firstBar.Length; i++) Assert.AreEqual(firstBar[i] with { StartStep = firstBar[i].StartStep + 8 }, secondBar[i]);
+        for (int i = 0; i < firstBar.Length; i++)
+        {
+            Assert.AreEqual(firstBar[i] with { StartStep = firstBar[i].StartStep + 8 }, secondBar[i]);
+        }
+
         Assert.AreEqual(response.ExecutionLatency, result.ExecutionLatency);
     }
 
@@ -137,12 +148,18 @@ public sealed class QuantumStudioCoreTests
             good with { MinimumDurationSteps = 0 }, good with { MaximumDurationSteps = 0 }, good with { MinimumPitchCents = -1201 }, good with { MaximumPitchCents = -1201 },
             good with { PitchStepCents = 0 }, good with { MinimumStretch = 0 }, good with { MaximumStretch = 0 }, good with { MinimumSpeed = 0 },
             good with { MaximumSpeed = 0 }, good with { MaximumCutOffsetMs = -1 }, good with { OutputGainDb = 13 }];
-        foreach (var options in invalid) Assert.Throws<ArgumentException>(() => options.Validate(4, tracks));
+        foreach (var options in invalid)
+        {
+            Assert.Throws<ArgumentException>(() => options.Validate(4, tracks));
+        }
+
         Assert.Throws<ArgumentException>(() => good.Validate(3, tracks));
         Assert.Throws<ArgumentException>(() => good.Validate(4, []));
         foreach (var track in new QuantumTrackMapping[] { null!, new("", 0), new("Kick", 4), new("Kick", 0, StepOffset: int.MinValue),
             new("Kick", 0, DensityScale: 3), new("Kick", 0, Gain: 2), new("Kick", 0, PitchOffsetCents: 1201) })
+        {
             Assert.Throws<ArgumentException>(() => good.Validate(4, [track]));
+        }
     }
 
     [TestMethod]

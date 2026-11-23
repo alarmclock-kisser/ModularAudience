@@ -14,7 +14,10 @@ internal sealed class ApplicationPreferencesMonitor : IDisposable
         Directory.CreateDirectory(directory);
         this.debounce = new System.Threading.Timer(_ =>
         {
-            if (Volatile.Read(ref this.disposed) == 0) this.Changed?.Invoke(this, EventArgs.Empty);
+            if (Volatile.Read(ref this.disposed) == 0)
+            {
+                this.Changed?.Invoke(this, EventArgs.Empty);
+            }
         }, null, Timeout.Infinite, Timeout.Infinite);
         this.watcher = new FileSystemWatcher(directory, Path.GetFileName(fullPath))
         {
@@ -32,14 +35,22 @@ internal sealed class ApplicationPreferencesMonitor : IDisposable
 
     private void Schedule(object? sender, EventArgs e)
     {
-        if (Volatile.Read(ref this.disposed) != 0) return;
+        if (Volatile.Read(ref this.disposed) != 0)
+        {
+            return;
+        }
+
         try { this.debounce.Change(120, Timeout.Infinite); }
         catch (ObjectDisposedException) { }
     }
 
     public void Dispose()
     {
-        if (Interlocked.Exchange(ref this.disposed, 1) != 0) return;
+        if (Interlocked.Exchange(ref this.disposed, 1) != 0)
+        {
+            return;
+        }
+
         this.watcher.Dispose();
         this.debounce.Dispose();
     }

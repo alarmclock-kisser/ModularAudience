@@ -61,7 +61,7 @@ public sealed class SampleWaveformModeller : Form
         root.RowStyles.Add(new(SizeType.Percent, 100)); root.RowStyles.Add(new(SizeType.Absolute, 38));
         var toolbar = Flow();
         toolbar.Controls.Add(play); play.Click += (_, _) => Safe(ToggleHear);
-        toolbar.Controls.Add(loop); loop.CheckedChanged += (_, _) => { if (provider != null) provider.Loop = loop.Checked; };
+        toolbar.Controls.Add(loop); loop.CheckedChanged += (_, _) => { if (provider != null) { provider.Loop = loop.Checked; } };
         toolbar.Controls.Add(bypass); bypass.CheckedChanged += (_, _) => { UpdatePreview(); plot.Invalidate(); };
         save = Tool(toolbar, "Save", () => _ = SaveAsync((ModifierKeys & Keys.Control) != 0));
         Tool(toolbar, "Undo", () => History(false)); Tool(toolbar, "Redo", () => History(true));
@@ -96,7 +96,11 @@ public sealed class SampleWaveformModeller : Form
         };
         spectrum.MouseDown += (_, e) => Safe(() =>
         {
-            if (e.Button != MouseButtons.Left) return;
+            if (e.Button != MouseButtons.Left)
+            {
+                return;
+            }
+
             var eq = SampleEffect.Create(SampleEffectKind.PeakEq);
             eq.FrequencyHz = 20 * Math.Pow(Math.Max(1, original.SampleRate / 2d / 20), Math.Clamp(e.X / (double)Math.Max(1, spectrum.Width), 0, 1));
             eq.GainDb = Math.Clamp(24 - 48 * e.Y / (double)Math.Max(1, spectrum.Height - 22), -24, 24);
@@ -151,7 +155,7 @@ public sealed class SampleWaveformModeller : Form
         selectionStart.ValueChanged += (_, _) => { UpdatePreview(); plot.Invalidate(); };
         selectionEnd.ValueChanged += (_, _) => { UpdatePreview(); plot.Invalidate(); };
         plot.Paint += PaintWave; plot.MouseDown += BeginStroke; plot.MouseMove += ContinueStroke;
-        plot.MouseUp += (_, _) => EndStroke(); plot.MouseCaptureChanged += (_, _) => { if (!plot.Capture) EndStroke(); };
+        plot.MouseUp += (_, _) => EndStroke(); plot.MouseCaptureChanged += (_, _) => { if (!plot.Capture) { EndStroke(); } };
         plot.MouseWheel += (_, e) =>
         {
             double anchor = PositionAt(e.X);
@@ -161,7 +165,7 @@ public sealed class SampleWaveformModeller : Form
             scroll.Value = max > 0 ? (int)Math.Clamp(start / max * 100000, 0, 100000) : 0;
         };
         debounce.Tick += (_, _) => { debounce.Stop(); renderTask = RenderLatestAsync(); };
-        meter.Tick += (_, _) => { if (output?.PlaybackState == PlaybackState.Playing && provider?.Finished == true) StopHear(); plot.Invalidate(); };
+        meter.Tick += (_, _) => { if (output?.PlaybackState == PlaybackState.Playing && provider?.Finished == true) { StopHear(); } plot.Invalidate(); };
         Shown += (_, _) => { body.SplitterDistance = Math.Max(450, body.Width - 400); };
         FormClosing += (_, _) => { renderCts?.Cancel(); StopHear(); };
         Safe(RefreshPresets); committed = settings.Clone(); QueueRender();
@@ -175,13 +179,21 @@ public sealed class SampleWaveformModeller : Form
     private Button Tool(Control parent, string text, Action action)
     { var button = new Button { Text = text, AutoSize = true }; button.Click += (_, _) => Safe(action); parent.Controls.Add(button); return button; }
     private void Safe(Action action) { try { action(); } catch (Exception error) { status.Text = error.Message; } }
-    private void CheckRange() { if (selectionStart.Value >= selectionEnd.Value) throw new ArgumentException("Selection start must be before its end."); }
+    private void CheckRange() { if (selectionStart.Value >= selectionEnd.Value)
+        {
+            throw new ArgumentException("Selection start must be before its end.");
+        }
+    }
     private void RefreshPresets() { preset.Items.Clear(); preset.Items.AddRange(presets.Names()); }
     private void SavePreset()
     { settings.Name = presetName.Text.Trim(); presets.Save(settings.Name, settings); Commit(); RefreshPresets(); preset.SelectedItem = settings.Name; status.Text = "Preset saved in AppData."; }
     private void LoadPreset()
     {
-        if (preset.SelectedItem is not string name) return;
+        if (preset.SelectedItem is not string name)
+        {
+            return;
+        }
+
         settings = presets.Load(name); presetName.Text = name; Commit(); RefreshChain();
     }
     private void AddEffect()
@@ -194,33 +206,59 @@ public sealed class SampleWaveformModeller : Form
     private void MoveEffect(int offset)
     {
         int index = chain.SelectedIndex, next = index + offset;
-        if (index < 0 || next < 0 || next >= settings.Effects.Count) return;
+        if (index < 0 || next < 0 || next >= settings.Effects.Count)
+        {
+            return;
+        }
+
         var effect = settings.Effects[index]; settings.Effects.RemoveAt(index); settings.Effects.Insert(next, effect); Commit(); RefreshChain(effect);
     }
     private void RefreshChain(object? selected = null)
     {
         int index = chain.SelectedIndex; chain.BeginUpdate(); chain.Items.Clear(); chain.Items.AddRange(settings.Effects.Cast<object>().ToArray());
-        if (selected != null && chain.Items.Contains(selected)) chain.SelectedItem = selected;
-        else if (chain.Items.Count > 0) chain.SelectedIndex = Math.Clamp(index, 0, chain.Items.Count - 1);
-        else properties.SelectedObject = null;
+        if (selected != null && chain.Items.Contains(selected))
+        {
+            chain.SelectedItem = selected;
+        }
+        else if (chain.Items.Count > 0)
+        {
+            chain.SelectedIndex = Math.Clamp(index, 0, chain.Items.Count - 1);
+        }
+        else
+        {
+            properties.SelectedObject = null;
+        }
+
         chain.EndUpdate();
     }
     private void Commit()
     {
         settings.Validate();
-        if (JsonSerializer.Serialize(settings) == JsonSerializer.Serialize(committed)) return;
+        if (JsonSerializer.Serialize(settings) == JsonSerializer.Serialize(committed))
+        {
+            return;
+        }
+
         undo.Push(committed.Clone()); redo.Clear(); committed = settings.Clone(); QueueRender();
     }
     private void History(bool forward)
     {
         EndStroke(); var from = forward ? redo : undo; var to = forward ? undo : redo;
-        if (from.Count == 0) return;
+        if (from.Count == 0)
+        {
+            return;
+        }
+
         to.Push(committed.Clone()); settings = from.Pop(); committed = settings.Clone(); presetName.Text = settings.Name;
         RefreshChain(); QueueRender();
     }
     private void QueueRender()
     {
-        if (disposed) return;
+        if (disposed)
+        {
+            return;
+        }
+
         revision++; renderCts?.Cancel(); debounce.Stop(); debounce.Start(); status.Text = "Updating waveform…";
     }
     private async Task RenderLatestAsync()
@@ -241,33 +279,77 @@ public sealed class SampleWaveformModeller : Form
             status.Text = $"{result.Duration.TotalSeconds:0.000} s · {result.SampleRate} Hz · {result.Channels} ch · Peak {20 * Math.Log10(Math.Max(1e-12, peak)):0.0} dBFS{(peak > 1 ? " — above full scale" : "")} · {settings.Effects.Count} effects. Save replaces; Ctrl+Save creates a variation.";
         }
         catch (OperationCanceledException) { }
-        catch (Exception error) { if (!disposed && generation == revision) status.Text = error.Message; }
-        finally { if (ReferenceEquals(renderCts, cts)) renderCts = null; cts.Dispose(); }
+        catch (Exception error) { if (!disposed && generation == revision)
+            {
+                status.Text = error.Message;
+            }
+        }
+        finally { if (ReferenceEquals(renderCts, cts)) { renderCts = null; } cts.Dispose(); }
     }
     private async Task SaveAsync(bool copy)
     {
-        if (saving) return; saving = true; save.Enabled = false;
+        if (saving)
+        {
+            return;
+        }
+
+        saving = true; save.Enabled = false;
         try
         {
             EndStroke(); debounce.Stop();
             if (readyRevision != revision) { renderCts?.Cancel(); renderTask = RenderLatestAsync(); await renderTask; }
-            if (disposed) return;
-            if (readyRevision != revision || rendered == null) throw new InvalidOperationException("Resolve the effect error before saving.");
+            if (disposed)
+            {
+                return;
+            }
+
+            if (readyRevision != revision || rendered == null)
+            {
+                throw new InvalidOperationException("Resolve the effect error before saving.");
+            }
+
             CommitToCollection(copy);
-            if (!copy) Close(); else status.Text = "New modelled variation added to the same collection.";
+            if (!copy)
+            {
+                Close();
+            }
+            else
+            {
+                status.Text = "New modelled variation added to the same collection.";
+            }
         }
-        catch (Exception error) { if (!disposed) status.Text = error.Message; }
-        finally { saving = false; if (!disposed) save.Enabled = true; }
+        catch (Exception error) { if (!disposed)
+            {
+                status.Text = error.Message;
+            }
+        }
+        finally { saving = false; if (!disposed)
+            {
+                save.Enabled = true;
+            }
+        }
     }
     private void CommitToCollection(bool copy)
     {
-        if (collection.IsDisposed || !collection.AudioC.Audios.Contains(target)) throw new InvalidOperationException("The original sample is no longer in its collection.");
-        if (rendered == null) throw new InvalidOperationException("No rendered audio is ready.");
+        if (collection.IsDisposed || !collection.AudioC.Audios.Contains(target))
+        {
+            throw new InvalidOperationException("The original sample is no longer in its collection.");
+        }
+
+        if (rendered == null)
+        {
+            throw new InvalidOperationException("No rendered audio is ready.");
+        }
+
         if (copy)
         {
             var variant = rendered.Clone(); variant.Tag = target.Tag; variant.Key = target.Key; variant.SampleTag = target.SampleTag;
             string basis = target.OriginalName + " — Modelled", name = basis; int count = 2;
-            while (collection.AudioC.Audios.Any(a => a.Name == name)) name = basis + " " + count++;
+            while (collection.AudioC.Audios.Any(a => a.Name == name))
+            {
+                name = basis + " " + count++;
+            }
+
             variant.FilePath = string.Empty; variant.Rename(name); collection.AudioC.Audios.Add(variant);
         }
         else
@@ -285,13 +367,25 @@ public sealed class SampleWaveformModeller : Form
         int offset = Math.Max(0, (frames - size) / 2);
         for (int i = 0; i < Math.Min(size, frames); i++)
         {
-            double value = 0; for (int c = 0; c < audio.Channels; c++) value += audio.Data[(offset + i) * audio.Channels + c] / (double)audio.Channels;
+            double value = 0; for (int c = 0; c < audio.Channels; c++)
+            {
+                value += audio.Data[(offset + i) * audio.Channels + c] / (double)audio.Channels;
+            }
+
             fft[i] = value * (0.5 - 0.5 * Math.Cos(2 * Math.PI * i / (size - 1)));
         }
         for (int i = 1, j = 0; i < size; i++)
         {
-            int bit = size >> 1; for (; (j & bit) != 0; bit >>= 1) j ^= bit; j ^= bit;
-            if (i < j) (fft[i], fft[j]) = (fft[j], fft[i]);
+            int bit = size >> 1; for (; (j & bit) != 0; bit >>= 1)
+            {
+                j ^= bit;
+            }
+
+            j ^= bit;
+            if (i < j)
+            {
+                (fft[i], fft[j]) = (fft[j], fft[i]);
+            }
         }
         for (int length = 2; length <= size; length <<= 1)
         {
@@ -329,14 +423,22 @@ public sealed class SampleWaveformModeller : Form
     private double PositionAt(int x) => Math.Clamp(ViewStart + x / (double)Math.Max(1, plot.Width) / (double)zoom.Value, 0, 1);
     private double DrawValue(int y)
     {
-        if (gesture.SelectedIndex == 2) return Math.Clamp(2 * (1 - y / (double)Math.Max(1, plot.Height)), 0, 2);
+        if (gesture.SelectedIndex == 2)
+        {
+            return Math.Clamp(2 * (1 - y / (double)Math.Max(1, plot.Height)), 0, 2);
+        }
+
         double channelHeight = plot.Height / (double)Math.Max(1, original.Channels);
         double localY = y - ((int)drawChannel.Value - 1) * channelHeight;
         return Math.Clamp((1 - 2 * localY / Math.Max(1, channelHeight)) / (double)vertical.Value, -4, 4);
     }
     private void BeginStroke(object? sender, MouseEventArgs e)
     {
-        if (e.Button != MouseButtons.Left || saving) return;
+        if (e.Button != MouseButtons.Left || saving)
+        {
+            return;
+        }
+
         plot.Focus(); selectAnchor = PositionAt(e.X);
         if (gesture.SelectedIndex == 0) { plot.Capture = true; return; }
         stroke = SampleEffect.Create(gesture.SelectedIndex == 1 ? SampleEffectKind.DrawWaveform : SampleEffectKind.VolumeEnvelope);
@@ -346,7 +448,11 @@ public sealed class SampleWaveformModeller : Form
     }
     private void ContinueStroke(object? sender, MouseEventArgs e)
     {
-        if (!plot.Capture || (e.Button & MouseButtons.Left) == 0) return;
+        if (!plot.Capture || (e.Button & MouseButtons.Left) == 0)
+        {
+            return;
+        }
+
         double position = PositionAt(e.X);
         if (stroke == null)
         {
@@ -363,10 +469,14 @@ public sealed class SampleWaveformModeller : Form
     }
     private void EndStroke()
     {
-        if (stroke == null) { if (plot.Capture) plot.Capture = false; return; }
+        if (stroke == null) { if (plot.Capture) { plot.Capture = false; } return; }
         var drawing = stroke; stroke = null; plot.Capture = false;
         double start = drawing.Points.Min(p => p.Position), end = drawing.Points.Max(p => p.Position);
-        if (end <= start) end = Math.Min(1, start + 1d / Math.Max(1, original.Data.Length / original.Channels));
+        if (end <= start)
+        {
+            end = Math.Min(1, start + 1d / Math.Max(1, original.Data.Length / original.Channels));
+        }
+
         if (end <= start) { settings.Effects.Remove(drawing); return; }
         drawing.StartPercent = start * 100; drawing.EndPercent = end * 100;
         drawing.Points = drawing.Points.OrderBy(p => p.Position).Select(p => new SampleDrawPoint((p.Position - start) / (end - start), p.Value)).ToList();
@@ -375,7 +485,11 @@ public sealed class SampleWaveformModeller : Form
     private void PaintWave(object? sender, PaintEventArgs e)
     {
         var g = e.Graphics; g.Clear(Color.FromArgb(22, 24, 30)); var audio = DisplayAudio;
-        int frames = audio.Data.Length / audio.Channels; if (frames == 0) return;
+        int frames = audio.Data.Length / audio.Channels; if (frames == 0)
+        {
+            return;
+        }
+
         double start = ViewStart, width = 1 / (double)zoom.Value;
         using var gridPen = new Pen(Color.FromArgb(55, 60, 70)); using var wavePen = new Pen(Color.Turquoise);
         int channels = audio.Channels;
@@ -394,9 +508,17 @@ public sealed class SampleWaveformModeller : Form
                 if (last - first <= 2)
                 {
                     var point = new PointF(x, middle - audio.Data[first * channels + c] * amplitude);
-                    if (previous is { } p) g.DrawLine(wavePen, p, point); previous = point;
+                    if (previous is { } p)
+                    {
+                        g.DrawLine(wavePen, p, point);
+                    }
+
+                    previous = point;
                 }
-                else g.DrawLine(wavePen, x, middle - max * amplitude, x, middle - min * amplitude);
+                else
+                {
+                    g.DrawLine(wavePen, x, middle - max * amplitude, x, middle - min * amplitude);
+                }
             }
             g.DrawString($"Ch {c + 1}", Font, Brushes.Silver, 4, c * plot.Height / channels + 4);
         }
@@ -441,12 +563,12 @@ public sealed class SampleWaveformModeller : Form
         private float gain;
         public bool Loop { get; set; }
         public bool Finished { get; private set; }
-        public int Position { get { lock (gate) return position; } }
+        public int Position { get { lock (gate) { return position; } } }
         public WaveFormat WaveFormat { get; }
         public PreviewProvider(int rate, int channels) => WaveFormat = WaveFormat.CreateIeeeFloatWaveFormat(rate, channels);
         public void Update(float[] value, int start, int end)
         {
-            lock (gate) { data = value; first = start; last = end; if (position < first || position >= last) position = first; Finished = false; gain = 0; }
+            lock (gate) { data = value; first = start; last = end; if (position < first || position >= last) { position = first; } Finished = false; gain = 0; }
         }
         public int Read(float[] buffer, int offset, int count)
             => Read(buffer.AsSpan(offset, count));
@@ -457,13 +579,23 @@ public sealed class SampleWaveformModeller : Form
                 int channels = WaveFormat.Channels;
                 for (int i = 0; i < buffer.Length; i += channels)
                 {
-                    if (position >= last) { if (Loop) { position = first; gain = 0; } else Finished = true; }
+                    if (position >= last) { if (Loop) { position = first; gain = 0; } else
+                        {
+                            Finished = true;
+                        }
+                    }
                     gain = Math.Min(1, gain + 1f / Math.Max(1, WaveFormat.SampleRate / 200));
                     float fade = Math.Min(gain, (last - position) / (float)Math.Max(1, WaveFormat.SampleRate / 200));
                     for (int c = 0; c < channels && i + c < buffer.Length; c++)
+                    {
                         buffer[i + c] = !Finished && position * channels + c < data.Length
                             ? Math.Clamp(data[position * channels + c] * fade, -1, 1) : 0;
-                    if (!Finished) position++;
+                    }
+
+                    if (!Finished)
+                    {
+                        position++;
+                    }
                 }
                 return buffer.Length;
             }

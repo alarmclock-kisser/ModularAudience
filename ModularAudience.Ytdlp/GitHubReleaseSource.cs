@@ -38,7 +38,10 @@ public static partial class GitHubReleaseSource
         if (document.RootElement.ValueKind != JsonValueKind.Object ||
             !document.RootElement.TryGetProperty("tag_name", out var tag) ||
             tag.ValueKind != JsonValueKind.String || string.IsNullOrWhiteSpace(tag.GetString()))
+        {
             throw new InvalidDataException("The GitHub release does not have a valid tag.");
+        }
+
         return new GitHubRelease(tag.GetString()!, ParseAssets(document.RootElement));
     }
 
@@ -49,7 +52,10 @@ public static partial class GitHubReleaseSource
     {
         if (root.ValueKind != JsonValueKind.Object ||
             !root.TryGetProperty("assets", out var assetList) || assetList.ValueKind != JsonValueKind.Array)
+        {
             throw new InvalidDataException("The GitHub release does not have a valid asset list.");
+        }
+
         var assets = new List<ReleaseAsset>();
         foreach (var asset in assetList.EnumerateArray())
         {
@@ -60,7 +66,10 @@ public static partial class GitHubReleaseSource
                 string.IsNullOrWhiteSpace(url.GetString()) ||
                 !asset.TryGetProperty("size", out var size) || size.ValueKind != JsonValueKind.Number ||
                 !size.TryGetInt64(out var length) || length <= 0)
+            {
                 throw new InvalidDataException("The GitHub release contains invalid asset metadata.");
+            }
+
             assets.Add(new ReleaseAsset(name.GetString()!, url.GetString()!,
                 asset.TryGetProperty("digest", out var digest) && digest.ValueKind == JsonValueKind.String
                     ? digest.GetString() : null,
@@ -74,28 +83,40 @@ public static partial class GitHubReleaseSource
     {
         if (asset.Digest is { } digest && digest.StartsWith("sha256:", StringComparison.OrdinalIgnoreCase)
             && HashPattern().IsMatch(digest[7..]))
+        {
             return digest[7..].ToLowerInvariant();
+        }
 
         var checksum = assets.FirstOrDefault(a => a.Name == asset.Name + ".sha256")
             ?? assets.FirstOrDefault(a => a.Name == asset.Name + ".sha256sum")
             ?? assets.FirstOrDefault(a => a.Name == "SHA2-256SUMS")
             ?? assets.FirstOrDefault(a => a.Name.Equals("checksums.sha256", StringComparison.OrdinalIgnoreCase));
         if (checksum is null)
+        {
             throw new InvalidDataException($"No SHA256 digest or checksum asset is available for {asset.Name}.");
+        }
+
         var text = Encoding.UTF8.GetString(await ReadLimitedAsync(checksum.Url, 4 * 1024 * 1024, token))
             .Trim().TrimStart('\uFEFF');
         var dedicated = checksum.Name == asset.Name + ".sha256" || checksum.Name == asset.Name + ".sha256sum";
         if (dedicated && HashPattern().IsMatch(text))
+        {
             return text.ToLowerInvariant();
+        }
         // Deno's Windows checksum sidecar is currently PowerShell Get-FileHash output.
         if (dedicated && PowerShellHashPattern().Match(text) is { Success: true } match)
+        {
             return match.Groups[1].Value.ToLowerInvariant();
+        }
+
         foreach (var line in text.Split('\n'))
         {
             var parts = line.Trim().Split((char[]?)null, 2, StringSplitOptions.RemoveEmptyEntries);
             if (parts.Length == 2 && HashPattern().IsMatch(parts[0]) &&
                 parts[1].TrimStart('*').Trim() == asset.Name)
+            {
                 return parts[0].ToLowerInvariant();
+            }
         }
         throw new InvalidDataException($"No matching SHA256 checksum was found for {asset.Name}.");
     }
@@ -104,7 +125,10 @@ public static partial class GitHubReleaseSource
         CancellationToken token, IProgress<string>? progress = null, IProgress<YtdlpDownloadProgress>? downloadProgress = null)
     {
         if (asset.Size <= 0 || asset.Size > MaximumAssetBytes)
+        {
             throw new InvalidDataException("The binary asset size exceeds the allowed limit.");
+        }
+
         var transfer = new AssetTransferProgress(asset.Name, asset.Size, progress, downloadProgress);
         transfer.Report(0);
         using var response = await SendAsync(asset.Url, token);
@@ -118,7 +142,9 @@ public static partial class GitHubReleaseSource
         progress?.Report($"Verifying SHA256 for {asset.Name}.");
         if (new FileInfo(destination).Length != asset.Size ||
             !string.Equals(await HashAsync(destination, token), expectedHash, StringComparison.OrdinalIgnoreCase))
+        {
             throw new InvalidDataException($"SHA256 or size verification failed for {asset.Name}.");
+        }
     }
 
     public static async Task<string> HashAsync(string path, CancellationToken token)
@@ -147,7 +173,10 @@ public static partial class GitHubReleaseSource
         {
             total = checked(total + count);
             if (total > limit)
+            {
                 throw new InvalidDataException("The download exceeded the allowed size.");
+            }
+
             await target.WriteAsync(buffer.AsMemory(0, count), token);
             progress?.Report(total);
         }
@@ -168,12 +197,18 @@ public static partial class GitHubReleaseSource
                 var location = response.Headers.Location;
                 response.Dispose();
                 if (location is null)
+                {
                     throw new HttpRequestException("GitHub returned a redirect without a location.");
+                }
+
                 uri = location.IsAbsoluteUri ? location : new Uri(uri, location);
                 continue;
             }
             if (response.IsSuccessStatusCode)
+            {
                 return response;
+            }
+
             var status = response.StatusCode;
             response.Dispose();
             throw new HttpRequestException($"GitHub returned HTTP {(int)status} ({status}).", null, status);
@@ -186,7 +221,9 @@ public static partial class GitHubReleaseSource
         if (uri.Scheme != Uri.UriSchemeHttps || uri.Port != 443 || !string.IsNullOrEmpty(uri.UserInfo) ||
             uri.IdnHost is not ("api.github.com" or "github.com" or "release-assets.githubusercontent.com" or
                 "objects.githubusercontent.com" or "github-releases.githubusercontent.com"))
+        {
             throw new InvalidDataException("The binary URL is not an approved HTTPS GitHub endpoint.");
+        }
     }
 
     [GeneratedRegex("^[A-Fa-f0-9]{64}$", RegexOptions.CultureInvariant)]

@@ -13,7 +13,11 @@ public partial class YoutubeBrowserWindow
 
     private void NavigateToPlaylist_Click(object? sender, EventArgs e)
     {
-        if (!CanBrowse || SelectedVideo() is not { IsPlaylist: true } playlist) return;
+        if (!CanBrowse || SelectedVideo() is not { IsPlaylist: true } playlist)
+        {
+            return;
+        }
+
         StartBrowseOperation("Loading playlist videos...", async token =>
         {
             string query = $"Playlist :: {playlist.Title} ({playlist.PlaylistCount?.ToString() ?? "…"})";
@@ -50,13 +54,24 @@ public partial class YoutubeBrowserWindow
                         await foreach (var video in PlaylistVideos(playlist.Url, token).WithCancellation(token))
                         {
                             token.ThrowIfCancellationRequested();
-                            if (video.IsVideo && seen.Add(video.Id)) videos.Add(video);
+                            if (video.IsVideo && seen.Add(video.Id))
+                            {
+                                videos.Add(video);
+                            }
                         }
                     }
                 }, source.Token);
                 source.Token.ThrowIfCancellationRequested();
-                if (!succeeded || closing || resourcesReleased) return;
-                if (busy && activeBatch is { Settled: true }) await operation;
+                if (!succeeded || closing || resourcesReleased)
+                {
+                    return;
+                }
+
+                if (busy && activeBatch is { Settled: true })
+                {
+                    await operation;
+                }
+
                 source.Token.ThrowIfCancellationRequested();
                 // The old batch may have completed while playlist metadata was loading.
                 // QueueDownloadVideos handles either the live queue or a fresh batch.
@@ -66,12 +81,23 @@ public partial class YoutubeBrowserWindow
             }
             catch (OperationCanceledException) when (source.IsCancellationRequested)
             {
-                if (!closing && !resourcesReleased) AppendLog("Playlist enqueue cancelled; no playlist downloads were added.");
+                if (!closing && !resourcesReleased)
+                {
+                    AppendLog("Playlist enqueue cancelled; no playlist downloads were added.");
+                }
             }
-            catch (Exception error) { if (!closing && !resourcesReleased) ReportError("Unable to enqueue playlist downloads", error); }
+            catch (Exception error) { if (!closing && !resourcesReleased)
+                {
+                    ReportError("Unable to enqueue playlist downloads", error);
+                }
+            }
             finally
             {
-                if (ReferenceEquals(playlistEnqueueCancellation, source)) playlistEnqueueCancellation = null;
+                if (ReferenceEquals(playlistEnqueueCancellation, source))
+                {
+                    playlistEnqueueCancellation = null;
+                }
+
                 source.Dispose();
                 RefreshAvailability();
             }

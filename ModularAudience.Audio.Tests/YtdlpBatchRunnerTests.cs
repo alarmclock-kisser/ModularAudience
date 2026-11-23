@@ -25,27 +25,47 @@ public sealed class YtdlpBatchRunnerTests
             lock (sync) { active++; peak = Math.Max(peak, active); }
             started[item].TrySetResult();
             try { await release[item].Task.WaitAsync(Deadline, token); }
-            finally { lock (sync) active--; }
+            finally { lock (sync)
+                {
+                    active--;
+                }
+            }
         }, cancellation.Token, changed);
         try
         {
             await started[0].Task.WaitAsync(Deadline);
-            for (int i = 1; i <= limit; i++) queue.Enqueue(i);
+            for (int i = 1; i <= limit; i++)
+            {
+                queue.Enqueue(i);
+            }
+
             changed.Release();
             await Task.WhenAll(started.Take(limit).Select(gate => gate.Task)).WaitAsync(Deadline);
             Assert.IsFalse(started[limit].Task.IsCompleted, "Items beyond the configured limit must remain queued.");
             Assert.IsFalse(release[0].Task.IsCompleted, "New items must start before the first download finishes.");
-            lock (sync) Assert.AreEqual(limit, peak);
+            lock (sync)
+            {
+                Assert.AreEqual(limit, peak);
+            }
+
             release[1].TrySetResult();
             await started[limit].Task.WaitAsync(Deadline);
-            foreach (var gate in release) gate.TrySetResult();
+            foreach (var gate in release)
+            {
+                gate.TrySetResult();
+            }
+
             await run.WaitAsync(Deadline);
             Assert.AreEqual(limit, peak);
         }
         finally
         {
             await cancellation.CancelAsync();
-            foreach (var gate in release) gate.TrySetResult();
+            foreach (var gate in release)
+            {
+                gate.TrySetResult();
+            }
+
             await DrainAsync(run);
         }
     }
@@ -76,7 +96,9 @@ public sealed class YtdlpBatchRunnerTests
     public async Task RunAsync_ParallelLimitsOneAndTwo_ReachLimitWithoutExceedingItAcrossFourItems()
     {
         foreach (int limit in new[] { 1, 2 })
+        {
             await AssertConcurrencyAsync(limit);
+        }
     }
 
     [TestMethod]
@@ -90,11 +112,19 @@ public sealed class YtdlpBatchRunnerTests
         int starts = 0, cleanups = 0, cleaned = 0;
         var run = YtdlpBatchRunner.RunAsync(new[] { 0, 1, 2, 3 }, 2, async (_, token) =>
         {
-            if (Interlocked.Increment(ref starts) == 2) started.TrySetResult();
+            if (Interlocked.Increment(ref starts) == 2)
+            {
+                started.TrySetResult();
+            }
+
             try { await work.Task.WaitAsync(Deadline, token); }
             finally
             {
-                if (Interlocked.Increment(ref cleanups) == 2) cleaning.TrySetResult();
+                if (Interlocked.Increment(ref cleanups) == 2)
+                {
+                    cleaning.TrySetResult();
+                }
+
                 await releaseCleanup.Task.WaitAsync(Deadline);
                 Interlocked.Increment(ref cleaned);
             }
@@ -215,7 +245,11 @@ public sealed class YtdlpBatchRunnerTests
             }
             started[item].TrySetResult();
             try { await release[item].Task.WaitAsync(Deadline, token); }
-            finally { lock (sync) active--; }
+            finally { lock (sync)
+                {
+                    active--;
+                }
+            }
         }, cancellation.Token);
         try
         {
@@ -228,7 +262,10 @@ public sealed class YtdlpBatchRunnerTests
                     Assert.AreEqual(first + limit, calls, "No queued item may start while all slots are held.");
                     Assert.AreEqual(limit, peak);
                 }
-                for (int index = first; index < first + limit; index++) release[index].TrySetResult();
+                for (int index = first; index < first + limit; index++)
+                {
+                    release[index].TrySetResult();
+                }
             }
             await run.WaitAsync(Deadline);
             Assert.AreEqual(limit, peak);
@@ -238,7 +275,11 @@ public sealed class YtdlpBatchRunnerTests
         finally
         {
             await cancellation.CancelAsync();
-            foreach (var gate in release) gate.TrySetResult();
+            foreach (var gate in release)
+            {
+                gate.TrySetResult();
+            }
+
             await DrainAsync(run);
         }
     }

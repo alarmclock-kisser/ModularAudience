@@ -24,7 +24,12 @@ public partial class YoutubeBrowserWindow
         UpdateResultRowsPreservingInteraction(() =>
         {
             foreach (ListViewItem row in resultsList.Items)
-                if (row.Tag is YtdlpVideo { IsVideo: true, UploadDate: null }) row.SubItems[6].Text = "Loading...";
+            {
+                if (row.Tag is YtdlpVideo { IsVideo: true, UploadDate: null })
+                {
+                    row.SubItems[6].Text = "Loading...";
+                }
+            }
         });
         var lookupClient = new YtdlpClient(binaryManager)
         {
@@ -44,7 +49,10 @@ public partial class YoutubeBrowserWindow
         catch (OperationCanceledException) { }
         catch (Exception error)
         {
-            if (!closing && !resourcesReleased) AppendLog("Warning: Upload-date lookup failed. " + error.Message);
+            if (!closing && !resourcesReleased)
+            {
+                AppendLog("Warning: Upload-date lookup failed. " + error.Message);
+            }
         }
         finally { dateTasks.Remove(task); }
     }
@@ -71,26 +79,43 @@ public partial class YoutubeBrowserWindow
             date = resultDateCache.TryGetValue(video.Id, out var cached) ? cached : await provider(video, token);
             if (!token.IsCancellationRequested && generation == dateGeneration && date is { } value)
             {
-                if (resultDateCache.Count >= 2000) resultDateCache.Clear();
+                if (resultDateCache.Count >= 2000)
+                {
+                    resultDateCache.Clear();
+                }
+
                 resultDateCache[video.Id] = value;
             }
         }
         catch (OperationCanceledException) when (token.IsCancellationRequested) { return; }
         catch (Exception error) { failure = error.Message; }
         finally { slots.Release(); }
-        if (token.IsCancellationRequested || generation != dateGeneration || closing || resourcesReleased) return;
+        if (token.IsCancellationRequested || generation != dateGeneration || closing || resourcesReleased)
+        {
+            return;
+        }
         // Keep the native handle and interaction state; BufferedListView prevents flashing
         // when the updated rows are presented together.
         UpdateResultRowsPreservingInteraction(() =>
         {
             foreach (ListViewItem row in resultsList.Items)
             {
-                if (row.Tag is not YtdlpVideo current || current.Id != video.Id || current.UploadDate is not null) continue;
+                if (row.Tag is not YtdlpVideo current || current.Id != video.Id || current.UploadDate is not null)
+                {
+                    continue;
+                }
+
                 row.Tag = current with { UploadDate = date };
                 string text = date is null ? "Unavailable" : FormatUploadDate(date);
-                if (row.SubItems[6].Text != text) row.SubItems[6].Text = text;
+                if (row.SubItems[6].Text != text)
+                {
+                    row.SubItems[6].Text = text;
+                }
             }
         });
-        if (failure is not null) AppendLog($"Warning: Upload date for {video.Id}: {failure}");
+        if (failure is not null)
+        {
+            AppendLog($"Warning: Upload date for {video.Id}: {failure}");
+        }
     }
 }

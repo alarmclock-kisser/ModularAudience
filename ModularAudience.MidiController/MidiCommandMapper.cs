@@ -65,21 +65,29 @@ public sealed class MidiCommandMapper
         // 1. Check custom mappings first
         var key = (message.Channel, message.Command, message.Data1);
         if (this._customMappings.TryGetValue(key, out var custom))
+        {
             return custom;
+        }
 
         // 2. Note On (velocity > 0) → Play
         if (message.Command == 0x90 && message.Data2 > 0)
+        {
             return MidiCommand.Play;
+        }
 
         // 3. Note Off → Stop
         if (message.Command == 0x80)
+        {
             return MidiCommand.Stop;
+        }
 
         // 4. Control Change → look up CC mapping
         if (message.Command == 0xB0)
         {
             if (this._ccMappings.TryGetValue(message.Data1, out var ccCommand))
+            {
                 return ccCommand;
+            }
         }
 
         return MidiCommand.None;

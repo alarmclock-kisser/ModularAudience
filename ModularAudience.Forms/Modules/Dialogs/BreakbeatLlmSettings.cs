@@ -9,7 +9,10 @@ public sealed record LlmParameterDefinition(string Key, string Label, double Def
     {
         if (!double.TryParse(text.Trim().Replace(',', '.'), NumberStyles.Float, CultureInfo.InvariantCulture, out double value)
             || !double.IsFinite(value) || value < Minimum || value > Maximum || Integer && value != Math.Truncate(value))
+        {
             throw new ArgumentException($"{Label}: enter {(Integer ? "an integer" : "a number")} between {Minimum} and {Maximum}.");
+        }
+
         return value;
     }
 }
@@ -45,7 +48,9 @@ public sealed class BreakbeatLlmSettings
         foreach (var definition in Definitions)
         {
             if (!Parameters.TryGetValue(definition.Key, out var value) || value == null)
+            {
                 Parameters[definition.Key] = new() { Enabled = definition.EnabledByDefault, Value = definition.Default };
+            }
             else
             {
                 try { definition.Parse(value.Value.ToString("R", CultureInfo.InvariantCulture)); }
@@ -65,7 +70,11 @@ public sealed class BreakbeatLlmSettings
         Directory.CreateDirectory(Path.GetDirectoryName(Path.GetFullPath(path))!);
         string temporary = path + "." + Guid.NewGuid().ToString("N") + ".tmp";
         try { File.WriteAllText(temporary, JsonSerializer.Serialize(this, new JsonSerializerOptions { WriteIndented = true })); File.Move(temporary, path, true); }
-        finally { if (File.Exists(temporary)) File.Delete(temporary); }
+        finally { if (File.Exists(temporary))
+            {
+                File.Delete(temporary);
+            }
+        }
     }
     public void ApplyTo(Dictionary<string, object?> payload)
     {
@@ -74,11 +83,21 @@ public sealed class BreakbeatLlmSettings
         {
             payload.Remove(definition.Key);
             var value = Parameters[definition.Key];
-            if (!value.Enabled) continue;
+            if (!value.Enabled)
+            {
+                continue;
+            }
+
             definition.Parse(value.Value.ToString("R", CultureInfo.InvariantCulture));
             payload[definition.Key] = definition.Integer ? (object)(long)value.Value : value.Value;
         }
-        if (JsonResponse) payload["response_format"] = new Dictionary<string, string> { ["type"] = "json_object" };
-        else payload.Remove("response_format");
+        if (JsonResponse)
+        {
+            payload["response_format"] = new Dictionary<string, string> { ["type"] = "json_object" };
+        }
+        else
+        {
+            payload.Remove("response_format");
+        }
     }
 }

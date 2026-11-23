@@ -48,7 +48,10 @@ namespace ModularAudience.Forms.Modules.Dialogs
             this.domainUpDown_step.Items.AddRange(Array.ConvertAll(SemitoneSteps, s => s.ToString()));
             this.domainUpDown_step.SelectedIndex = this.domainUpDown_step.Items.IndexOf("0,5");
             if (this.domainUpDown_step.SelectedIndex < 0)
+            {
                 this.domainUpDown_step.SelectedIndex = Array.IndexOf(SemitoneSteps, 0.5f);
+            }
+
             this.checkBox_fftPv.Text = "FFT-PV (preserve duration)";
             this.checkBox_fftPv.AutoSize = true;
 

@@ -349,7 +349,10 @@ namespace ModularAudience.Audio
             if (this.loopEnabled && endSampleIndex > startSampleIndex &&
                 this.loopStartSamples == Math.Max(0, startSampleIndex) &&
                 this.loopEndSamples == Math.Max(Math.Max(0, startSampleIndex) + 1, endSampleIndex))
+            {
                 return;
+            }
+
             if (endSampleIndex <= startSampleIndex)
             {
                 this.loopEnabled = false;
@@ -378,7 +381,11 @@ namespace ModularAudience.Audio
         {
             // Selection/paint updates frequently reapply a disabled loop. Do not rebuild
             // the active resampler or reset its buffered phase when nothing changed.
-            if (!this.loopEnabled && !resumeSampleIndex.HasValue) return;
+            if (!this.loopEnabled && !resumeSampleIndex.HasValue)
+            {
+                return;
+            }
+
             long startSampleIndex;
             if (resumeSampleIndex.HasValue)
             {

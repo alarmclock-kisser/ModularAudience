@@ -53,13 +53,23 @@ public partial class YoutubeBrowserWindow : Form
             AppendLog(settingsWarning);
             LogManager.LogWarning(settingsWarning);
         }
-        if (EnsureBinaryDirectory()) InitializeToolsForSelectedPolicy();
+        if (EnsureBinaryDirectory())
+        {
+            InitializeToolsForSelectedPolicy();
+        }
     }
 
     private void Update_Click(object? sender, EventArgs e)
     {
-        if (busy || browsing || playlistEnqueueCancellation is not null || closing || IsDisposed || resourcesReleased) return;
-        if (EnsureBinaryDirectory()) StartToolUpdateCheck();
+        if (busy || browsing || playlistEnqueueCancellation is not null || closing || IsDisposed || resourcesReleased)
+        {
+            return;
+        }
+
+        if (EnsureBinaryDirectory())
+        {
+            StartToolUpdateCheck();
+        }
     }
 
     private void StartToolUpdateCheck()
@@ -79,7 +89,11 @@ public partial class YoutubeBrowserWindow : Form
 
     private void CheckForUpdates_Changed(object? sender, EventArgs e)
     {
-        if (restoringSettings) return;
+        if (restoringSettings)
+        {
+            return;
+        }
+
         SaveSettings();
         pendingUpdateCheck = checkForUpdates.Checked;
         TryStartPendingUpdateCheck();
@@ -87,7 +101,11 @@ public partial class YoutubeBrowserWindow : Form
 
     private void TryStartPendingUpdateCheck()
     {
-        if (!pendingUpdateCheck || !checkForUpdates.Checked || busy || browsing || playlistEnqueueCancellation is not null || closing || IsDisposed || resourcesReleased) return;
+        if (!pendingUpdateCheck || !checkForUpdates.Checked || busy || browsing || playlistEnqueueCancellation is not null || closing || IsDisposed || resourcesReleased)
+        {
+            return;
+        }
+
         pendingUpdateCheck = false;
         Update_Click(this, EventArgs.Empty);
     }
@@ -97,7 +115,11 @@ public partial class YoutubeBrowserWindow : Form
 
     private void Query_KeyDown(object? sender, KeyEventArgs e)
     {
-        if (e.KeyCode != Keys.Enter) return;
+        if (e.KeyCode != Keys.Enter)
+        {
+            return;
+        }
+
         e.SuppressKeyPress = true;
         Search(false);
     }
@@ -114,7 +136,11 @@ public partial class YoutubeBrowserWindow : Form
 
     private void RefreshAvailability()
     {
-        if (IsDisposed || resourcesReleased) return;
+        if (IsDisposed || resourcesReleased)
+        {
+            return;
+        }
+
         bool available = CanBrowse;
         queryPanel.Enabled = available;
         optionsGroup.Enabled = available;
@@ -131,8 +157,16 @@ public partial class YoutubeBrowserWindow : Form
             playItem.Enabled = !closing && !busy && binariesReady && SelectedVideo() is not null;
             playItem.Text = IsPlayingVideo(SelectedVideo()) ? "Stop" : "Play";
         }
-        if (skipItem is not null) skipItem.Enabled = CanSkipPlayback;
-        if (addNextItem is not null) addNextItem.Enabled = CanAddNext;
+        if (skipItem is not null)
+        {
+            skipItem.Enabled = CanSkipPlayback;
+        }
+
+        if (addNextItem is not null)
+        {
+            addNextItem.Enabled = CanAddNext;
+        }
+
         metadataButton.Enabled = available && SelectedVideo() is { IsVideo: true };
         showRelatedButton.Enabled = metadataButton.Enabled;
         operationProgress.Visible = busy || activeBatch is not null;
@@ -156,14 +190,22 @@ public partial class YoutubeBrowserWindow : Form
 
     private void Related_Click(object? sender, EventArgs e)
     {
-        if (SelectedVideo() is not { } video) return;
+        if (SelectedVideo() is not { } video)
+        {
+            return;
+        }
+
         queryText.Text = SearchTerms(video.Title + " " + video.Uploader);
         Search(false, forceSearch: true);
     }
 
     private void Uploader_Click(object? sender, EventArgs e)
     {
-        if (SelectedVideo() is not { } video || string.IsNullOrWhiteSpace(video.Uploader)) return;
+        if (SelectedVideo() is not { } video || string.IsNullOrWhiteSpace(video.Uploader))
+        {
+            return;
+        }
+
         queryText.Text = SearchTerms(video.Uploader);
         Search(false, forceSearch: true);
     }
@@ -173,7 +215,11 @@ public partial class YoutubeBrowserWindow : Form
 
     private void Open_Click(object? sender, EventArgs e)
     {
-        if (SelectedVideo() is not { } video) return;
+        if (SelectedVideo() is not { } video)
+        {
+            return;
+        }
+
         try
         {
             var url = YtdlpParser.ValidateYoutubeUrl(video.Url);
@@ -188,18 +234,33 @@ public partial class YoutubeBrowserWindow : Form
         {
             var urls = SelectedVideos().Select(v => YtdlpParser.ValidateYoutubeUrl(v.Url).AbsoluteUri);
             var text = string.Join(Environment.NewLine, urls);
-            if (text.Length > 0) Clipboard.SetText(text);
+            if (text.Length > 0)
+            {
+                Clipboard.SetText(text);
+            }
         }
         catch (Exception error) { ReportError("Unable to copy YouTube URLs", error); }
     }
 
     private void AppendLog(string message)
     {
-        if (IsDisposed || resourcesReleased) return;
+        if (IsDisposed || resourcesReleased)
+        {
+            return;
+        }
+
         string line = message.Replace('\r', ' ').Replace('\n', ' ');
-        if (line.Length > 1200) line = line[..1200];
+        if (line.Length > 1200)
+        {
+            line = line[..1200];
+        }
+
         logLines.Enqueue($"{DateTime.Now:HH:mm:ss}  {line}");
-        while (logLines.Count > 160) logLines.Dequeue();
+        while (logLines.Count > 160)
+        {
+            logLines.Dequeue();
+        }
+
         activityLog.Text = string.Join(Environment.NewLine, logLines);
         activityLog.SelectionStart = activityLog.TextLength;
         activityLog.ScrollToCaret();
@@ -210,14 +271,24 @@ public partial class YoutubeBrowserWindow : Form
         LogManager.LogError($"YouTube browser: {title}. {error}");
         AppendLog($"Error: {title}. {error.Message}");
         if (!closing && !IsDisposed && !resourcesReleased)
+        {
             WindowMainStaticHelpers.ShowErrorWithCopyButton(this, title, error);
+        }
     }
 
     private async void Window_FormClosing(object? sender, FormClosingEventArgs e)
     {
-        if (closeAllowed) return;
+        if (closeAllowed)
+        {
+            return;
+        }
+
         e.Cancel = true;
-        if (closing) return;
+        if (closing)
+        {
+            return;
+        }
+
         closing = true;
         HideThumbnailPopup();
         playlistEnqueueCancellation?.Cancel();
@@ -256,7 +327,11 @@ public partial class YoutubeBrowserWindow : Form
 
     private void ReleaseResources()
     {
-        if (resourcesReleased) return;
+        if (resourcesReleased)
+        {
+            return;
+        }
+
         resourcesReleased = true;
         playlistEnqueueCancellation?.Cancel();
         searchHistoryMenu?.Dispose();

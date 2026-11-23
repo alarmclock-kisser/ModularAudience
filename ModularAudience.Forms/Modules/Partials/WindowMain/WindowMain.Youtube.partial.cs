@@ -14,9 +14,15 @@ public partial class WindowMain
         try
         {
             if (youtubeBrowser is null || youtubeBrowser.IsDisposed)
+            {
                 youtubeBrowser = new YoutubeBrowserWindow(ImportYoutubeAudio);
+            }
+
             if (youtubeBrowser.WindowState == FormWindowState.Minimized)
+            {
                 youtubeBrowser.WindowState = FormWindowState.Normal;
+            }
+
             youtubeBrowser.Show();
             youtubeBrowser.BringToFront();
             youtubeBrowser.Activate();
@@ -31,9 +37,15 @@ public partial class WindowMain
     private void ImportYoutubeAudio(AudioObj audio)
     {
         if (IsDisposed || Disposing)
+        {
             throw new InvalidOperationException("The main window is closing; the audio cannot be imported.");
+        }
+
         if (youtubeCollection is null || youtubeCollection.IsDisposed || youtubeCollection.Disposing)
+        {
             youtubeCollection = new AudioCollectionView([], "YouTube Audio Collection");
+        }
+
         var collection = youtubeCollection;
         collection.Show();
         int number = GetCollectionNumber(collection);

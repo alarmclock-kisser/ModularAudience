@@ -6,10 +6,17 @@ namespace ModularAudience.Audio.Processors_V4
             DeterministicSourceGroup[] groups, DeterministicSeparationSettings settings, CancellationToken token)
         {
             float[][][] masks = Allocate(block.Frames, groups.Length, dictionary.Length, token);
-            if (groups.Length == 0 || block.Frames == 0) return masks;
+            if (groups.Length == 0 || block.Frames == 0)
+            {
+                return masks;
+            }
+
             double[][] power = CopyPower(block.Power, token);
             double maximum = DeterministicTrainingData.Maximum(power, token);
-            if (maximum == 0) return masks;
+            if (maximum == 0)
+            {
+                return masks;
+            }
             // A scalar block rescale improves conditioning without changing fixed-W responsibilities.
             double floor = DeterministicTrainingData.NormalizePower(power, maximum, token);
             double[][] activations = DeterministicNmf.Fit(power, dictionary, floor, settings, token);
@@ -28,7 +35,10 @@ namespace ModularAudience.Audio.Processors_V4
             {
                 token.ThrowIfCancellationRequested();
                 result[frame] = new float[sources][];
-                for (int source = 0; source < sources; source++) result[frame][source] = new float[bins];
+                for (int source = 0; source < sources; source++)
+                {
+                    result[frame][source] = new float[bins];
+                }
             }
             return result;
         }
@@ -40,7 +50,10 @@ namespace ModularAudience.Audio.Processors_V4
             {
                 token.ThrowIfCancellationRequested();
                 copy[frame] = new double[original[frame].Length];
-                for (int bin = 0; bin < original[frame].Length; bin++) copy[frame][bin] = DeterministicTrainingData.Positive(original[frame][bin]);
+                for (int bin = 0; bin < original[frame].Length; bin++)
+                {
+                    copy[frame][bin] = DeterministicTrainingData.Positive(original[frame][bin]);
+                }
             }
             return copy;
         }
@@ -50,8 +63,16 @@ namespace ModularAudience.Audio.Processors_V4
         {
             for (int bin = 0; bin < power.Length; bin++)
             {
-                if ((bin & 127) == 0) token.ThrowIfCancellationRequested();
-                if (power[bin] <= 0) continue;
+                if ((bin & 127) == 0)
+                {
+                    token.ThrowIfCancellationRequested();
+                }
+
+                if (power[bin] <= 0)
+                {
+                    continue;
+                }
+
                 double modeled = DeterministicNmf.Dot(dictionary[bin], activation);
                 double h = DeterministicTrainingData.Unit(block.Harmonic[frame][bin]);
                 double p = DeterministicTrainingData.Unit(block.Percussive[frame][bin]);
@@ -63,7 +84,10 @@ namespace ModularAudience.Audio.Processors_V4
                 {
                     double groupPower = 0;
                     foreach (int component in groups[source].Components)
+                    {
                         groupPower += groups[source].WeightFor(component) * dictionary[bin][component] * activation[component];
+                    }
+
                     double affinity = Affinity(groups[source], h, p, pan);
                     masks[source][bin] = (float)DeterministicTrainingData.Unit(groupPower / denominator * affinity);
                 }
@@ -87,7 +111,11 @@ namespace ModularAudience.Audio.Processors_V4
                 double history = 0.24 * (1 - transientPreservation * onset);
                 for (int bin = 0; bin < power[frame].Length; bin++)
                 {
-                    if ((bin & 127) == 0) token.ThrowIfCancellationRequested();
+                    if ((bin & 127) == 0)
+                    {
+                        token.ThrowIfCancellationRequested();
+                    }
+
                     for (int source = 0; source < masks[frame].Length; source++)
                     {
                         masks[frame][source][bin] = power[frame][bin] > 0
@@ -103,17 +131,31 @@ namespace ModularAudience.Audio.Processors_V4
             double denominator = 1 + (masks.Length + 1) * floor;
             for (int bin = 0; bin < power.Length; bin++)
             {
-                if ((bin & 127) == 0) token.ThrowIfCancellationRequested();
-                if (power[bin] <= 0) continue;
+                if ((bin & 127) == 0)
+                {
+                    token.ThrowIfCancellationRequested();
+                }
+
+                if (power[bin] <= 0)
+                {
+                    continue;
+                }
+
                 double sum = 0;
                 for (int source = 0; source < masks.Length; source++)
                 {
                     masks[source][bin] = (float)((masks[source][bin] + floor) / denominator);
                     sum += masks[source][bin];
                 }
-                if (sum <= 1) continue;
+                if (sum <= 1)
+                {
+                    continue;
+                }
                 // Only a simplex roundoff guard, never independent normalization of stem loudness.
-                for (int source = 0; source < masks.Length; source++) masks[source][bin] = (float)(masks[source][bin] * ((1 - 1e-6) / sum));
+                for (int source = 0; source < masks.Length; source++)
+                {
+                    masks[source][bin] = (float)(masks[source][bin] * ((1 - 1e-6) / sum));
+                }
             }
         }
     }

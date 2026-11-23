@@ -41,7 +41,10 @@ public sealed class YoutubeRecoveryDialogTests
             Assert.AreEqual("Default", decision.Session.Profile);
         }
         using (var fresh = CreateDialog("ERROR: Sign in to confirm"))
+        {
             Assert.IsFalse(Field<CheckBox>(fresh, "consentCheck").Checked);
+        }
+
         using var tls = CreateDialog("ERROR: CERTIFICATE_VERIFY_FAILED");
         Assert.AreEqual(1, Field<ComboBox>(tls, "actionCombo").Items.Count);
         Invoke(tls, "Retry_Click", null, EventArgs.Empty);
@@ -66,7 +69,11 @@ public sealed class YoutubeRecoveryDialogTests
             var imported = jobs.GetValue(0)!;
             var failed = jobs.GetValue(1)!;
             var cleanup = jobs.GetValue(2)!;
-            foreach (object job in jobs) SetProperty(job, "Terminal", true);
+            foreach (object job in jobs)
+            {
+                SetProperty(job, "Terminal", true);
+            }
+
             SetProperty(imported, "Status", "Completed");
             SetProperty(imported, "HandedOff", true);
             SetProperty(imported, "Error", new YtdlpProcessException(1, "ERROR: HTTP Error 503"));
@@ -103,7 +110,10 @@ public sealed class YoutubeRecoveryDialogTests
         public override void Post(SendOrPostCallback callback, object? state) => queue.Enqueue((callback, state));
         internal void Drain()
         {
-            while (queue.TryDequeue(out var item)) item.Callback(item.State);
+            while (queue.TryDequeue(out var item))
+            {
+                item.Callback(item.State);
+            }
         }
     }
 

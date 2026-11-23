@@ -21,10 +21,18 @@ public static class YtdlpRecoveryRules
 
     public static YtdlpDownloadOptions Apply(YtdlpFailureKind kind, YtdlpRecoveryDecision decision, YtdlpDownloadOptions options)
     {
-        if (!CanApply(kind, decision.Action, options)) throw new InvalidOperationException("This recovery action is not applicable to the reported failure.");
+        if (!CanApply(kind, decision.Action, options))
+        {
+            throw new InvalidOperationException("This recovery action is not applicable to the reported failure.");
+        }
+
         if (decision.Action == YtdlpRecoveryAction.BrowserSession)
         {
-            if (decision.Session is null) throw new ArgumentException("Select a browser session and grant consent.");
+            if (decision.Session is null)
+            {
+                throw new ArgumentException("Select a browser session and grant consent.");
+            }
+
             decision.Session.Validate();
         }
         return decision.Action switch

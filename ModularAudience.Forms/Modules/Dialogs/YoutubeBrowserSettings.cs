@@ -48,12 +48,23 @@ internal sealed class YoutubeBrowserSettings
         string path = filePath ?? SettingsPath;
         try
         {
-            if (!File.Exists(path)) return new();
+            if (!File.Exists(path))
+            {
+                return new();
+            }
+
             if (new FileInfo(path).Length > 65536)
+            {
                 throw new InvalidDataException("The settings file exceeds 64 KiB.");
+            }
+
             var settings = JsonSerializer.Deserialize<YoutubeBrowserSettings>(File.ReadAllText(path))
                 ?? throw new InvalidDataException("The settings file is empty.");
-            if (settings.Normalize()) warning = "Warning: Invalid YouTube settings were reset to safe values.";
+            if (settings.Normalize())
+            {
+                warning = "Warning: Invalid YouTube settings were reset to safe values.";
+            }
+
             return settings;
         }
         catch (Exception error) when (error is IOException or InvalidDataException or UnauthorizedAccessException or JsonException or ArgumentException or NotSupportedException)
@@ -72,9 +83,17 @@ internal sealed class YoutubeBrowserSettings
         ResultLimit = Math.Clamp(ResultLimit, 1, 200);
         int[] bitrates = [64, 96, 128, 192, 256, 320];
         Mp3Bitrate = bitrates.MinBy(value => Math.Abs((long)value - Mp3Bitrate));
-        if (WavBitDepth is not (8 or 16 or 24 or 32)) WavBitDepth = 16;
+        if (WavBitDepth is not (8 or 16 or 24 or 32))
+        {
+            WavBitDepth = 16;
+        }
+
         SortColumn = Math.Clamp(SortColumn, -1, 6);
-        if (!Enum.IsDefined(IpVersion)) IpVersion = YtdlpIpVersion.Automatic;
+        if (!Enum.IsDefined(IpVersion))
+        {
+            IpVersion = YtdlpIpVersion.Automatic;
+        }
+
         ProxyMode = Math.Clamp(ProxyMode, 0, 2);
         ProxyUrl ??= string.Empty;
         try { new YtdlpNetworkOptions { ProxyUrl = ProxyUrl }.Validate(); }
@@ -85,13 +104,29 @@ internal sealed class YoutubeBrowserSettings
         MaxParallelDownloads = Math.Clamp(MaxParallelDownloads, 1, YtdlpBatchRunner.MaximumParallelism);
         MaxRetries = Math.Clamp(MaxRetries, 0, YtdlpRetryBudget.MaximumRetries);
         Format = Format == "mp3" ? "mp3" : "wav";
-        if (VisibleColumns is { Length: 6 }) VisibleColumns = [.. VisibleColumns, true];
-        if (VisibleColumns is not { Length: 7 }) VisibleColumns = [true, true, true, true, false, false, true];
+        if (VisibleColumns is { Length: 6 })
+        {
+            VisibleColumns = [.. VisibleColumns, true];
+        }
+
+        if (VisibleColumns is not { Length: 7 })
+        {
+            VisibleColumns = [true, true, true, true, false, false, true];
+        }
+
         VisibleColumns[0] = true;
         OutputDirectory = NormalizeDirectory(OutputDirectory);
         YTDownloaderBinariesPath ??= string.Empty;
-        if (!ValidStretch(Stretch)) Stretch = null;
-        if (Stretch is not null) Stretch = Stretch with { Threads = Math.Clamp(Stretch.Threads, 1, Math.Max(1, Environment.ProcessorCount)) };
+        if (!ValidStretch(Stretch))
+        {
+            Stretch = null;
+        }
+
+        if (Stretch is not null)
+        {
+            Stretch = Stretch with { Threads = Math.Clamp(Stretch.Threads, 1, Math.Max(1, Environment.ProcessorCount)) };
+        }
+
         StretchEnabled &= Stretch is not null;
         return before != JsonSerializer.Serialize(this);
     }
@@ -102,7 +137,9 @@ internal sealed class YoutubeBrowserSettings
         {
             if (!string.IsNullOrWhiteSpace(directory) && directory.Length <= 2048 &&
                 !directory.Any(char.IsControl) && Path.IsPathFullyQualified(directory))
+            {
                 return Path.GetFullPath(directory);
+            }
         }
         catch (Exception error) when (error is ArgumentException or NotSupportedException or PathTooLongException) { }
         return DefaultOutputDirectory;
@@ -127,12 +164,21 @@ internal sealed class YoutubeBrowserSettings
                 JsonSerializer.Serialize(stream, this, new JsonSerializerOptions { WriteIndented = true });
                 stream.Flush(flushToDisk: true);
             }
-            if (File.Exists(path)) File.Replace(temporary, path, null);
-            else File.Move(temporary, path);
+            if (File.Exists(path))
+            {
+                File.Replace(temporary, path, null);
+            }
+            else
+            {
+                File.Move(temporary, path);
+            }
         }
         finally
         {
-            if (File.Exists(temporary)) File.Delete(temporary);
+            if (File.Exists(temporary))
+            {
+                File.Delete(temporary);
+            }
         }
     }
 }

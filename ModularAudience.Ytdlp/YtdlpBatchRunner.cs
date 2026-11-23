@@ -17,7 +17,11 @@ public static class YtdlpBatchRunner
     {
         ArgumentNullException.ThrowIfNull(queue);
         ArgumentNullException.ThrowIfNull(processItem);
-        if (maxParallelism is < 1 or > MaximumParallelism) throw new ArgumentOutOfRangeException(nameof(maxParallelism));
+        if (maxParallelism is < 1 or > MaximumParallelism)
+        {
+            throw new ArgumentOutOfRangeException(nameof(maxParallelism));
+        }
+
         using var cancellation = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken);
         using var ownWake = queueChanged is null ? new SemaphoreSlim(0) : null;
         SemaphoreSlim wake = queueChanged ?? ownWake!;
@@ -39,7 +43,11 @@ public static class YtdlpBatchRunner
                     Interlocked.Increment(ref firstPhase);
                     running.Add(RunJobAsync(queue.Dequeue()));
                 }
-                if (running.Count == 0) continue;
+                if (running.Count == 0)
+                {
+                    continue;
+                }
+
                 using var wakeCancellation = CancellationTokenSource.CreateLinkedTokenSource(cancellation.Token);
                 Task wakeTask = wake.WaitAsync(wakeCancellation.Token);
                 Task finished = await Task.WhenAny(running.Append(wakeTask));
@@ -63,7 +71,11 @@ public static class YtdlpBatchRunner
             int released = 0;
             void ReleaseFirstPhase()
             {
-                if (Interlocked.Exchange(ref released, 1) != 0) return;
+                if (Interlocked.Exchange(ref released, 1) != 0)
+                {
+                    return;
+                }
+
                 Interlocked.Decrement(ref firstPhase);
                 wake.Release();
             }
@@ -79,7 +91,11 @@ public static class YtdlpBatchRunner
     {
         ArgumentNullException.ThrowIfNull(queue);
         ArgumentNullException.ThrowIfNull(processItem);
-        if (maxParallelism is < 1 or > MaximumParallelism) throw new ArgumentOutOfRangeException(nameof(maxParallelism));
+        if (maxParallelism is < 1 or > MaximumParallelism)
+        {
+            throw new ArgumentOutOfRangeException(nameof(maxParallelism));
+        }
+
         using var cancellation = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken);
         var running = new List<Task>();
         try
@@ -87,9 +103,16 @@ public static class YtdlpBatchRunner
             while (queue.Count > 0 || running.Count > 0)
             {
                 cancellation.Token.ThrowIfCancellationRequested();
-                if (queueChanged != null) while (queueChanged.Wait(0)) { }
+                if (queueChanged != null)
+                {
+                    while (queueChanged.Wait(0)) { }
+                }
+
                 while (queue.Count > 0 && running.Count < maxParallelism)
+                {
                     running.Add(processItem(queue.Dequeue(), cancellation.Token));
+                }
+
                 if (queueChanged != null && running.Count < maxParallelism)
                 {
                     // A batch may start with one item and receive more while it is downloading.
@@ -127,7 +150,10 @@ public static class YtdlpBatchRunner
         ArgumentNullException.ThrowIfNull(items);
         ArgumentNullException.ThrowIfNull(processItem);
         if (maxParallelism is < 1 or > MaximumParallelism)
+        {
             throw new ArgumentOutOfRangeException(nameof(maxParallelism), "Parallelism must be between 1 and 8.");
+        }
+
         return RunWorkersAsync(items, maxParallelism, processItem, cancellationToken);
     }
 
@@ -140,7 +166,10 @@ public static class YtdlpBatchRunner
         var count = items.Count;
         var workers = new Task[Math.Min(maxParallelism, count)];
         for (var index = 0; index < workers.Length; index++)
+        {
             workers[index] = RunWorkerAsync(items, count, processItem, cancellation, state);
+        }
+
         try
         {
             await Task.WhenAll(workers);
@@ -166,7 +195,10 @@ public static class YtdlpBatchRunner
                 token.ThrowIfCancellationRequested();
                 var index = Interlocked.Increment(ref state.NextIndex);
                 if (index >= count)
+                {
                     return;
+                }
+
                 token.ThrowIfCancellationRequested();
                 await processItem(items[(int)index], token);
             }

@@ -25,9 +25,16 @@ internal static class VocalMidiSyllableFiller
             var result = new StringBuilder(Prefix, Prefix.Length + vowelCharacters + Suffix.Length + PhraseEndCoda.Length);
             result.Append(Vowel);
             for (int count = Vowel.Length; count < vowelCharacters && RepeatUnit.Length > 0; count += RepeatUnit.Length)
+            {
                 result.Append(RepeatUnit);
+            }
+
             result.Append(Suffix);
-            if (phraseEnd) result.Append(PhraseEndCoda);
+            if (phraseEnd)
+            {
+                result.Append(PhraseEndCoda);
+            }
+
             return result.ToString();
         }
     }
@@ -117,21 +124,35 @@ internal static class VocalMidiSyllableFiller
         ArgumentNullException.ThrowIfNull(settings);
         ArgumentNullException.ThrowIfNull(existingText);
         if (!settings.Singing)
+        {
             throw new InvalidOperationException("Fill Syllables requires the Singing voice.");
+        }
+
         IVocalMidiFile midi = settings.SingingMidiFile
             ?? throw new InvalidOperationException("Load a MIDI file before filling syllables.");
         if (settings.SingingMidiTrackIndex is not int trackIndex)
+        {
             throw new InvalidOperationException("Select a MIDI track before filling syllables.");
+        }
+
         IVocalMidiTrack track = midi.Tracks.FirstOrDefault(candidate => candidate.Index == trackIndex)
             ?? throw new InvalidOperationException("The selected MIDI track does not exist.");
         if (track.Notes.Count == 0)
+        {
             throw new InvalidOperationException("The selected MIDI track contains no notes.");
+        }
+
         if (!double.IsFinite(midi.DefaultBpm) || midi.DefaultBpm <= 0
             || midi.TicksPerQuarterNote <= 0
             || !double.IsFinite(settings.Speed) || settings.Speed <= 0)
+        {
             throw new InvalidDataException("The MIDI timing or vocal speed is invalid.");
+        }
+
         if (!Templates.TryGetValue(settings.Language, out SyllableTemplate[]? palette))
+        {
             throw new ArgumentOutOfRangeException(nameof(settings), settings.Language, "The selected language is not supported.");
+        }
 
         IReadOnlyList<VocalToken> existingTokens = VocalTextParser.Parse(
             settings.Language, existingText, settings.EmphasisSyntax, cancellationToken);
@@ -194,9 +215,11 @@ internal static class VocalMidiSyllableFiller
         int completedSyllableCount = VocalTextParser.GetSyllableTextRanges(
             settings.Language, existingText + appendedText, settings.EmphasisSyntax, cancellationToken).Count;
         if (completedSyllableCount != noteGroups.Length)
+        {
             throw new InvalidDataException(
                 $"Generated {settings.Language.DisplayName()} text maps to {completedSyllableCount} syllables for "
                 + $"{noteGroups.Length} MIDI note groups.");
+        }
 
         return new VocalMidiSyllableFillResult(
             appendedText, noteGroups.Length - existingRanges.Count, existingRanges.Count, noteGroups.Length);
@@ -221,15 +244,22 @@ internal static class VocalMidiSyllableFiller
         IReadOnlyList<VocalSingingSyllable> syllables =
             VocalSinging.CreateSyllables(language, tokens, cancellationToken).Syllables;
         if (syllables.Count != 1)
+        {
             throw new InvalidDataException(
                 $"The generated {language.DisplayName()} syllable template did not produce exactly one syllable.");
+        }
+
         return syllables[0].NaturalDurationMilliseconds;
     }
 
     private static int GetPaletteIndex(
         double pitch, double lowestPitch, double highestPitch, int paletteLength)
     {
-        if (paletteLength <= 1 || highestPitch <= lowestPitch) return paletteLength / 2;
+        if (paletteLength <= 1 || highestPitch <= lowestPitch)
+        {
+            return paletteLength / 2;
+        }
+
         double normalized = (pitch - lowestPitch) / (highestPitch - lowestPitch);
         return Math.Clamp(
             (int)Math.Round(normalized * (paletteLength - 1), MidpointRounding.AwayFromZero),
@@ -240,7 +270,11 @@ internal static class VocalMidiSyllableFiller
     private static int GetVowelCharacterCount(
         IReadOnlyList<IVocalMidiNote> chord, IVocalMidiFile midi, double speed, SyllableTemplate template)
     {
-        if (template.RepeatUnit.Length == 0) return template.Vowel.Length;
+        if (template.RepeatUnit.Length == 0)
+        {
+            return template.Vowel.Length;
+        }
+
         long groupStartTick = chord[0].StartTick;
         long groupEndTick = chord.Max(
             note => checked(note.StartTick + Math.Max(1, note.DurationTicks)));
@@ -248,9 +282,15 @@ internal static class VocalMidiSyllableFiller
         double durationMilliseconds = durationTicks * 60_000.0
             / (midi.DefaultBpm * midi.TicksPerQuarterNote * speed);
         if (!double.IsFinite(durationMilliseconds))
+        {
             throw new InvalidDataException("A MIDI note has an invalid duration.");
+        }
+
         if (durationMilliseconds >= MaximumVowelCharacters * MillisecondsPerVowelCharacter)
+        {
             return MaximumVowelCharacters;
+        }
+
         return Math.Clamp(
             (int)Math.Ceiling(durationMilliseconds / MillisecondsPerVowelCharacter),
             1,
@@ -264,10 +304,22 @@ internal static class VocalMidiSyllableFiller
         IReadOnlyList<IVocalMidiNote[]> noteGroups,
         IVocalMidiFile midi)
     {
-        if (existingText.Length == 0 || char.IsWhiteSpace(existingText[^1])) return string.Empty;
-        if (existingSyllableCount == 0) return " ";
+        if (existingText.Length == 0 || char.IsWhiteSpace(existingText[^1]))
+        {
+            return string.Empty;
+        }
+
+        if (existingSyllableCount == 0)
+        {
+            return " ";
+        }
+
         string midiSeparator = GetMidiSeparator(noteGroups[groupIndex - 1], noteGroups[groupIndex], midi);
-        if (midiSeparator == Environment.NewLine) return midiSeparator;
+        if (midiSeparator == Environment.NewLine)
+        {
+            return midiSeparator;
+        }
+
         return char.IsPunctuation(existingText[^1]) ? " " : midiSeparator;
     }
 
@@ -277,7 +329,9 @@ internal static class VocalMidiSyllableFiller
         long previousStart = previous[0].StartTick;
         long currentStart = current[0].StartTick;
         if (previousStart / midi.TicksPerBar != currentStart / midi.TicksPerBar)
+        {
             return Environment.NewLine;
+        }
 
         long previousEnd = previous.Max(note => note.StartTick + Math.Max(1, note.DurationTicks));
         long restTicks = Math.Max(0, currentStart - previousEnd);

@@ -117,7 +117,9 @@ namespace ModularAudience.Audio.Tests
             // A clean 100 Hz bass tone: matches both Synth Bass (25-300 Hz) and Bass Guitar (30-350 Hz).
             float[] bass = new float[8000];
             for (int i = 0; i < bass.Length; i++)
+            {
                 bass[i] = (float)(0.4 * Math.Sin(2 * Math.PI * 100 * i / SampleRate));
+            }
 
             using AudioTestScope scope = new();
             AudioObj audio = scope.Create(bass, SampleRate);
@@ -346,7 +348,11 @@ namespace ModularAudience.Audio.Tests
         private static double Dot(float[] first, float[] second)
         {
             double sum = 0;
-            for (int i = 0; i < first.Length; i++) sum += (double)first[i] * second[i];
+            for (int i = 0; i < first.Length; i++)
+            {
+                sum += (double)first[i] * second[i];
+            }
+
             return sum;
         }
 
@@ -366,7 +372,10 @@ namespace ModularAudience.Audio.Tests
             {
                 Assert.AreEqual(original.Length, stem.Data.Length, $"{stem.Name}: sample count changed.");
                 AssertFinite(stem.Data, stem.Name);
-                for (int i = 0; i < sum.Length; i++) sum[i] += stem.Data[i];
+                for (int i = 0; i < sum.Length; i++)
+                {
+                    sum[i] += stem.Data[i];
+                }
             }
             double error = Enumerable.Range(0, sum.Length).Max(i => Math.Abs(sum[i] - original[i]));
             Assert.IsTrue(error <= 1e-6, $"Stems must reconstruct the original; maximum error={error:E9}.");
@@ -376,7 +385,10 @@ namespace ModularAudience.Audio.Tests
         {
             for (int i = 0; i < samples.Length; i++)
             {
-                if (!float.IsFinite(samples[i])) Assert.Fail($"{context}: non-finite at sample {i}: {samples[i]}.");
+                if (!float.IsFinite(samples[i]))
+                {
+                    Assert.Fail($"{context}: non-finite at sample {i}: {samples[i]}.");
+                }
             }
         }
 

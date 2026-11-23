@@ -36,7 +36,11 @@ public sealed class MixPreparationCache : IDisposable
     public async Task PrepareAsync(MixArrangement mix, CancellationToken token = default)
     {
         var snapshot = new MixArrangement(); snapshot.Restore(mix.Capture());
-        foreach (var source in mix.Sources) snapshot.Sources.Add(source.Key, source.Value);
+        foreach (var source in mix.Sources)
+        {
+            snapshot.Sources.Add(source.Key, source.Value);
+        }
+
         foreach (var lane in snapshot.Lanes.Where(lane => !lane.IsVideo))
         {
             token.ThrowIfCancellationRequested();
@@ -44,33 +48,55 @@ public sealed class MixPreparationCache : IDisposable
             lock (gate)
             {
                 ObjectDisposedException.ThrowIf(disposed, this);
-                if (lanes.TryGetValue(lane.Id, out var cached) && cached.Key == key) continue;
+                if (lanes.TryGetValue(lane.Id, out var cached) && cached.Key == key)
+                {
+                    continue;
+                }
             }
             var one = new MixArrangement { Bpm = snapshot.Bpm, Name = snapshot.Name };
-            foreach (var source in snapshot.Sources) one.Sources.Add(source.Key, source.Value);
+            foreach (var source in snapshot.Sources)
+            {
+                one.Sources.Add(source.Key, source.Value);
+            }
+
             one.Lanes.Add(new MixLane { Id = lane.Id, Name = lane.Name, AutoCrossfade = lane.AutoCrossfade, Clips = lane.Clips });
             using var audio = await MixRenderer.RenderAsync(one, token, normalizeOutput: false).ConfigureAwait(false);
             token.ThrowIfCancellationRequested();
             lock (gate)
             {
-                if (disposed) return;
+                if (disposed)
+                {
+                    return;
+                }
+
                 lanes[lane.Id] = new(key, audio.Data); LaneRenders++;
             }
         }
         lock (gate)
+        {
             foreach (var id in lanes.Keys.Where(id => !snapshot.Lanes.Any(lane => !lane.IsVideo && lane.Id == id)).ToArray())
+            {
                 lanes.Remove(id);
+            }
+        }
     }
     public bool CanMix(MixArrangement mix)
     {
-        lock (gate) return !disposed && mix.Lanes.Where(lane => !lane.IsVideo)
+        lock (gate)
+        {
+            return !disposed && mix.Lanes.Where(lane => !lane.IsVideo)
             .All(lane => lanes.TryGetValue(lane.Id, out var cached) && cached.Key == LaneKey(mix, lane));
+        }
     }
     public float[] Mix(MixArrangement mix, float[]? reuse = null, CancellationToken token = default)
     {
         const int channels = 2, sampleRate = 44100;
         long length = (long)Math.Ceiling(Math.Max(0.01, AudioDuration(mix)) * sampleRate) * channels;
-        if (length > int.MaxValue) throw new InvalidOperationException("The mix exceeds the RAM audio buffer limit.");
+        if (length > int.MaxValue)
+        {
+            throw new InvalidOperationException("The mix exceeds the RAM audio buffer limit.");
+        }
+
         var output = reuse?.Length == length ? reuse : new float[(int)length];
         (float[] Data, double Gain)[] inputs;
         lock (gate)
@@ -101,7 +127,14 @@ public sealed class MixPreparationCache : IDisposable
                 for (int i = begin; i < end; i++)
                 {
                     double sum = 0;
-                    foreach (var input in inputs) if (i < input.Data.Length) sum += input.Data[i] * input.Gain;
+                    foreach (var input in inputs)
+                    {
+                        if (i < input.Data.Length)
+                        {
+                            sum += input.Data[i] * input.Gain;
+                        }
+                    }
+
                     output[i] = (float)Math.Clamp(sum, -0.98, 0.98);
                 }
             });

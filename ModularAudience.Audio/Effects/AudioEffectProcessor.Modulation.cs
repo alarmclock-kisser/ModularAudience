@@ -9,7 +9,11 @@ public static partial class AudioEffectProcessor
         double accumulatedPhase = 0;
         double Phase(int frame)
         {
-            if (!context.Automation.Has("RateHz")) return frame * 2 * Math.PI * settings["RateHz"] / context.Rate;
+            if (!context.Automation.Has("RateHz"))
+            {
+                return frame * 2 * Math.PI * settings["RateHz"] / context.Rate;
+            }
+
             double value = accumulatedPhase;
             accumulatedPhase = (accumulatedPhase + 2 * Math.PI * context.Automation.Value("RateHz", frame) / context.Rate) % (2 * Math.PI * 100);
             return value;
@@ -43,7 +47,11 @@ public static partial class AudioEffectProcessor
                 context.Check(frame, frames);
                 double basePhase = Phase(frame), stereoPhase = context.Automation.Value("StereoPhase", frame) * Math.PI / 180;
                 double minimum = context.Automation.Value("MinimumHz", frame), maximum = context.Automation.Value("MaximumHz", frame);
-                if (minimum >= maximum) throw new ArgumentException("The automated phaser maximum must remain above its minimum frequency.");
+                if (minimum >= maximum)
+                {
+                    throw new ArgumentException("The automated phaser maximum must remain above its minimum frequency.");
+                }
+
                 for (int channel = 0; channel < channels; channel++)
                 {
                     double phase = basePhase + (channel % 2) * stereoPhase;

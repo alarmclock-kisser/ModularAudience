@@ -15,15 +15,26 @@ internal static class QuantumSequenceAudioRenderer
         sequence.Options.Validate(sequence.QubitCount, sequence.Tracks);
         if (samples.Count != sequence.Tracks.Count || samples.Any(sample => sample is null || sample.SampleRate <= 0 || sample.Channels is < 1 or > 8 ||
             sample.Data.Length < sample.Channels || sample.Data.Length % sample.Channels != 0) || samples.Sum(sample => (long)sample.Data.Length) > MaximumSamples)
+        {
             throw new ArgumentException("Select valid samples with complete frames; combined source PCM must not exceed 256 MiB.");
+        }
+
         token.ThrowIfCancellationRequested();
         var snapshots = new List<AudioObj>();
         try
         {
-            foreach (var sample in samples) snapshots.Add(sample.Clone());
+            foreach (var sample in samples)
+            {
+                snapshots.Add(sample.Clone());
+            }
+
             return await Task.Run(() => Render(sequence, snapshots, token), token).ConfigureAwait(false);
         }
-        finally { foreach (var sample in snapshots) sample.Dispose(); }
+        finally { foreach (var sample in snapshots)
+            {
+                sample.Dispose();
+            }
+        }
     }
 
     private static AudioObj Render(QuantumBeatSequence sequence, IReadOnlyList<AudioObj> samples, CancellationToken token)
@@ -32,7 +43,11 @@ internal static class QuantumSequenceAudioRenderer
         var settings = sequence.Options;
         double secondsPerStep = 240 / settings.Bpm / settings.StepsPerBar;
         int frames = checked((int)Math.Ceiling(settings.Bars * settings.StepsPerBar * secondsPerStep * rate));
-        if (frames * (long)channels > MaximumSamples) throw new ArgumentException("The quantum arrangement exceeds the 256 MiB output limit.");
+        if (frames * (long)channels > MaximumSamples)
+        {
+            throw new ArgumentException("The quantum arrangement exceeds the 256 MiB output limit.");
+        }
+
         var mix = new float[frames * channels];
         var cache = new Dictionary<(int Track, double Pitch, double Stretch, double Speed, double Cut, bool Reverse, double Duration), AudioObj>();
         long retainedSamples = 0;
@@ -46,7 +61,10 @@ internal static class QuantumSequenceAudioRenderer
                     !double.IsFinite(note.DurationSteps) || note.DurationSteps is <= 0 or > 16 || !double.IsFinite(note.PitchShiftCents) || Math.Abs(note.PitchShiftCents) > 2400 ||
                     !double.IsFinite(note.TimeStretchFactor) || note.TimeStretchFactor is < 0.5 or > 2 || !double.IsFinite(note.VarispeedFactor) || note.VarispeedFactor is < 0.5 or > 2 ||
                     !double.IsFinite(note.SliceCutOffsetMs) || note.SliceCutOffsetMs < 0)
+                {
                     throw new ArgumentException("The quantum sequence contains an invalid audio event.");
+                }
+
                 var key = (note.TrackIndex, note.PitchShiftCents, note.TimeStretchFactor, note.VarispeedFactor, note.SliceCutOffsetMs, note.Reverse,
                     settings.FitToNoteDuration || settings.TruncateNotes ? note.DurationSteps : 0);
                 if (!cache.TryGetValue(key, out var clip))
@@ -55,16 +73,43 @@ internal static class QuantumSequenceAudioRenderer
                     int sourceFrames = source.Data.Length / source.Channels;
                     int cutFrame = (int)Math.Clamp(Math.Floor(note.SliceCutOffsetMs * source.SampleRate / 1000), 0, sourceFrames - 1);
                     double estimate = (sourceFrames - cutFrame) * note.TimeStretchFactor / note.VarispeedFactor;
-                    if (settings.FitToNoteDuration) estimate = note.DurationSteps * secondsPerStep * source.SampleRate;
+                    if (settings.FitToNoteDuration)
+                    {
+                        estimate = note.DurationSteps * secondsPerStep * source.SampleRate;
+                    }
+
                     if (estimate * source.Channels > MaximumSamples - retainedSamples)
+                    {
                         throw new ArgumentException("Quantum DSP variations exceed the 256 MiB preparation limit. Use shorter samples or fewer variations.");
+                    }
+
                     using var cut = new AudioObj { Data = source.Data[(cutFrame * source.Channels)..], SampleRate = source.SampleRate, Channels = source.Channels, BitDepth = 32 };
-                    if (cut.Data.Any(value => !float.IsFinite(value))) throw new ArgumentException("Quantum audio requires finite PCM samples.");
+                    if (cut.Data.Any(value => !float.IsFinite(value)))
+                    {
+                        throw new ArgumentException("Quantum audio requires finite PCM samples.");
+                    }
+
                     var chain = new SampleModellerSettings();
-                    if (note.Reverse) chain.Effects.Add(new SampleEffect { Kind = SampleEffectKind.Reverse });
-                    if (note.PitchShiftCents != 0) chain.Effects.Add(new SampleEffect { Kind = SampleEffectKind.PitchShift, Semitones = note.PitchShiftCents / 100 });
-                    if (note.TimeStretchFactor != 1) chain.Effects.Add(new SampleEffect { Kind = SampleEffectKind.TimeStretch, Factor = note.TimeStretchFactor });
-                    if (note.VarispeedFactor != 1) chain.Effects.Add(new SampleEffect { Kind = SampleEffectKind.Varispeed, Factor = note.VarispeedFactor });
+                    if (note.Reverse)
+                    {
+                        chain.Effects.Add(new SampleEffect { Kind = SampleEffectKind.Reverse });
+                    }
+
+                    if (note.PitchShiftCents != 0)
+                    {
+                        chain.Effects.Add(new SampleEffect { Kind = SampleEffectKind.PitchShift, Semitones = note.PitchShiftCents / 100 });
+                    }
+
+                    if (note.TimeStretchFactor != 1)
+                    {
+                        chain.Effects.Add(new SampleEffect { Kind = SampleEffectKind.TimeStretch, Factor = note.TimeStretchFactor });
+                    }
+
+                    if (note.VarispeedFactor != 1)
+                    {
+                        chain.Effects.Add(new SampleEffect { Kind = SampleEffectKind.Varispeed, Factor = note.VarispeedFactor });
+                    }
+
                     clip = SampleModellerDsp.Render(cut, chain, token);
                     cache.Add(key, clip);
                     int requested = Math.Max(1, checked((int)Math.Ceiling(note.DurationSteps * secondsPerStep * clip.SampleRate)));
@@ -73,7 +118,10 @@ internal static class QuantumSequenceAudioRenderer
                         clip.Data = ModularAudience.Audio.Processors_V1.PitchShifter.StretchPhaseVocoder(clip.Data, clip.Channels, requested, cancellationToken: token);
                     }
                     else if (settings.TruncateNotes && requested < clip.Data.Length / clip.Channels)
+                    {
                         clip.Data = clip.Data[..(requested * clip.Channels)];
+                    }
+
                     retainedSamples += clip.Data.Length;
                 }
 
@@ -84,13 +132,21 @@ internal static class QuantumSequenceAudioRenderer
                 long required = ((long)start + outputFrames) * channels;
                 if (settings.KeepEndTails && required > mix.Length)
                 {
-                    if (required > MaximumSamples) throw new ArgumentException("Quantum note tails exceed the output memory limit.");
+                    if (required > MaximumSamples)
+                    {
+                        throw new ArgumentException("Quantum note tails exceed the output memory limit.");
+                    }
+
                     Array.Resize(ref mix, (int)required);
                 }
                 outputFrames = Math.Min(outputFrames, mix.Length / channels - start);
                 for (int frame = 0; frame < outputFrames; frame++)
                 {
-                    if ((frame & 4095) == 0) token.ThrowIfCancellationRequested();
+                    if ((frame & 4095) == 0)
+                    {
+                        token.ThrowIfCancellationRequested();
+                    }
+
                     double position = frame * ratio;
                     int first = Math.Min(inputFrames - 1, (int)position), second = Math.Min(inputFrames - 1, first + 1);
                     double fraction = position - first;
@@ -104,14 +160,26 @@ internal static class QuantumSequenceAudioRenderer
             double peak = 0;
             for (int i = 0; i < mix.Length; i++)
             {
-                if ((i & 65535) == 0) token.ThrowIfCancellationRequested();
-                if (!float.IsFinite(mix[i])) throw new ArithmeticException("Quantum rendering produced non-finite audio.");
+                if ((i & 65535) == 0)
+                {
+                    token.ThrowIfCancellationRequested();
+                }
+
+                if (!float.IsFinite(mix[i]))
+                {
+                    throw new ArithmeticException("Quantum rendering produced non-finite audio.");
+                }
+
                 peak = Math.Max(peak, Math.Abs((double)mix[i]));
             }
             double gain = Math.Pow(10, settings.OutputGainDb / 20) * (settings.NormalizeOutput && peak > 0 ? 0.95 / peak : 1);
             for (int i = 0; i < mix.Length; i++)
             {
-                if ((i & 65535) == 0) token.ThrowIfCancellationRequested();
+                if ((i & 65535) == 0)
+                {
+                    token.ThrowIfCancellationRequested();
+                }
+
                 mix[i] = (float)Math.Clamp(mix[i] * gain, -1, 1);
             }
             var result = new AudioObj { Data = mix, SampleRate = rate, Channels = channels, BitDepth = 32, Bpm = (float)settings.Bpm,
@@ -119,6 +187,10 @@ internal static class QuantumSequenceAudioRenderer
             result.Rename("Quantum Breakbeat " + DateTime.Now.ToString("yyyyMMdd_HHmmss"));
             return result;
         }
-        finally { foreach (var clip in cache.Values) clip.Dispose(); }
+        finally { foreach (var clip in cache.Values)
+            {
+                clip.Dispose();
+            }
+        }
     }
 }

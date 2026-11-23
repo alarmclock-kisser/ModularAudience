@@ -18,7 +18,9 @@ public partial class BreakbeatPatternEditorDialog
             {
                 var doc = JsonSerializer.Deserialize<Dictionary<string, float>>(File.ReadAllText(TrackNameFontPath));
                 if (doc != null && doc.TryGetValue("FontSize", out float v) && v is >= 6f and <= 24f)
+                {
                     trackNameFontSize = v;
+                }
             }
         }
         catch { }
@@ -38,8 +40,16 @@ public partial class BreakbeatPatternEditorDialog
     {
         float[] sizes = { 6f, 7f, 8f, 9f, 10f, 11f, 12f, 14f, 16f };
         int idx = Array.FindIndex(sizes, s => Math.Abs(s - trackNameFontSize) < 0.5f);
-        if (idx < 0) idx = Array.FindIndex(sizes, s => s >= trackNameFontSize);
-        if (idx < 0) idx = sizes.Length - 1;
+        if (idx < 0)
+        {
+            idx = Array.FindIndex(sizes, s => s >= trackNameFontSize);
+        }
+
+        if (idx < 0)
+        {
+            idx = sizes.Length - 1;
+        }
+
         idx = Math.Clamp(idx + (delta > 0 ? 1 : -1), 0, sizes.Length - 1);
         trackNameFontSize = sizes[idx];
         SaveTrackNameFontSize();

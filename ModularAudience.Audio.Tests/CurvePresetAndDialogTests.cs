@@ -47,7 +47,10 @@ public sealed class CurvePresetAndDialogTests
         File.Delete(store.FilePath); Assert.ThrowsExactly<ArgumentException>(() => store.Save(null, new() { Equation = "1/x" }));
         Assert.IsFalse(File.Exists(store.FilePath)); store.Save("Curve", new()); string before = File.ReadAllText(store.FilePath);
         using (var locked = new FileStream(store.FilePath, FileMode.Open, FileAccess.ReadWrite, FileShare.None))
+        {
             Assert.ThrowsExactly<IOException>(() => store.Save("Other", new()));
+        }
+
         Assert.AreEqual(before, File.ReadAllText(store.FilePath)); Assert.AreEqual(1, Directory.GetFiles(files.Directory).Length);
     }
 
@@ -110,8 +113,16 @@ public sealed class CurvePresetAndDialogTests
             Assert.AreEqual(targets.Count, Descendants(editor).OfType<CurveBindingControl>().Count(), definition.Name);
             var bindings = targets.ToDictionary(target => target.Key, target => new EffectParameterCurve { Enabled = target.Key != "OutputGainDb",
                 StartValue = target.NeutralValue, Curve = new() { Equation = "x^2" } }, StringComparer.Ordinal);
-            var settings = definition.CreateDefaults(); if (definition.Kind == AudioEffectKind.HumRemoval) settings = settings.With(("Mains", 2));
-            if (definition.Kind == AudioEffectKind.NoiseReduction) settings = settings.With(("Profile", 2));
+            var settings = definition.CreateDefaults(); if (definition.Kind == AudioEffectKind.HumRemoval)
+            {
+                settings = settings.With(("Mains", 2));
+            }
+
+            if (definition.Kind == AudioEffectKind.NoiseReduction)
+            {
+                settings = settings.With(("Profile", 2));
+            }
+
             settings = settings with { Automation = new() { Parameters = bindings, Timing = new() { Scope = EffectCurveScope.AcrossSelection, IncludeGaps = false, IncludeSilence = false } } };
             editor.ApplySettings(settings); Assert.IsTrue(settings.SoundEquals(editor.CaptureSettings()), definition.Name);
             foreach (EffectCurveTarget target in targets)
@@ -242,7 +253,7 @@ public sealed class CurvePresetAndDialogTests
     }
 
     private static T Find<T>(Control parent, string name) where T : Control => Descendants(parent).OfType<T>().Single(control => control.Name == name);
-    private static IEnumerable<Control> Descendants(Control parent) { foreach (Control child in parent.Controls) { yield return child; foreach (Control descendant in Descendants(child)) yield return descendant; } }
+    private static IEnumerable<Control> Descendants(Control parent) { foreach (Control child in parent.Controls) { yield return child; foreach (Control descendant in Descendants(child)) { yield return descendant; } } }
     private static void Drain(Task task)
     {
         SynchronizationContext? context = SynchronizationContext.Current; var watch = Stopwatch.StartNew();

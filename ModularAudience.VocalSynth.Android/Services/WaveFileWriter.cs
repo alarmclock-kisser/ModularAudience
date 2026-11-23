@@ -12,15 +12,22 @@ internal static class WaveFileWriter
         ArgumentException.ThrowIfNullOrWhiteSpace(filePath);
         ArgumentNullException.ThrowIfNull(audio);
         if (audio.Channels is < 1 or > 2 || audio.SampleRate <= 0 || audio.Data.Length % audio.Channels != 0)
+        {
             throw new InvalidDataException("The generated audio format is not supported for WAV export.");
+        }
+
         if (trailingSilenceMilliseconds < 0)
+        {
             throw new InvalidDataException("Trailing WAV silence cannot be negative.");
+        }
 
         long silenceFrames = ((long)audio.SampleRate * trailingSilenceMilliseconds + 999) / 1000;
         long totalSamples = audio.Data.LongLength + silenceFrames * audio.Channels;
         long dataBytes = totalSamples * sizeof(short);
         if (dataBytes > int.MaxValue - 36)
+        {
             throw new InvalidDataException("The exported WAV file exceeds the supported RIFF size.");
+        }
 
         await using FileStream stream = new(filePath, FileMode.Create, FileAccess.Write, FileShare.None);
         byte[] header = new byte[44];
@@ -69,6 +76,8 @@ internal static class WaveFileWriter
         await stream.FlushAsync(cancellationToken);
         long expectedLength = 44L + totalSamples * sizeof(short);
         if (stream.Length != expectedLength)
+        {
             throw new IOException("The exported WAV file does not contain all generated audio samples.");
+        }
     }
 }

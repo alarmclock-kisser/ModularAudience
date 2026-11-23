@@ -50,10 +50,15 @@ internal static class ReleaseCommitHistoryFormatter
             text.Append("No commit messages are available for this release range.");
         }
         else
+        {
             latestReleaseStart = AppendEntries(text, currentEntries, currentEntries[^1].ReleaseNumber);
+        }
 
         foreach (string warning in history.Warnings.Distinct(StringComparer.Ordinal))
+        {
             text.AppendLine().AppendLine().Append("Note: ").Append(warning.Replace("\0", string.Empty, StringComparison.Ordinal));
+        }
+
         return text.ToString();
     }
 
@@ -63,13 +68,27 @@ internal static class ReleaseCommitHistoryFormatter
         int releaseStart = -1;
         foreach (ReleaseCommitHistoryEntry entry in entries)
         {
-            if (hasEntry) text.AppendLine().AppendLine();
-            if (entry.ReleaseNumber == releaseToFind) releaseStart = text.Length;
+            if (hasEntry)
+            {
+                text.AppendLine().AppendLine();
+            }
+
+            if (entry.ReleaseNumber == releaseToFind)
+            {
+                releaseStart = text.Length;
+            }
+
             text.Append("Build ").Append(entry.ReleaseNumber.ToString(CultureInfo.InvariantCulture));
             if (entry.CommittedAt is { } date)
+            {
                 text.Append(" | ").Append(date.ToUniversalTime().ToString("yyyy-MM-dd HH:mm 'UTC'", CultureInfo.InvariantCulture));
+            }
+
             if (!string.IsNullOrEmpty(entry.CommitSha))
+            {
                 text.Append(" | ").Append(entry.CommitSha[..Math.Min(12, entry.CommitSha.Length)]);
+            }
+
             text.AppendLine();
             text.Append(entry.Message is null
                 ? "Commit message unavailable for this release."

@@ -13,11 +13,16 @@ public sealed partial class MixTrackView
     {
         if (collectionImportPending || busy || closing || released || this.windowGroup.IsBlocked) { return; }
         if (Arrangement.Lanes.Any(lane => lane.Clips.Count > 0))
+        {
             throw new InvalidOperationException("A collection selection must open in a new mix.");
+        }
+
         AudioObj[] selected = audios.DistinctBy(audio => audio.Id).ToArray();
         if (selected.Length == 0) { return; }
         if (selected.Any(audio => audio.IsDisposed || audio.Data.Length == 0 || audio.SampleRate <= 0 || audio.Channels <= 0))
+        {
             throw new InvalidOperationException("A selected track no longer has available audio samples.");
+        }
 
         collectionImportPending = true;
         List<TrackView> pending = [];

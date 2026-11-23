@@ -90,7 +90,10 @@ public sealed class YtdlpRepairTests
         add.Invoke(new YtdlpNetworkOptions { IpVersion = YtdlpIpVersion.IPv4, ProxyUrl = "" }, [arguments]);
         CollectionAssert.AreEqual(new[] { "--force-ipv4", "--proxy", "" }, arguments);
         foreach (var proxy in new[] { "file:///C:/test", "https://user:password@proxy.example", "https://proxy.example/path", "https://proxy.example\n--no-check-certificates" })
+        {
             Assert.ThrowsExactly<ArgumentException>(() => new YtdlpNetworkOptions { ProxyUrl = proxy }.Validate());
+        }
+
         new YtdlpNetworkOptions { IpVersion = YtdlpIpVersion.IPv6, ProxyUrl = "http://proxy.example:8080" }.Validate();
     }
 

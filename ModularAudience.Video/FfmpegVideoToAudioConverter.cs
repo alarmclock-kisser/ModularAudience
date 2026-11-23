@@ -379,18 +379,28 @@ public sealed class FfmpegVideoToAudioConverter : IVideoToAudioConverter, IDispo
         // 2. Same directory as the entry assembly or common local folder
         string? exeDir = AppContext.BaseDirectory;
         var localCandidate = Path.Combine(exeDir, "ffmpeg.exe");
-        if (File.Exists(localCandidate)) return localCandidate;
+        if (File.Exists(localCandidate))
+        {
+            return localCandidate;
+        }
 
         // 3. PATH
         var pathEnv = Environment.GetEnvironmentVariable("PATH") ?? string.Empty;
         foreach (var entry in pathEnv.Split(Path.PathSeparator))
         {
             var dir = entry.Trim().Trim('"');
-            if (string.IsNullOrWhiteSpace(dir) || !Path.IsPathFullyQualified(dir)) continue;
+            if (string.IsNullOrWhiteSpace(dir) || !Path.IsPathFullyQualified(dir))
+            {
+                continue;
+            }
+
             try
             {
                 var candidate = Path.Combine(dir, "ffmpeg.exe");
-                if (File.Exists(candidate)) return Path.GetFullPath(candidate);
+                if (File.Exists(candidate))
+                {
+                    return Path.GetFullPath(candidate);
+                }
             }
             catch { /* ignore invalid entries */ }
         }
@@ -402,7 +412,11 @@ public sealed class FfmpegVideoToAudioConverter : IVideoToAudioConverter, IDispo
     {
         lock (_disposalLock)
         {
-            if (_disposed) return;
+            if (_disposed)
+            {
+                return;
+            }
+
             _disposed = true;
         }
 

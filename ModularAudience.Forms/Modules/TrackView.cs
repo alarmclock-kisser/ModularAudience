@@ -1444,7 +1444,11 @@ namespace ModularAudience.Forms.Modules
             // Mouse moves only change the visual selection. Rebuilding/rewinding the
             // live audio graph for every pointer event causes dropouts and UI stalls.
             // MouseUp clears the drag flags and commits the final loop once.
-            if (this.dragSelecting || this.resizingSelection) return;
+            if (this.dragSelecting || this.resizingSelection)
+            {
+                return;
+            }
+
             this.ApplyLoopFractionToAudio();
 
             if (this.OriginalAudio.Playing)
@@ -2644,8 +2648,15 @@ namespace ModularAudience.Forms.Modules
                     this.synchronizingBeatDivisionCombos = true;
                     try
                     {
-                        if (this.beatGridV3DivisionCombo != null) this.beatGridV3DivisionCombo.SelectedItem = selected;
-                        if (this.beatGridAnalogDivisionCombo != null) this.beatGridAnalogDivisionCombo.SelectedItem = selected;
+                        if (this.beatGridV3DivisionCombo != null)
+                        {
+                            this.beatGridV3DivisionCombo.SelectedItem = selected;
+                        }
+
+                        if (this.beatGridAnalogDivisionCombo != null)
+                        {
+                            this.beatGridAnalogDivisionCombo.SelectedItem = selected;
+                        }
                     }
                     finally
                     {

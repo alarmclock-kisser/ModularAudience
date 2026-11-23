@@ -19,7 +19,11 @@ public sealed class EffectCurveTests
         EffectCurve source = EffectCurvePresets.All.Single(preset => preset.Id == id).Curve;
         EffectCurve copy = source.Copy(); CompiledEffectCurve curve = copy.Compile();
         Assert.AreNotSame(source.Points, copy.Points); Assert.IsTrue(copy.SoundEquals(source));
-        for (int i = 0; i <= 10000; i++) Assert.IsTrue(curve.At(i / 10000d) is >= 0 and <= 1, id);
+        for (int i = 0; i <= 10000; i++)
+        {
+            Assert.IsTrue(curve.At(i / 10000d) is >= 0 and <= 1, id);
+        }
+
         Assert.IsFalse((copy with { Equation = "1-x" }).SoundEquals(source with { Equation = "x" }));
     }
 
@@ -120,7 +124,10 @@ public sealed class EffectCurveTests
         EffectCurvePoint[][] invalid = [[], [new(0, 0)], [new(0.1, 0), new(1, 1)], [new(0, 0), new(0.9, 1)],
             [new(0, 0), new(0.5, 1), new(0.5, 0), new(1, 1)], [new(0, 0), new(0.8, 1), new(0.2, 0), new(1, 1)],
             [new(0, 0), new(1, double.NaN)], [new(0, 0), new(1, double.PositiveInfinity)]];
-        foreach (var points in invalid) Assert.ThrowsExactly<ArgumentException>(() => new EffectCurve { Mode = EffectCurveMode.Checkpoints, Points = points }.Compile());
+        foreach (var points in invalid)
+        {
+            Assert.ThrowsExactly<ArgumentException>(() => new EffectCurve { Mode = EffectCurveMode.Checkpoints, Points = points }.Compile());
+        }
     }
 
     [TestMethod]

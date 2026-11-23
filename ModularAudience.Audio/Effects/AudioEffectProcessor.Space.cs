@@ -26,12 +26,18 @@ public static partial class AudioEffectProcessor
             if (context.Automation.Has("DelayMs"))
             {
                 double currentDelay = Math.Max(1, context.Rate * context.Automation.Value("DelayMs", frame) / 1000);
-                for (int tap = 0; tap < tapCount; tap++) tapPositions[tap] = currentDelay * tapMultipliers[tap];
+                for (int tap = 0; tap < tapCount; tap++)
+                {
+                    tapPositions[tap] = currentDelay * tapMultipliers[tap];
+                }
             }
             if (context.Automation.Has("LowPassHz"))
             {
                 Biquad coefficients = Biquad.LowPass(context.Automation.Value("LowPassHz", frame), context.Rate);
-                for (int channel = 0; channel < channels; channel++) filters[channel].Reconfigure(coefficients);
+                for (int channel = 0; channel < channels; channel++)
+                {
+                    filters[channel].Reconfigure(coefficients);
+                }
             }
             for (int channel = 0; channel < channels; channel++)
             {
@@ -135,13 +141,23 @@ public static partial class AudioEffectProcessor
                 tank.Early.Write(excitation);
                 double early = 0;
                 for (int tap = 0; tap < tank.EarlyTaps.Length; tap++)
+                {
                     early += tank.Early.Read(tank.EarlyTaps[tap] * sizeRatio) * (tap % 2 == 0 ? 1 : -0.65) / (tap + 2);
+                }
+
                 if (tank.Shimmer is not null)
+                {
                     excitation += tank.Shimmer.Process(tank.LastWet) * context.Automation.Value("ShimmerPercent", frame) / 100 * 0.2;
+                }
+
                 for (int index = 0; index < tank.Diffusers.Length; index++)
                 {
-                    if (context.Automation.Has("DiffusionPercent")) tank.Diffusers[index].SetCoefficient(context.Automation.Value("DiffusionPercent", frame) / 100 *
+                    if (context.Automation.Has("DiffusionPercent"))
+                    {
+                        tank.Diffusers[index].SetCoefficient(context.Automation.Value("DiffusionPercent", frame) / 100 *
                         (settings.Effect == AudioEffectKind.SpringReverb && (index & 1) == 1 ? -0.75 : 0.68));
+                    }
+
                     excitation = tank.Diffusers[index].Process(excitation);
                 }
                 double sum = 0;
@@ -157,12 +173,17 @@ public static partial class AudioEffectProcessor
                 // Normalized Hadamard scattering is orthogonal: it redistributes
                 // feedback energy rather than multiplying it by the number of lines.
                 for (int stride = 1; stride < 8; stride *= 2)
+                {
                     for (int start = 0; start < 8; start += stride * 2)
+                    {
                         for (int offset = 0; offset < stride; offset++)
                         {
                             double a = mixed[start + offset], b = mixed[start + offset + stride];
                             mixed[start + offset] = a + b; mixed[start + offset + stride] = a - b;
                         }
+                    }
+                }
+
                 for (int line = 0; line < 8; line++)
                 {
                     double feedback = context.Automation.Has("DecaySeconds") || context.Automation.Has("SizePercent")

@@ -14,7 +14,9 @@ public sealed class TextEditHistoryTests
     {
         using var editor = new TextHistoryTextBox();
         foreach (char character in "hello world")
+        {
             editor.AppendText(character.ToString());
+        }
 
         Assert.IsTrue(editor.ProcessHistoryCommand(Keys.Control | Keys.Z));
         Assert.AreEqual("hello ", editor.Text);

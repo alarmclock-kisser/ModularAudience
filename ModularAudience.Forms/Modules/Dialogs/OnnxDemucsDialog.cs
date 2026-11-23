@@ -111,7 +111,11 @@ public partial class OnnxDemucsDialog : Form
         modelRow.SetColumnSpan(retentionRow, 2);
         this.keepModelLoaded.ValueChanged += (_, _) =>
         {
-            if (this.initializing) return;
+            if (this.initializing)
+            {
+                return;
+            }
+
             this.settings.KeepModelLoadedSeconds = (int)this.keepModelLoaded.Value;
             try { this.settings.Save(); }
             catch (Exception error) { this.ShowError("Unable to save model retention setting", error); }
@@ -132,7 +136,11 @@ public partial class OnnxDemucsDialog : Form
         this.AddOption("Parallel DirectML devices", this.checkedListBox_directMLDevices);
         this.AddOption("Chunk overlap (%)", this.overlap);
         int checksRow = (this.optionCount + 1) / 2;
-        for (int row = 0; row < checksRow; row++) this.optionsPanel.RowStyles.Add(new RowStyle(SizeType.Absolute, 32));
+        for (int row = 0; row < checksRow; row++)
+        {
+            this.optionsPanel.RowStyles.Add(new RowStyle(SizeType.Absolute, 32));
+        }
+
         this.optionsPanel.RowStyles[4].Height = 82;
         this.optionsPanel.RowStyles.Add(new RowStyle(SizeType.Absolute, 190));
         this.optionsPanel.RowStyles.Add(new RowStyle(SizeType.Percent, 100));
@@ -154,7 +162,11 @@ public partial class OnnxDemucsDialog : Form
         this.comboBox_cudaToolkitVersion.Margin = new Padding(3, 4, 3, 4);
         this.checksPanel.Controls.Add(this.comboBox_cudaToolkitVersion, 1, checkIndex / 2);
         this.checksPanel.RowCount = (checkIndex + 1) / 2;
-        for (int row = 0; row < this.checksPanel.RowCount; row++) this.checksPanel.RowStyles.Add(new RowStyle(SizeType.Percent, 100f / this.checksPanel.RowCount));
+        for (int row = 0; row < this.checksPanel.RowCount; row++)
+        {
+            this.checksPanel.RowStyles.Add(new RowStyle(SizeType.Percent, 100f / this.checksPanel.RowCount));
+        }
+
         checkGroup.Controls.Add(this.checksPanel);
         this.optionsPanel.Controls.Add(checkGroup, 0, checksRow);
         this.optionsPanel.SetColumnSpan(checkGroup, 4);
@@ -190,11 +202,30 @@ public partial class OnnxDemucsDialog : Form
         {
             if (ReferenceEquals(control, this.keepModelLoaded)
                 || ReferenceEquals(control, this.useCudaCuFft)
-                || ReferenceEquals(control, this.comboBox_cudaToolkitVersion)) continue;
-            if (control is CheckBox check) check.CheckedChanged += (_, _) => this.OptionsChanged();
-            if (control is ComboBox combo) combo.SelectedIndexChanged += (_, _) => this.OptionsChanged();
-            if (control is NumericUpDown number) number.ValueChanged += (_, _) => this.OptionsChanged();
-            if (control is TextBox text) text.TextChanged += (_, _) => this.OptionsChanged();
+                || ReferenceEquals(control, this.comboBox_cudaToolkitVersion))
+            {
+                continue;
+            }
+
+            if (control is CheckBox check)
+            {
+                check.CheckedChanged += (_, _) => this.OptionsChanged();
+            }
+
+            if (control is ComboBox combo)
+            {
+                combo.SelectedIndexChanged += (_, _) => this.OptionsChanged();
+            }
+
+            if (control is NumericUpDown number)
+            {
+                number.ValueChanged += (_, _) => this.OptionsChanged();
+            }
+
+            if (control is TextBox text)
+            {
+                text.TextChanged += (_, _) => this.OptionsChanged();
+            }
         }
         this.SetBusy(false);
     }
@@ -209,7 +240,11 @@ public partial class OnnxDemucsDialog : Form
     {
         var combo = new ComboBox { DropDownStyle = ComboBoxStyle.DropDownList, Dock = DockStyle.Fill };
         combo.Items.AddRange(values);
-        if (values.Length > 0) combo.SelectedIndex = 0;
+        if (values.Length > 0)
+        {
+            combo.SelectedIndex = 0;
+        }
+
         return combo;
     }
     private static NumericUpDown Number(int min, int max) => new() { Minimum = min, Maximum = max, Width = 120 };
@@ -222,7 +257,11 @@ public partial class OnnxDemucsDialog : Form
             TextAlign = ReferenceEquals(control, this.overlap) ? ContentAlignment.TopLeft : ContentAlignment.MiddleLeft,
             AutoEllipsis = true, Margin = new Padding(3, 2, 3, 2) }, column, row);
         control.MinimumSize = Size.Empty;
-        if (control is ComboBox or TextBox) control.Width = 100;
+        if (control is ComboBox or TextBox)
+        {
+            control.Width = 100;
+        }
+
         control.Margin = new Padding(3, 4, 3, 4);
         this.optionsPanel.Controls.Add(control, column + 1, row);
     }
@@ -244,10 +283,25 @@ public partial class OnnxDemucsDialog : Form
         }
 
         var notices = new List<string>();
-        if (!string.IsNullOrWhiteSpace(cudaCatalog.Warning)) notices.Add(cudaCatalog.Warning);
-        if (adapters.Length == 0) notices.Add("No DirectML adapters were detected; choose CPU execution.");
-        if (this.cudaDevices.Length == 0) notices.Add("No CUDA devices were detected; CUDA CuFFT is disabled.");
-        else if (this.cudaToolkits.Length == 0) notices.Add("No supported CUDA CuFFT toolkit was detected; parallel CPU FFT will be used.");
+        if (!string.IsNullOrWhiteSpace(cudaCatalog.Warning))
+        {
+            notices.Add(cudaCatalog.Warning);
+        }
+
+        if (adapters.Length == 0)
+        {
+            notices.Add("No DirectML adapters were detected; choose CPU execution.");
+        }
+
+        if (this.cudaDevices.Length == 0)
+        {
+            notices.Add("No CUDA devices were detected; CUDA CuFFT is disabled.");
+        }
+        else if (this.cudaToolkits.Length == 0)
+        {
+            notices.Add("No supported CUDA CuFFT toolkit was detected; parallel CPU FFT will be used.");
+        }
+
         this.deviceNotice = string.Join(" ", notices.Distinct(StringComparer.Ordinal));
     }
 
@@ -275,11 +329,18 @@ public partial class OnnxDemucsDialog : Form
     private DemucsLoadOptions[] GetDesiredOptions()
     {
         var options = this.ReadOptions();
-        if (!options.UseDirectML) return [options];
+        if (!options.UseDirectML)
+        {
+            return [options];
+        }
+
         var selected = this.checkedListBox_directMLDevices.CheckedItems.Cast<DirectMLDeviceChoice>()
             .DistinctBy(choice => choice.Adapter.Id).ToArray();
         if (selected.Length == 0)
+        {
             throw new ArgumentException("Select at least one DirectML device or choose CPU execution.");
+        }
+
         return selected.Select(choice =>
         {
             var copy = JsonSerializer.Deserialize<DemucsLoadOptions>(JsonSerializer.Serialize(options))!;
@@ -297,7 +358,9 @@ public partial class OnnxDemucsDialog : Form
     private void DirectMLDevices_ItemCheck(object? sender, ItemCheckEventArgs e)
     {
         if (!this.initializing && this.IsHandleCreated)
+        {
             this.BeginInvoke((Action)this.OptionsChanged);
+        }
     }
 
     private void GpuCacheTimer_Tick(object? sender, EventArgs e) => this.UpdateProviderControls();
@@ -322,10 +385,17 @@ public partial class OnnxDemucsDialog : Form
             this.ApplySettings();
             this.Onnx = await Task.Run(() => new OnnxService(this.settings.ModelDirectories, loadImmediately: false));
             this.RefreshModels();
-            if (this.Onnx.ModelPaths.Count == 0) await this.BrowseModelsAsync();
+            if (this.Onnx.ModelPaths.Count == 0)
+            {
+                await this.BrowseModelsAsync();
+            }
+
             bool reused = this.comboBox_models.SelectedItem is ModelItem selected &&
                 await this.TryReuseModelsAsync(selected.Path, this.GetDesiredOptions());
-            if (!reused) this.status.Text = this.WithDeviceNotice(warning ?? "Select a model and load options, then click Load model. No model is loaded yet.");
+            if (!reused)
+            {
+                this.status.Text = this.WithDeviceNotice(warning ?? "Select a model and load options, then click Load model. No model is loaded yet.");
+            }
         }
         catch (Exception error) { this.ShowError("Unable to prepare Demucs", error); }
         finally { this.initializing = false; this.SetBusy(false); }
@@ -337,7 +407,11 @@ public partial class OnnxDemucsDialog : Form
         this.keepModelLoaded.Value = Math.Clamp(this.settings.KeepModelLoadedSeconds, 0, 86400);
         o.NormalizeWorkers();
         bool directMLAvailable = this.checkedListBox_directMLDevices.Items.Count > 0;
-        if (!directMLAvailable) o.UseDirectML = false;
+        if (!directMLAvailable)
+        {
+            o.UseDirectML = false;
+        }
+
         o.NormalizeForProvider(o.UseDirectML);
         this.provider.SelectedIndex = o.UseDirectML && directMLAvailable ? 0 : 1;
         if (this.cudaToolkits.Length > 0)
@@ -373,7 +447,10 @@ public partial class OnnxDemucsDialog : Form
             : this.settings.SelectedDirectMLDeviceIds;
         if (!selectedIds.Any(id => this.FindDirectMLDevice(id) is not null)
             && this.checkedListBox_directMLDevices.Items.Count > 0)
+        {
             selectedIds = [((DirectMLDeviceChoice)this.checkedListBox_directMLDevices.Items[0]).Adapter.Id];
+        }
+
         this.settings.SelectedDirectMLDeviceIds = selectedIds
             .Where(id => this.FindDirectMLDevice(id) is not null).Distinct().ToArray();
         for (int index = 0; index < this.checkedListBox_directMLDevices.Items.Count; index++)
@@ -389,7 +466,11 @@ public partial class OnnxDemucsDialog : Form
         foreach (string line in this.advanced.Lines.Where(l => !string.IsNullOrWhiteSpace(l)))
         {
             int equals = line.IndexOf('=');
-            if (equals <= 0) throw new ArgumentException("Extra session entries must use key=value, one entry per line.");
+            if (equals <= 0)
+            {
+                throw new ArgumentException("Extra session entries must use key=value, one entry per line.");
+            }
+
             entries.Add(line[..equals].Trim(), line[(equals + 1)..].Trim());
         }
         bool useDirectML = this.provider.SelectedIndex == 0;
@@ -398,10 +479,20 @@ public partial class OnnxDemucsDialog : Form
             .Cast<DirectMLDeviceChoice>().FirstOrDefault()
             ?? this.FindDirectMLDevice(this.settings.Options.DeviceId);
         int cudaDeviceId;
-        if (!useCudaCuFft) cudaDeviceId = -1;
-        else if (useDirectML) cudaDeviceId = selectedDevice?.Cuda?.Id ?? -1;
-        else cudaDeviceId = this.cudaDevices.FirstOrDefault(device => device.Id == this.settings.Options.CudaDeviceId)?.Id
+        if (!useCudaCuFft)
+        {
+            cudaDeviceId = -1;
+        }
+        else if (useDirectML)
+        {
+            cudaDeviceId = selectedDevice?.Cuda?.Id ?? -1;
+        }
+        else
+        {
+            cudaDeviceId = this.cudaDevices.FirstOrDefault(device => device.Id == this.settings.Options.CudaDeviceId)?.Id
             ?? this.cudaDevices.FirstOrDefault()?.Id ?? -1;
+        }
+
         long? deviceLuid = useDirectML ? selectedDevice?.Adapter.Luid
             : useCudaCuFft ? this.cudaDevices.FirstOrDefault(device => device.Id == cudaDeviceId)?.Luid : null;
         return new DemucsLoadOptions
@@ -430,7 +521,11 @@ public partial class OnnxDemucsDialog : Form
 
     private void OptionsChanged()
     {
-        if (this.initializing || this.busy) return;
+        if (this.initializing || this.busy)
+        {
+            return;
+        }
+
         if (this.Onnx?.IsOnline == true && this.comboBox_models.SelectedItem is ModelItem selected)
         {
             try
@@ -494,7 +589,11 @@ public partial class OnnxDemucsDialog : Form
 
     private async Task BrowseModelsAsync()
     {
-        if (this.Onnx == null) return;
+        if (this.Onnx == null)
+        {
+            return;
+        }
+
         using var browser = new FolderBrowserDialog
         {
             Description = this.Onnx.ModelPaths.Count == 0
@@ -503,7 +602,11 @@ public partial class OnnxDemucsDialog : Form
             UseDescriptionForTitle = true, ShowNewFolderButton = false
         };
         browser.SelectedPath = this.ModelsBrowseDirectory();
-        if (browser.ShowDialog(this) != DialogResult.OK) return;
+        if (browser.ShowDialog(this) != DialogResult.OK)
+        {
+            return;
+        }
+
         bool wasBusy = this.busy;
         this.SetBusy(true, "Scanning models directory…", loading: true);
         try
@@ -513,7 +616,9 @@ public partial class OnnxDemucsDialog : Form
             this.RefreshModels();
             this.settings.Save();
             if (this.Onnx.ModelPaths.Count == 0)
+            {
                 this.status.Text = "No ONNX models were found in that directory. Click Browse models directory to try another directory.";
+            }
         }
         catch (Exception error) { this.ShowError("Unable to scan models directory", error); }
         finally { this.SetBusy(wasBusy); }
@@ -529,12 +634,19 @@ public partial class OnnxDemucsDialog : Form
         this.comboBox_models.Items.AddRange(this.Onnx!.ModelPaths.Select(p => new ModelItem(p)).ToArray());
         this.comboBox_models.SelectedItem = this.comboBox_models.Items.Cast<ModelItem>()
             .FirstOrDefault(m => string.Equals(m.Path, this.settings.SelectedModel, StringComparison.OrdinalIgnoreCase));
-        if (this.comboBox_models.SelectedIndex < 0 && this.comboBox_models.Items.Count > 0) this.comboBox_models.SelectedIndex = 0;
+        if (this.comboBox_models.SelectedIndex < 0 && this.comboBox_models.Items.Count > 0)
+        {
+            this.comboBox_models.SelectedIndex = 0;
+        }
     }
 
     private async void Load_Click(object? sender, EventArgs e)
     {
-        if (this.busy) return;
+        if (this.busy)
+        {
+            return;
+        }
+
         if (this.HasLoadedModels)
         {
             this.SetBusy(true, "Unloading and disposing Demucs sessions…", loading: true);
@@ -553,7 +665,11 @@ public partial class OnnxDemucsDialog : Form
             finally { this.SetBusy(false); }
             return;
         }
-        if (this.Onnx == null || this.comboBox_models.SelectedItem is not ModelItem model) return;
+        if (this.Onnx == null || this.comboBox_models.SelectedItem is not ModelItem model)
+        {
+            return;
+        }
+
         this.SetBusy(true, $"Loading {model.Name}…", loading: true);
         this.loadedWithCurrentOptions = false;
         try
@@ -564,7 +680,11 @@ public partial class OnnxDemucsDialog : Form
             this.settings.SelectedModel = model.Path;
             this.settings.SelectedDirectMLDeviceIds = this.GetSelectedDirectMLDeviceIds();
             this.settings.Save();
-            if (await this.TryReuseModelsAsync(model.Path, desiredOptions)) return;
+            if (await this.TryReuseModelsAsync(model.Path, desiredOptions))
+            {
+                return;
+            }
+
             var acquired = await this.LoadModelLeasesAsync(model.Path, desiredOptions);
             this.modelLeases.AddRange(acquired);
             this.Onnx = acquired[0].Model;
@@ -574,7 +694,10 @@ public partial class OnnxDemucsDialog : Form
             this.loadedWithCurrentOptions = true;
             this.checkedListBox_stems.Items.Clear();
             foreach (string stem in this.Onnx.AvailableStems)
+            {
                 this.checkedListBox_stems.Items.Add(stem, this.settings.SelectedStems.Contains(stem));
+            }
+
             string ready = acquired.Count > 1
                 ? $"Ready — {acquired.Count} model sessions loaded; selected stems will be split across devices in parallel."
                 : "Ready — model session loaded.";
@@ -597,8 +720,15 @@ public partial class OnnxDemucsDialog : Form
         this.UpdateProviderControls();
         this.progressBar_inferencing.Style = value && loading ? ProgressBarStyle.Marquee : ProgressBarStyle.Continuous;
         this.progressBar_inferencing.MarqueeAnimationSpeed = value && loading ? 30 : 0;
-        if (message != null) this.status.Text = message;
-        if (!value && this.closeRequested) this.BeginInvoke(this.Close);
+        if (message != null)
+        {
+            this.status.Text = message;
+        }
+
+        if (!value && this.closeRequested)
+        {
+            this.BeginInvoke(this.Close);
+        }
     }
 
     private void UpdateProviderControls()
@@ -653,7 +783,11 @@ public partial class OnnxDemucsDialog : Form
             new[] { heading }.Concat(devices.Select((device, index) => $"{device}: {states[index]}")));
         IProgress<(int Index, string State)> progress = new Progress<(int Index, string State)>(update =>
         {
-            if (!reportProgress || this.IsDisposed) return;
+            if (!reportProgress || this.IsDisposed)
+            {
+                return;
+            }
+
             states[update.Index] = update.State;
             UpdateLoadStatus();
         });
@@ -692,7 +826,11 @@ public partial class OnnxDemucsDialog : Form
 
     private async void button_Run_Click(object sender, EventArgs e)
     {
-        if (this.busy || this.Onnx?.IsOnline != true) return;
+        if (this.busy || this.Onnx?.IsOnline != true)
+        {
+            return;
+        }
+
         string[] selected = this.checkedListBox_stems.CheckedItems.Cast<string>().ToArray();
         if (selected.Length == 0)
         {
@@ -719,7 +857,11 @@ public partial class OnnxDemucsDialog : Form
             var progressValues = new double[selected.Length];
             var stemProgress = selected.Select((stem, index) => (IProgress<double>)new Progress<double>(fraction =>
             {
-                if (this.IsDisposed || this.Disposing || !this.busy) return;
+                if (this.IsDisposed || this.Disposing || !this.busy)
+                {
+                    return;
+                }
+
                 progressValues[index] = fraction;
                 this.progressBar_inferencing.Value = Math.Clamp(
                     (int)(progressValues.Sum() * 1000 / selected.Length), 0, 1000);
@@ -763,7 +905,10 @@ public partial class OnnxDemucsDialog : Form
                     extract.Data = result.Samples;
                     extract.Rename($"{this.OriginalAudio.OriginalName}_{result.Name}");
                     if (collection == null || collection.IsDisposed)
+                    {
                         collection = new AudioCollectionView([], $"{this.OriginalAudio.Name} - Stems Demucs");
+                    }
+
                     collection.AudioC.Audios.Add(extract);
                     collection.Show();
                     completed++;
@@ -781,7 +926,11 @@ public partial class OnnxDemucsDialog : Form
             }
             try { await allWorkers; }
             catch (Exception error) { failure ??= error; }
-            if (failure is not null) ExceptionDispatchInfo.Capture(failure).Throw();
+            if (failure is not null)
+            {
+                ExceptionDispatchInfo.Capture(failure).Throw();
+            }
+
             this.status.Text = $"Finished — {selected.Length} stem(s) extracted.\n{DescribeLoadedModels(leases)}";
         }
         catch (OperationCanceledException) { this.status.Text = $"Separation cancelled — {completed} completed stem(s) kept."; }
@@ -814,7 +963,10 @@ public partial class OnnxDemucsDialog : Form
                 this.settings.SelectedModel = (this.comboBox_models.SelectedItem as ModelItem)?.Path ?? "";
                 this.settings.SelectedDirectMLDeviceIds = this.GetSelectedDirectMLDeviceIds();
                 if (this.checkedListBox_stems.Items.Count > 0)
+                {
                     this.settings.SelectedStems = this.checkedListBox_stems.CheckedItems.Cast<string>().ToArray();
+                }
+
                 this.settings.Save();
             }
             catch (Exception error) { this.ShowError("Unable to save Demucs settings", error); }
@@ -859,7 +1011,10 @@ public partial class OnnxDemucsDialog : Form
         this.loadedWithCurrentOptions = true;
         this.checkedListBox_stems.Items.Clear();
         foreach (string stem in cached.AvailableStems)
+        {
             this.checkedListBox_stems.Items.Add(stem, this.settings.SelectedStems.Contains(stem));
+        }
+
         this.status.Text = this.WithDeviceNotice($"Ready — reused {acquired.Count} loaded model session(s).\n{DescribeLoadedModels(acquired)}");
         return true;
     }
@@ -873,7 +1028,10 @@ public partial class OnnxDemucsDialog : Form
         {
             ReleaseLeases(this.modelLeases, keepAlive ?? TimeSpan.FromSeconds((double)this.keepModelLoaded.Value));
         }
-        else service?.Dispose();
+        else
+        {
+            service?.Dispose();
+        }
     }
 
     internal static void ReleaseLeases(IEnumerable<SharedModelPool<OnnxService>.Lease> leases, TimeSpan keepAlive)
@@ -883,15 +1041,30 @@ public partial class OnnxDemucsDialog : Form
             lease.KeepAlive = keepAlive;
             lease.Dispose();
         }
-        if (leases is List<SharedModelPool<OnnxService>.Lease> list) list.Clear();
+        if (leases is List<SharedModelPool<OnnxService>.Lease> list)
+        {
+            list.Clear();
+        }
     }
 
     internal static int[][] AssignStemsToDevices(int stemCount, int deviceCount)
     {
-        if (stemCount < 0) throw new ArgumentOutOfRangeException(nameof(stemCount));
-        if (deviceCount <= 0) throw new ArgumentOutOfRangeException(nameof(deviceCount));
+        if (stemCount < 0)
+        {
+            throw new ArgumentOutOfRangeException(nameof(stemCount));
+        }
+
+        if (deviceCount <= 0)
+        {
+            throw new ArgumentOutOfRangeException(nameof(deviceCount));
+        }
+
         var assignments = Enumerable.Range(0, deviceCount).Select(_ => new List<int>()).ToArray();
-        for (int stem = 0; stem < stemCount; stem++) assignments[stem % deviceCount].Add(stem);
+        for (int stem = 0; stem < stemCount; stem++)
+        {
+            assignments[stem % deviceCount].Add(stem);
+        }
+
         return assignments.Select(deviceStems => deviceStems.ToArray()).ToArray();
     }
 
@@ -900,7 +1073,10 @@ public partial class OnnxDemucsDialog : Form
         if (this.comboBox_models.SelectedItem is ModelItem selected)
         {
             string? parent = Path.GetDirectoryName(Path.GetFullPath(selected.Path));
-            if (parent != null && Directory.Exists(parent)) return parent;
+            if (parent != null && Directory.Exists(parent))
+            {
+                return parent;
+            }
         }
         return this.settings.ModelDirectories.FirstOrDefault(Directory.Exists)
             ?? this.Onnx?.ModelDirectories.FirstOrDefault(Directory.Exists)

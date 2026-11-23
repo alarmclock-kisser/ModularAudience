@@ -89,7 +89,9 @@ internal static class VocalCustomSampleStore
     internal static void SetIpaSubstring(Guid id, string value)
     {
         lock (Gate)
+        {
             FindEntry(id).IpaSubstring = value;
+        }
     }
 
     internal static void SetAudio(Guid id, AudioObj source)
@@ -118,7 +120,11 @@ internal static class VocalCustomSampleStore
 
     internal static void SetAudioFromEntry(Guid targetId, Guid sourceId)
     {
-        if (targetId == sourceId) return;
+        if (targetId == sourceId)
+        {
+            return;
+        }
+
         AudioObj cached;
         AudioObj? previous;
         lock (Gate)
@@ -126,7 +132,10 @@ internal static class VocalCustomSampleStore
             Entry source = FindEntry(sourceId);
             Entry target = FindEntry(targetId);
             if (source.Audio is null)
+            {
                 throw new InvalidOperationException("The selected cached sample is no longer available.");
+            }
+
             ValidateAudio(source.Audio);
             cached = source.Audio.Clone();
             previous = target.Audio;
@@ -155,7 +164,11 @@ internal static class VocalCustomSampleStore
         lock (Gate)
         {
             Entry? entry = Entries.FirstOrDefault(candidate => candidate.Id == id);
-            if (entry is null) return;
+            if (entry is null)
+            {
+                return;
+            }
+
             Entries.Remove(entry);
             previous = entry.Audio;
         }
@@ -164,9 +177,17 @@ internal static class VocalCustomSampleStore
 
     internal static bool IsEligibleAudio(AudioObj audio)
     {
-        if (audio.Channels is < 1 or > 2 || audio.AdjustedSampleRate <= 0) return false;
+        if (audio.Channels is < 1 or > 2 || audio.AdjustedSampleRate <= 0)
+        {
+            return false;
+        }
+
         float[] samples = audio.Data;
-        if (samples.Length == 0 || samples.Length % audio.Channels != 0) return false;
+        if (samples.Length == 0 || samples.Length % audio.Channels != 0)
+        {
+            return false;
+        }
+
         double durationSeconds = samples.Length / (double)(audio.Channels * audio.AdjustedSampleRate);
         return double.IsFinite(durationSeconds) && durationSeconds > 0 && durationSeconds < 60;
     }
@@ -174,7 +195,9 @@ internal static class VocalCustomSampleStore
     private static void ValidateAudio(AudioObj audio)
     {
         if (!IsEligibleAudio(audio))
+        {
             throw new ArgumentException("Custom sample audio must be valid and shorter than one minute.", nameof(audio));
+        }
     }
 
     private static Entry FindEntry(Guid id) =>

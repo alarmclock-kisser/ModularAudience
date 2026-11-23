@@ -14,7 +14,9 @@ internal static class WaveAudioReader
         ReadOnlySpan<byte> bytes = buffer.GetBuffer().AsSpan(0, checked((int)buffer.Length));
         if (bytes.Length < 12 || !bytes[..4].SequenceEqual("RIFF"u8)
             || !bytes[8..12].SequenceEqual("WAVE"u8))
+        {
             throw new InvalidDataException("The selected file is not a valid WAV file.");
+        }
 
         ushort format = 0;
         ushort channels = 0;
@@ -26,17 +28,26 @@ internal static class WaveAudioReader
             ReadOnlySpan<byte> id = bytes.Slice(offset, 4);
             uint size = BinaryPrimitives.ReadUInt32LittleEndian(bytes.Slice(offset + 4, 4));
             if (size > int.MaxValue || size > bytes.Length - offset - 8)
+            {
                 throw new InvalidDataException("The WAV file contains an invalid chunk size.");
+            }
+
             ReadOnlySpan<byte> chunk = bytes.Slice(offset + 8, (int)size);
             if (id.SequenceEqual("fmt "u8))
             {
-                if (chunk.Length < 16) throw new InvalidDataException("The WAV format chunk is incomplete.");
+                if (chunk.Length < 16)
+                {
+                    throw new InvalidDataException("The WAV format chunk is incomplete.");
+                }
+
                 format = BinaryPrimitives.ReadUInt16LittleEndian(chunk);
                 channels = BinaryPrimitives.ReadUInt16LittleEndian(chunk[2..]);
                 sampleRate = checked((int)BinaryPrimitives.ReadUInt32LittleEndian(chunk[4..]));
                 bitsPerSample = BinaryPrimitives.ReadUInt16LittleEndian(chunk[14..]);
                 if (format == 0xfffe && chunk.Length >= 40)
+                {
                     format = BinaryPrimitives.ReadUInt16LittleEndian(chunk[24..]);
+                }
             }
             else if (id.SequenceEqual("data"u8))
             {
@@ -46,15 +57,26 @@ internal static class WaveAudioReader
         }
 
         if (channels is < 1 or > 2 || sampleRate <= 0 || data.IsEmpty)
+        {
             throw new InvalidDataException("The WAV file has no supported mono or stereo audio data.");
+        }
+
         int bytesPerSample = bitsPerSample / 8;
         if (bitsPerSample % 8 != 0 || bytesPerSample is < 1 or > 4
             || data.Length % (bytesPerSample * channels) != 0)
+        {
             throw new InvalidDataException("The WAV sample format is not supported.");
+        }
+
         if (format != 1 && format != 3)
+        {
             throw new InvalidDataException("Only PCM and IEEE float WAV files are supported.");
+        }
+
         if (format == 3 && bitsPerSample != 32 || format == 1 && bitsPerSample is not (8 or 16 or 24 or 32))
+        {
             throw new InvalidDataException("The WAV sample bit depth is not supported.");
+        }
 
         float[] samples = new float[data.Length / bytesPerSample];
         for (int index = 0; index < samples.Length; index++)
@@ -70,7 +92,11 @@ internal static class WaveAudioReader
                     32 => BinaryPrimitives.ReadInt32LittleEndian(sample) / 2147483648f,
                     _ => throw new InvalidDataException("The WAV sample bit depth is not supported."),
                 };
-            if (!float.IsFinite(value)) throw new InvalidDataException("The WAV contains an invalid sample.");
+            if (!float.IsFinite(value))
+            {
+                throw new InvalidDataException("The WAV contains an invalid sample.");
+            }
+
             samples[index] = Math.Clamp(value, -1, 1);
         }
         return new WaveAudioData(samples, sampleRate, channels);

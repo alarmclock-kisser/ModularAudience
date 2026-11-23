@@ -19,7 +19,11 @@ public partial class YoutubeBrowserWindow
             var originalSession = client.MetadataSession;
             var original = new YtdlpDownloadOptions { Network = originalNetwork, BrowserSession = originalSession };
             var decision = RequestRecovery([error], original, error.Message, token);
-            if (decision is null) return false;
+            if (decision is null)
+            {
+                return false;
+            }
+
             var recovered = YtdlpRecoveryRules.Apply(error.FailureKind, decision, original);
             try
             {
@@ -32,7 +36,11 @@ public partial class YoutubeBrowserWindow
             catch (YtdlpProcessException cookieError) when (cookieError.FailureKind == YtdlpFailureKind.BrowserCookies)
             {
                 var alternative = RequestRecovery([cookieError], recovered, cookieError.Message, token);
-                if (alternative is null) return false;
+                if (alternative is null)
+                {
+                    return false;
+                }
+
                 var corrected = YtdlpRecoveryRules.Apply(cookieError.FailureKind, alternative, recovered);
                 client.NetworkOptions = corrected.Network;
                 client.MetadataSession = corrected.BrowserSession;
@@ -47,7 +55,11 @@ public partial class YoutubeBrowserWindow
         YtdlpDownloadOptions options, string diagnostics, CancellationToken token)
     {
         token.ThrowIfCancellationRequested();
-        if (closing || IsDisposed || resourcesReleased) return null;
+        if (closing || IsDisposed || resourcesReleased)
+        {
+            return null;
+        }
+
         using var dialog = new YoutubeRecoveryDialog(errors, options, diagnostics);
         _ = dialog.Handle;
         using var registration = token.Register(() =>
@@ -102,33 +114,60 @@ public partial class YoutubeBrowserWindow
     {
         token.ThrowIfCancellationRequested();
         var candidates = RecoverableJobs(batch);
-        if (candidates.Length == 0 || closing || IsDisposed || resourcesReleased) return (false, false);
+        if (candidates.Length == 0 || closing || IsDisposed || resourcesReleased)
+        {
+            return (false, false);
+        }
+
         var errors = candidates.Select(job => (YtdlpProcessException)job.Error!).ToArray();
         string diagnostics = "Showing up to 20 failed items. Full errors remain in the application log.\r\n\r\n" +
             string.Join("\r\n\r\n", batch.Jobs.Where(job => job.Error is not null).Take(20)
                 .Select(job => $"{job.Video.Title} [{job.Video.Id}]\r\n{job.Error}"));
         var decision = RequestRecovery(errors, options, diagnostics, token);
-        if (decision is null) return (true, false);
+        if (decision is null)
+        {
+            return (true, false);
+        }
+
         var eligible = candidates.Where(job => job.Row.ListView is not null && !job.CancelRequested && YtdlpRecoveryRules.CanApply(
             (YtdlpProcessException)job.Error!, decision.Action, options)).ToArray();
-        if (eligible.Length == 0) return (true, false);
+        if (eligible.Length == 0)
+        {
+            return (true, false);
+        }
+
         var recovered = YtdlpRecoveryRules.Apply(((YtdlpProcessException)eligible[0].Error!).FailureKind, decision, options);
         await WaitForRecoveryWindowAsync(eligible.Select(job => (YtdlpProcessException)job.Error!).ToArray(), token);
-        foreach (var job in eligible) ResetForRecovery(job);
+        foreach (var job in eligible)
+        {
+            ResetForRecovery(job);
+        }
+
         batch.Settled = false;
         RefreshBatchProgress(batch);
         await RunBatchPassAsync(batch, eligible, recovered, cooldown, stretch, maxParallel, importGate, token);
         if (allowCookieCorrection && eligible.Any(job => job.Error is YtdlpProcessException { FailureKind: YtdlpFailureKind.BrowserCookies }))
+        {
             await RecoverBatchAsync(batch, recovered, cooldown, stretch, maxParallel, importGate, token, allowCookieCorrection: false);
+        }
+
         return (true, true);
     }
 
     private async Task WaitForRecoveryWindowAsync(IReadOnlyList<YtdlpProcessException> errors, CancellationToken token)
     {
         var deadline = errors.Max(error => error.RetryNotBeforeUtc);
-        if (deadline is null || deadline <= DateTimeOffset.UtcNow) return;
+        if (deadline is null || deadline <= DateTimeOffset.UtcNow)
+        {
+            return;
+        }
+
         var pause = deadline.Value - DateTimeOffset.UtcNow;
-        if (pause <= TimeSpan.Zero) return;
+        if (pause <= TimeSpan.Zero)
+        {
+            return;
+        }
+
         statusLabel.Text = $"Waiting {Math.Ceiling(pause.TotalSeconds):0} seconds before recovery (server Retry-After).";
         AppendLog(statusLabel.Text);
         await Task.Delay(pause, token);

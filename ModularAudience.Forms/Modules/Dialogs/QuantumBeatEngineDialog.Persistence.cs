@@ -33,11 +33,19 @@ public partial class QuantumBeatEngineDialog
             var project = workspace.Experiment; var options = project.Options;
             this.SetNumber("Qubits", project.Circuit.QubitCount);
             this.qasmVersionCombo.SelectedIndex = project.Circuit.Version == OpenQasmVersion.Version3 ? 1 : 0;
-            this.gateRows.Clear(); foreach (var gate in project.Circuit.Gates) this.gateRows.Add(QuantumGateEditorRow.From(gate));
+            this.gateRows.Clear(); foreach (var gate in project.Circuit.Gates)
+            {
+                this.gateRows.Add(QuantumGateEditorRow.From(gate));
+            }
+
             this.trackRows.Clear();
             var defaults = this.DefaultWorkspace().Experiment.Tracks;
             bool sameTracks = project.Tracks.Count == defaults.Count && project.Tracks.Select(track => track.Name).SequenceEqual(defaults.Select(track => track.Name));
-            foreach (var track in sameTracks ? project.Tracks : defaults) this.trackRows.Add(QuantumTrackEditorRow.From(track));
+            foreach (var track in sameTracks ? project.Tracks : defaults)
+            {
+                this.trackRows.Add(QuantumTrackEditorRow.From(track));
+            }
+
             var values = new Dictionary<string, double>
             {
                 ["Bars"] = options.Bars, ["StepsPerBar"] = options.StepsPerBar, ["Bpm"] = options.Bpm, ["Seed"] = options.Seed,
@@ -52,7 +60,11 @@ public partial class QuantumBeatEngineDialog
                 ["EntanglementChance"] = project.Randomization.EntanglementChance * 100, ["MinimumAngleDegrees"] = project.Randomization.MinimumAngleRadians * 180 / Math.PI,
                 ["MaximumAngleDegrees"] = project.Randomization.MaximumAngleRadians * 180 / Math.PI, ["Shots"] = workspace.Shots, ["OptimizationLevel"] = workspace.OptimizationLevel
             };
-            foreach (var (key, value) in values) this.SetNumber(key, value);
+            foreach (var (key, value) in values)
+            {
+                this.SetNumber(key, value);
+            }
+
             var flags = new Dictionary<string, bool>
             {
                 ["Interleaved"] = options.Interleaved, ["QuantumVelocity"] = options.QuantumVelocity, ["GhostNotes"] = options.GhostNotes,
@@ -63,7 +75,11 @@ public partial class QuantumBeatEngineDialog
                 ["AutoPlay"] = workspace.AutoPlay, ["LoopPlayback"] = workspace.LoopPlayback, ["FreshLocalSeed"] = workspace.FreshLocalSeed,
                 ["AutoQubits"] = workspace.AutoQubits, ["UsePreparedIsa"] = workspace.UsePreparedIsa
             };
-            foreach (var (key, value) in flags) this.checks[key].Checked = value;
+            foreach (var (key, value) in flags)
+            {
+                this.checks[key].Checked = value;
+            }
+
             this.checks["AllowCloudJobs"].Checked = false;
             this.arrangementCombo.SelectedIndex = Math.Clamp((int)options.Arrangement, 0, 2);
             this.providerCombo.SelectedIndex = workspace.UseIbm ? 1 : 0;
@@ -96,7 +112,9 @@ public partial class QuantumBeatEngineDialog
         try
         {
             if (this.store.ConnectionNames().Contains(this.connectionProfileCombo.Text, StringComparer.OrdinalIgnoreCase))
+            {
                 this.ApplyConnection(this.store.LoadConnection(this.connectionProfileCombo.Text));
+            }
         }
         catch (Exception error) { this.ShowError(error); }
         this.workspaceDirty = this.connectionDirty = false;
@@ -104,7 +122,11 @@ public partial class QuantumBeatEngineDialog
 
     private void ScheduleSave()
     {
-        if (this.loading || this.closing || this.released) return;
+        if (this.loading || this.closing || this.released)
+        {
+            return;
+        }
+
         this.workspaceDirty = true;
         this.Text = "Quantum Beat Engine" + (this.loadedExperimentName is null ? "" : " — " + this.loadedExperimentName) + " *";
         if (this.C("AutoSave")) { this.saveTimer.Stop(); this.saveTimer.Start(); }
@@ -112,7 +134,11 @@ public partial class QuantumBeatEngineDialog
 
     private void TrySaveWorkspace()
     {
-        if (this.loading || this.released || !this.workspaceDirty) return;
+        if (this.loading || this.released || !this.workspaceDirty)
+        {
+            return;
+        }
+
         try { this.SaveCurrentWorkspace(); this.SaveConnectionIfChanged(); }
         catch (Exception error) { this.ShowError(error); }
     }
@@ -120,8 +146,15 @@ public partial class QuantumBeatEngineDialog
     internal void SaveCurrentWorkspace()
     {
         var workspace = this.CaptureWorkspace();
-        if (this.suppressAutomaticSave) this.store.SaveRecoveryWorkspace(workspace, this.recoverySessionId);
-        else this.store.SaveWorkspace(workspace);
+        if (this.suppressAutomaticSave)
+        {
+            this.store.SaveRecoveryWorkspace(workspace, this.recoverySessionId);
+        }
+        else
+        {
+            this.store.SaveWorkspace(workspace);
+        }
+
         if (workspace.AutoSave && this.loadedExperimentName is not null)
         {
             try { this.store.SaveExperiment(this.loadedExperimentName, workspace); }
@@ -147,7 +180,11 @@ public partial class QuantumBeatEngineDialog
 
     internal void LoadNamedExperiment(string name)
     {
-        if (this.busy) throw new InvalidOperationException("Cancel the current operation before loading an experiment.");
+        if (this.busy)
+        {
+            throw new InvalidOperationException("Cancel the current operation before loading an experiment.");
+        }
+
         var workspace = this.store.LoadExperiment(name);
         this.Stop(); this.session.Disconnect(); this.ApplyWorkspace(workspace);
         this.sequence = null; this.lastExecution = null; this.rendered?.Dispose(); this.rendered = null;
@@ -158,23 +195,43 @@ public partial class QuantumBeatEngineDialog
 
     internal void RenameNamedExperiment(string oldName, string newName)
     {
-        if (this.busy) throw new InvalidOperationException("Wait for the current operation before renaming a saved experiment.");
+        if (this.busy)
+        {
+            throw new InvalidOperationException("Wait for the current operation before renaming a saved experiment.");
+        }
+
         this.store.RenameExperiment(oldName, newName);
-        if (string.Equals(this.loadedExperimentName, oldName, StringComparison.OrdinalIgnoreCase)) this.loadedExperimentName = newName;
+        if (string.Equals(this.loadedExperimentName, oldName, StringComparison.OrdinalIgnoreCase))
+        {
+            this.loadedExperimentName = newName;
+        }
+
         this.ScheduleSave(); this.UpdateAvailability(); this.SetStatus("Renamed saved experiment to '" + newName + "'.");
     }
 
     internal void DeleteNamedExperiment(string name)
     {
-        if (this.busy) throw new InvalidOperationException("Wait for the current operation before deleting a saved experiment.");
+        if (this.busy)
+        {
+            throw new InvalidOperationException("Wait for the current operation before deleting a saved experiment.");
+        }
+
         this.store.DeleteExperiment(name);
-        if (string.Equals(this.loadedExperimentName, name, StringComparison.OrdinalIgnoreCase)) this.loadedExperimentName = null;
+        if (string.Equals(this.loadedExperimentName, name, StringComparison.OrdinalIgnoreCase))
+        {
+            this.loadedExperimentName = null;
+        }
+
         this.ScheduleSave(); this.UpdateAvailability(); this.SetStatus("Deleted saved experiment '" + name + "'. The current editor setup remains available.");
     }
 
     private void ResetWorkspace()
     {
-        if (this.busy) return;
+        if (this.busy)
+        {
+            return;
+        }
+
         this.Stop(); this.session.Disconnect(); this.loadedExperimentName = null;
         this.ApplyWorkspace(this.DefaultWorkspace()); this.suppressAutomaticSave = false;
         this.sequence = null; this.lastExecution = null; this.rendered?.Dispose(); this.rendered = null;
@@ -185,8 +242,16 @@ public partial class QuantumBeatEngineDialog
 
     private void ShowLibrary(string action)
     {
-        if (this.busy) return;
-        if (this.libraryWindow is null || this.libraryWindow.IsDisposed) this.libraryWindow = new QuantumExperimentLibraryDialog(this, this.store);
+        if (this.busy)
+        {
+            return;
+        }
+
+        if (this.libraryWindow is null || this.libraryWindow.IsDisposed)
+        {
+            this.libraryWindow = new QuantumExperimentLibraryDialog(this, this.store);
+        }
+
         this.libraryWindow.SelectAction(action, this.loadedExperimentName); this.libraryWindow.Show(this); this.libraryWindow.BringToFront();
     }
 }

@@ -59,8 +59,14 @@ public sealed class YoutubeBrowserWindowTests
         }
         finally
         {
-            if (originalSettings == null) File.Delete(settingsPath);
-            else File.WriteAllBytes(settingsPath, originalSettings);
+            if (originalSettings == null)
+            {
+                File.Delete(settingsPath);
+            }
+            else
+            {
+                File.WriteAllBytes(settingsPath, originalSettings);
+            }
         }
     }
 
@@ -107,10 +113,21 @@ public sealed class YoutubeBrowserWindowTests
                 foreach (string handler in new[] { "Query_KeyDown", "Search_Click" })
                 {
                     Field<TextBox>(window, "queryText").Text = size + handler;
-                    if (handler == "Query_KeyDown") Invoke(window, handler, null, new KeyEventArgs(Keys.Enter));
-                    else Invoke(window, handler, null, EventArgs.Empty);
+                    if (handler == "Query_KeyDown")
+                    {
+                        Invoke(window, handler, null, new KeyEventArgs(Keys.Enter));
+                    }
+                    else
+                    {
+                        Invoke(window, handler, null, EventArgs.Empty);
+                    }
+
                     var timer = Stopwatch.StartNew();
-                    while (!Field<Task>(window, "browseOperation").IsCompleted && timer.Elapsed < TimeSpan.FromSeconds(5)) Application.DoEvents();
+                    while (!Field<Task>(window, "browseOperation").IsCompleted && timer.Elapsed < TimeSpan.FromSeconds(5))
+                    {
+                        Application.DoEvents();
+                    }
+
                     Assert.IsTrue(Field<Task>(window, "browseOperation").IsCompleted);
                     Assert.AreEqual(size + handler, Field<ListView>(window, "resultsList").Items[0].Text);
                     Assert.AreSame(Field<TabPage>(window, "resultsTab"), Field<TabControl>(window, "browsingTabs").SelectedTab);
@@ -137,7 +154,11 @@ public sealed class YoutubeBrowserWindowTests
         var channel = new YtdlpVideo { IsChannel = true, Id = "UCsXVk37bltHxD1rDPwtNM8Q", Title = "Channel", Url = "https://www.youtube.com/channel/UCsXVk37bltHxD1rDPwtNM8Q/videos" };
         Invoke(window, "PublishResults", new[] { channel }, "channel search", "Channels", false);
         var row = Field<ListView>(window, "resultsList").Items[0];
-        foreach (int index in new[] { 2, 3, 6 }) Assert.AreEqual("", row.SubItems[index].Text);
+        foreach (int index in new[] { 2, 3, 6 })
+        {
+            Assert.AreEqual("", row.SubItems[index].Text);
+        }
+
         Invoke(window, "PublishResults", new[] { new YtdlpVideo { Title = "Video" } }, "Channel :: Channel", "Channel videos", false);
         Invoke(window, "NavigateResultsHistory", -1);
         Assert.AreSame(channel, Field<ListView>(window, "resultsList").Items[0].Tag);
@@ -531,7 +552,10 @@ public sealed class YoutubeBrowserWindowTests
         callback.Report(progress);
         var deadline = Stopwatch.StartNew();
         while (!ReferenceEquals(progress, Property<YtdlpDownloadProgress?>(job, "Latest")) && deadline.Elapsed < TimeSpan.FromSeconds(5))
+        {
             Application.DoEvents();
+        }
+
         Assert.AreSame(progress, Property<YtdlpDownloadProgress?>(job, "Latest"), "The UI progress callback did not arrive within five seconds.");
     }
 
@@ -549,7 +573,11 @@ public sealed class YoutubeBrowserWindowTests
     private static async Task<string[]> CollectIdsAsync(IAsyncEnumerable<YtdlpVideo> videos)
     {
         var ids = new List<string>();
-        await foreach (var video in videos) ids.Add(video.Id);
+        await foreach (var video in videos)
+        {
+            ids.Add(video.Id);
+        }
+
         return ids.ToArray();
     }
 

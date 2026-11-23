@@ -10,7 +10,11 @@ internal static class VocalPitchPhaseVocoder
         int size, double formantPreservationPercent, CancellationToken cancellationToken)
     {
         int frames = source.Length;
-        if (frames == 0) return [];
+        if (frames == 0)
+        {
+            return [];
+        }
+
         int fftHop = size / 8;
         int bins = size / 2 + 1;
         int lastCenter = frames + size / 2;
@@ -25,7 +29,9 @@ internal static class VocalPitchPhaseVocoder
             {
                 long frame = center - size / 2 + index;
                 if (frame >= 0 && frame < frames)
+                {
                     weights[(int)frame] += (float)(window[index] * window[index]);
+                }
             }
         }
 
@@ -80,7 +86,11 @@ internal static class VocalPitchPhaseVocoder
             for (int bin = 0; bin < bins; bin++)
             {
                 int target = (int)Math.Round(bin * ratio);
-                if (target >= bins) continue;
+                if (target >= bins)
+                {
+                    continue;
+                }
+
                 double amplitude = magnitude[bin];
                 if (formantPreservationPercent > 0)
                 {
@@ -107,7 +117,10 @@ internal static class VocalPitchPhaseVocoder
                     spectrum[bin] = bin is 0 || bin == bins - 1
                         ? new Complex(value.Real, 0)
                         : value;
-                    if (bin > 0 && bin < bins - 1) spectrum[size - bin] = Complex.Conjugate(value);
+                    if (bin > 0 && bin < bins - 1)
+                    {
+                        spectrum[size - bin] = Complex.Conjugate(value);
+                    }
                 }
                 wasPresent[bin] = present;
             }
@@ -117,14 +130,20 @@ internal static class VocalPitchPhaseVocoder
             {
                 long frame = center - size / 2 + index;
                 if (frame >= 0 && frame < frames)
+                {
                     output[(int)frame] += (float)(spectrum[index].Real * window[index]);
+                }
             }
             first = false;
         }
 
         for (int frame = 0; frame < frames; frame++)
         {
-            if ((frame & 2047) == 0) cancellationToken.ThrowIfCancellationRequested();
+            if ((frame & 2047) == 0)
+            {
+                cancellationToken.ThrowIfCancellationRequested();
+            }
+
             output[frame] /= Math.Max(1e-12f, weights[frame]);
             double wetPosition = Math.Clamp(frame / (double)hop, 0, wet.Length - 1);
             int wetLeft = (int)wetPosition;

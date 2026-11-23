@@ -27,7 +27,11 @@ internal static class VocalSinging
 
         void FlushCurrent()
         {
-            if (current.Count == 0) return;
+            if (current.Count == 0)
+            {
+                return;
+            }
+
             syllables.Add(CreateSyllable(current, pendingPause, language));
             current.Clear();
             pendingPause = 0;
@@ -66,15 +70,28 @@ internal static class VocalSinging
                 previousSymbol = null;
                 continue;
             }
-            if (token is not VocalPhonemeToken phoneme) continue;
+            if (token is not VocalPhonemeToken phoneme)
+            {
+                continue;
+            }
 
             if (!VocalPhonemeInventory.Contains(phoneme.Phoneme))
+            {
                 throw new InvalidOperationException($"Unknown vocal phoneme: {phoneme.Phoneme}");
+            }
+
             VocalPhoneme definition = VocalPhonemeInventory.Get(phoneme.Phoneme);
             if (phoneme.Phoneme == "unsupported")
             {
-                if (current.Count > 0) current.Add(phoneme);
-                else leading.Add(phoneme);
+                if (current.Count > 0)
+                {
+                    current.Add(phoneme);
+                }
+                else
+                {
+                    leading.Add(phoneme);
+                }
+
                 previousSymbol = null;
                 continue;
             }
@@ -140,12 +157,19 @@ internal static class VocalSinging
                 }
                 continue;
             }
-            if (token is not VocalPhonemeToken phoneme) continue;
+            if (token is not VocalPhonemeToken phoneme)
+            {
+                continue;
+            }
+
             VocalPhoneme definition = VocalPhonemeInventory.Get(phoneme.Phoneme);
             bool beat = phoneme.Phoneme.StartsWith("beat-", StringComparison.Ordinal);
             double milliseconds = definition.DurationMs * (beat ? 1 : VocalSynthEngine.DurationMultiplier(phoneme));
             if (definition.IsVowel)
+            {
                 milliseconds *= language == VocalLanguage.AnimalCrossing ? 1.35 : 1.75;
+            }
+
             naturalDuration += milliseconds;
             if (phoneme.SourceStart >= 0)
             {
@@ -184,7 +208,10 @@ internal static class VocalSinging
             shifts[i] = previousShift;
             wet[i] = (float)previousWet;
         }
-        if (!haveShift) return source;
+        if (!haveShift)
+        {
+            return source;
+        }
 
         float[] shifted = VocalPitchPhaseVocoder.Render(
             source, rate, hop, shifts, wet, rate < 12000 ? 1024 : rate >= 96000 ? 4096 : 2048, 70, cancellationToken);
@@ -215,7 +242,10 @@ internal static class VocalSinging
             shifts[i] = previousShift;
             wet[i] = (float)previousWet;
         }
-        if (!haveShift) return source;
+        if (!haveShift)
+        {
+            return source;
+        }
 
         float[] shifted = VocalPitchPhaseVocoder.Render(
             source, rate, hop, shifts, wet, rate < 12000 ? 1024 : rate >= 96000 ? 4096 : 2048, 70, cancellationToken);

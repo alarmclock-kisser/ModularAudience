@@ -249,7 +249,11 @@ public static class AudioDecompilePipeline
         }
         catch
         {
-            foreach (AudioObj atomic in atomics) atomic.Dispose();
+            foreach (AudioObj atomic in atomics)
+            {
+                atomic.Dispose();
+            }
+
             throw;
         }
 

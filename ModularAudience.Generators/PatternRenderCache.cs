@@ -8,7 +8,7 @@ public sealed class PatternRenderCache : IDisposable
     private long clock, bytes;
     private bool disposed;
     public long MaximumBytes { get; }
-    public int Count { get { lock (gate) return entries.Count; } }
+    public int Count { get { lock (gate) { return entries.Count; } } }
     public long Hits { get; private set; }
     public PatternRenderCache(long maximumBytes = 1024L * 1024 * 1024) => MaximumBytes = Math.Max(0, maximumBytes);
     internal bool TryGet(string key, out (float[] Data, int Channels) value)
@@ -28,7 +28,11 @@ public sealed class PatternRenderCache : IDisposable
         long size = value.Data.LongLength * sizeof(float);
         lock (gate)
         {
-            if (disposed || size > MaximumBytes || entries.ContainsKey(key)) return;
+            if (disposed || size > MaximumBytes || entries.ContainsKey(key))
+            {
+                return;
+            }
+
             while (bytes + size > MaximumBytes && entries.Count > 0)
             {
                 string oldest = entries.MinBy(p => p.Value.Used).Key;

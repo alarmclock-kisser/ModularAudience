@@ -8,9 +8,17 @@ namespace ModularAudience.Audio.Processors_V4
             CancellationToken cancellationToken)
         {
             cancellationToken.ThrowIfCancellationRequested();
-            if (data.IsSilent) return 0;
+            if (data.IsSilent)
+            {
+                return 0;
+            }
+
             int frames = data.Power.Length;
-            if (frames < 3) return 1;
+            if (frames < 3)
+            {
+                return 1;
+            }
+
             int dimensions = Math.Min(data.BandPower[0].Length, frames - 1);
             double[][] features = CreateFeatures(data, dimensions, cancellationToken);
             double[,] scatter = Scatter(features, settings.Threads, cancellationToken);
@@ -29,7 +37,11 @@ namespace ModularAudience.Audio.Processors_V4
             int frames = data.Power.Length;
             int bands = data.BandPower[0].Length;
             int[] widths = new int[dimensions];
-            foreach (int band in data.BandOfBin) widths[band * dimensions / bands]++;
+            foreach (int band in data.BandOfBin)
+            {
+                widths[band * dimensions / bands]++;
+            }
+
             double mean = data.Energy.Sum() / frames / data.Power[0].Length;
             double[][] result = DeterministicSpectrogram.Allocate(frames, dimensions);
             for (int frame = 0; frame < frames; frame++)
@@ -95,7 +107,11 @@ namespace ModularAudience.Audio.Processors_V4
                 double parameters = rank * eigenvalues.Length - rank * (rank - 1) / 2.0;
                 double penalty = 0.5 * parameters * Math.Log(observations);
                 double mdl = Math.Max(0, likelihood) + penalty;
-                if (mdl >= best) continue;
+                if (mdl >= best)
+                {
+                    continue;
+                }
+
                 best = mdl;
                 selected = rank;
             }

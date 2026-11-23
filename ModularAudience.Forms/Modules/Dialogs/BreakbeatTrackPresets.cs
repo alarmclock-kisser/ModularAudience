@@ -260,7 +260,9 @@ internal static class BreakbeatTrackPresets
             int motifIndex = column % options.MotifLengthSteps;
             double noise;
             if (motifNoise.TryGetValue(motifIndex, out double previous) && random.Next(100) < options.MotifRepeatPercent)
+            {
                 noise = previous;
+            }
             else { noise = random.NextDouble(); motifNoise[motifIndex] = noise; }
             double legacyWeight = column % 2 == 0 ? 1 - amen : 1;
             double presetWeight = accent == 'X' ? 1 : accent == 'o' ? 0.48 : 0.015;
@@ -269,7 +271,10 @@ internal static class BreakbeatTrackPresets
             // Apply density after shaping so strong preset accents cannot saturate its scale.
             double probability = density
                 * (legacyWeight * (1 - intensity) + structuredWeight * intensity);
-            if (noise >= probability) continue;
+            if (noise >= probability)
+            {
+                continue;
+            }
 
             int min = options.MinNoteLengthSteps, max = options.MaxNoteLengthSteps;
             int randomLength = random.Next(min, max + 1);
@@ -310,9 +315,21 @@ internal static class BreakbeatTrackPresets
 
             var kinds = options.Clone();
             var allowed = new List<int>();
-            if (options.AllowTruncated) allowed.Add(0);
-            if (options.AllowTimeStretch) allowed.Add(1);
-            if (options.AllowVarispeed) allowed.Add(2);
+            if (options.AllowTruncated)
+            {
+                allowed.Add(0);
+            }
+
+            if (options.AllowTimeStretch)
+            {
+                allowed.Add(1);
+            }
+
+            if (options.AllowVarispeed)
+            {
+                allowed.Add(2);
+            }
+
             if (allowed.Count > 0)
             {
                 int preferred = preset.Name switch

@@ -32,7 +32,10 @@ internal static class VocalChinese
                 while (i < text.Length && IsHanzi(text[i]) && i - start < 256)
                 {
                     if (!Engine.Value.ContainsChar(text[i]))
+                    {
                         throw VocalMultilingualPhonemizer.Unsupported(text[i].ToString(), VocalLanguage.Chinese);
+                    }
+
                     i++;
                 }
                 foreach (string syllable in Engine.Value.ToPinyinList(text[start..i], PinyinStyle.ToneNumber))
@@ -44,7 +47,11 @@ internal static class VocalChinese
             else
             {
                 int start = i;
-                while (i < text.Length && !IsHanzi(text[i])) i++;
+                while (i < text.Length && !IsHanzi(text[i]))
+                {
+                    i++;
+                }
+
                 AppendPinyin(result, text[start..i], cancellationToken);
             }
         }
@@ -68,11 +75,16 @@ internal static class VocalChinese
                 marks.Add(0);
             }
             else if (c == '\u0308' && letters.Length > 0 && letters[^1] == 'u')
+            {
                 letters[^1] = 'v';
+            }
             else if (c is '\u0304' or '\u0301' or '\u030c' or '\u0300')
             {
                 if (marks.Count == 0 || marks[^1] != 0)
+                {
                     throw VocalMultilingualPhonemizer.Unsupported(input, VocalLanguage.Chinese);
+                }
+
                 marks[^1] = c switch { '\u0304' => 1, '\u0301' => 2, '\u030c' => 3, _ => 4 };
             }
             else if (c is >= '1' and <= '5')
@@ -85,7 +97,10 @@ internal static class VocalChinese
                 AppendPinyinGroup(result, letters.ToString(), marks, 0, cancellationToken);
                 letters.Clear(); marks.Clear();
             }
-            else throw VocalMultilingualPhonemizer.Unsupported(c.ToString(), VocalLanguage.Chinese);
+            else
+            {
+                throw VocalMultilingualPhonemizer.Unsupported(c.ToString(), VocalLanguage.Chinese);
+            }
         }
         AppendPinyinGroup(result, letters.ToString(), marks, 0, cancellationToken);
     }
@@ -96,7 +111,11 @@ internal static class VocalChinese
     {
         if (letters.Length == 0)
         {
-            if (numericTone != 0) throw VocalMultilingualPhonemizer.Unsupported(numericTone.ToString(), VocalLanguage.Chinese);
+            if (numericTone != 0)
+            {
+                throw VocalMultilingualPhonemizer.Unsupported(numericTone.ToString(), VocalLanguage.Chinese);
+            }
+
             return;
         }
 
@@ -108,27 +127,57 @@ internal static class VocalChinese
             cancellationToken.ThrowIfCancellationRequested();
             for (int end = Math.Min(letters.Length, start + 6); end > start; end--)
             {
-                if (next[end] < 0 || !TrySyllableIpa(letters[start..end], out _)) continue;
+                if (next[end] < 0 || !TrySyllableIpa(letters[start..end], out _))
+                {
+                    continue;
+                }
+
                 int tones = 0;
-                for (int p = start; p < end; p++) if (marks[p] != 0) tones++;
-                if (tones > 1 || numericTone != 0 && end == letters.Length && tones > 0) continue;
+                for (int p = start; p < end; p++)
+                {
+                    if (marks[p] != 0)
+                    {
+                        tones++;
+                    }
+                }
+
+                if (tones > 1 || numericTone != 0 && end == letters.Length && tones > 0)
+                {
+                    continue;
+                }
+
                 next[start] = end;
                 break;
             }
         }
-        if (next[0] < 0) throw VocalMultilingualPhonemizer.Unsupported(letters, VocalLanguage.Chinese);
+        if (next[0] < 0)
+        {
+            throw VocalMultilingualPhonemizer.Unsupported(letters, VocalLanguage.Chinese);
+        }
 
         for (int start = 0; start < letters.Length; start = next[start])
         {
             int end = next[start];
             _ = TrySyllableIpa(letters[start..end], out string ipa);
             int tone = end == letters.Length ? numericTone : 0;
-            for (int i = start; i < end; i++) if (marks[i] != 0) tone = marks[i];
+            for (int i = start; i < end; i++)
+            {
+                if (marks[i] != 0)
+                {
+                    tone = marks[i];
+                }
+            }
+
             int first = result.Count;
             VocalIpa.Append(result, ipa, cancellationToken);
             if (end == start + 1 && VocalPhonemizer.CappedRepetitionLength(letters, start) == 3)
+            {
                 for (int i = first; i < result.Count; i++)
+                {
                     result[i] = result[i] with { SourceRepetitionLength = 3 };
+                }
+            }
+
             VocalMultilingualPhonemizer.SetSyllableTone(result, first, tone);
         }
     }
@@ -156,6 +205,7 @@ internal static class VocalChinese
             final = syllable[1..];
         }
         else if (syllable.StartsWith('y'))
+        {
             final = syllable switch
             {
                 "yi" => "i", "yin" => "in", "ying" => "ing",
@@ -164,20 +214,36 @@ internal static class VocalChinese
                 "yu" => "v", "yue" => "ve", "yuan" => "van", "yun" => "vn",
                 _ => "",
             };
+        }
         else if (syllable.StartsWith('w'))
+        {
             final = syllable switch
             {
                 "wu" => "u", "wa" => "ua", "wo" => "uo", "wai" => "uai",
                 "wei" => "ui", "wan" => "uan", "wen" => "un", "wang" => "uang", "weng" => "ueng",
                 _ => "",
             };
+        }
 
         if (initial is "j" or "q" or "x" && final.StartsWith('u'))
+        {
             final = "v" + final[1..];
-        if (!Finals.TryGetValue(final, out string? finalIpa)) return false;
-        if (final == "er" && initial.Length > 0) return false;
+        }
+
+        if (!Finals.TryGetValue(final, out string? finalIpa))
+        {
+            return false;
+        }
+
+        if (final == "er" && initial.Length > 0)
+        {
+            return false;
+        }
+
         if (final == "i" && initial is "zh" or "ch" or "sh" or "r" or "z" or "c" or "s")
+        {
             finalIpa = "ɻ̩";
+        }
 
         string initialIpa = initial switch
         {

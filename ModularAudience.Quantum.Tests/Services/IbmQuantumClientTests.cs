@@ -95,7 +95,11 @@ public sealed class IbmQuantumClientTests
             if (request.Method == HttpMethod.Get)
             {
                 int attempt = Interlocked.Increment(ref reads);
-                if (attempt == 1) throw new HttpRequestException("Connection closed.");
+                if (attempt == 1)
+                {
+                    throw new HttpRequestException("Connection closed.");
+                }
+
                 if (attempt == 2)
                 {
                     var response = MockHttpMessageHandler.Json("{}", HttpStatusCode.ServiceUnavailable);

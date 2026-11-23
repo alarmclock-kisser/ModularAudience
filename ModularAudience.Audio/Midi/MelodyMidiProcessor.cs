@@ -21,7 +21,10 @@ internal static class MelodyMidiProcessor
     internal static List<MidiNoteData> Extract(PolyphonicAnalysis analysis, double bpm, CancellationToken token)
     {
         int frames = analysis.Strengths.Length;
-        if (frames == 0) return [];
+        if (frames == 0)
+        {
+            return [];
+        }
         // A bass fundamental must not erase a moving lead whenever they happen to meet
         // at an octave/fifth. Restore such upper candidates only when the recording also
         // contains a melodic neighborhood; an isolated harmonic tone has none.
@@ -33,8 +36,13 @@ internal static class MelodyMidiProcessor
                 token.ThrowIfCancellationRequested();
                 int neighbors = Enumerable.Range(Math.Max(48, p - 7), Math.Min(PolyphonicPitchAnalyzer.HighestNote, p + 7) - Math.Max(48, p - 7) + 1)
                     .Count(q => Math.Abs(q - p) is >= 1 and <= 7 && activity[q] > activity[p] * 0.18);
-                if (neighbors < 2) continue;
+                if (neighbors < 2)
+                {
+                    continue;
+                }
+
                 for (int t = 0; t < frames; t++)
+                {
                     if (raw[t][p] > 0 && analysis.Strengths[t][p] == 0)
                     {
                         // Only recover a lead above a longer-held bass. A moving lower
@@ -43,17 +51,34 @@ internal static class MelodyMidiProcessor
                         foreach (int interval in new[] { 12, 19, 24, 28, 31, 34, 36 })
                         {
                             int lower = p - interval;
-                            if (lower < PolyphonicPitchAnalyzer.LowestNote || raw[t][lower] <= 0) continue;
+                            if (lower < PolyphonicPitchAnalyzer.LowestNote || raw[t][lower] <= 0)
+                            {
+                                continue;
+                            }
+
                             foreach (int probe in new[] { t - 60, t + 60 })
+                            {
                                 if (probe >= 0 && probe < frames && raw[probe][lower] >= raw[t][lower] * 0.25f
-                                    && raw[probe][p] < raw[t][p] * 0.1f) heldBass = true;
+                                    && raw[probe][p] < raw[t][p] * 0.1f)
+                                {
+                                    heldBass = true;
+                                }
+                            }
                         }
-                        if (heldBass) analysis.Strengths[t][p] = raw[t][p] * 0.9f;
+                        if (heldBass)
+                        {
+                            analysis.Strengths[t][p] = raw[t][p] * 0.9f;
+                        }
                     }
+                }
             }
         }
         float global = analysis.Strengths.Max(f => f.Max());
-        if (global < 1e-6f) return [];
+        if (global < 1e-6f)
+        {
+            return [];
+        }
+
         double rmsFloor = Math.Max(1e-7, analysis.Rms.Max() * 0.006);
         // The soft upper-register preference cannot force an isolated bass/high instrument
         // into a vocal range; only supported spectral candidates enter the path.
@@ -69,7 +94,11 @@ internal static class MelodyMidiProcessor
             var current = Enumerable.Repeat(double.NegativeInfinity, States).ToArray();
             for (int p = PolyphonicPitchAnalyzer.LowestNote; p <= Rest; p++)
             {
-                if (p < Rest && (p > PolyphonicPitchAnalyzer.HighestNote || !voiced || strength[p] < Math.Max(global * 0.003f, peak * 0.055f))) continue;
+                if (p < Rest && (p > PolyphonicPitchAnalyzer.HighestNote || !voiced || strength[p] < Math.Max(global * 0.003f, peak * 0.055f)))
+                {
+                    continue;
+                }
+
                 double emission = p == Rest ? (voiced ? -0.45 : 0.3)
                     : 0.8 + 0.55 * Math.Log(Math.Max(1e-9, strength[p] / peak))
                         + 0.65 * Math.Clamp((p - 48) / 24.0, 0, 1);
@@ -97,10 +126,21 @@ internal static class MelodyMidiProcessor
         // Bridge only tiny pitch-detection gaps, never genuine silent rests.
         for (int start = 1; start < frames - 1; start++)
         {
-            if (path[start - 1] < 0 || path[start] == path[start - 1]) continue;
+            if (path[start - 1] < 0 || path[start] == path[start - 1])
+            {
+                continue;
+            }
+
             int end = start;
-            while (end < frames && end - start < 4 && path[end] != path[start - 1] && analysis.Rms[end] > rmsFloor) end++;
-            if (end < frames && path[end] == path[start - 1]) Array.Fill(path, path[start - 1], start, end - start);
+            while (end < frames && end - start < 4 && path[end] != path[start - 1] && analysis.Rms[end] > rmsFloor)
+            {
+                end++;
+            }
+
+            if (end < frames && path[end] == path[start - 1])
+            {
+                Array.Fill(path, path[start - 1], start, end - start);
+            }
         }
         List<MidiNoteData> notes = [];
         float maxRms = analysis.Rms.Max();
@@ -108,7 +148,11 @@ internal static class MelodyMidiProcessor
         {
             token.ThrowIfCancellationRequested();
             int pitch = path[start], end = start + 1;
-            while (end < frames && path[end] == pitch) end++;
+            while (end < frames && path[end] == pitch)
+            {
+                end++;
+            }
+
             double seconds = (end - start) * analysis.HopSize / (double)analysis.SampleRate;
             if (pitch >= 0 && seconds >= 0.065)
             {

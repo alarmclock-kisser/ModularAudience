@@ -49,7 +49,10 @@ public sealed class PitchShifterQualityTests
     {
         using var source = new AudioObj { Data = Enumerable.Repeat(0.25f, 9600).ToArray(), Channels = 2, SampleRate = 48000 };
         using var shifted = await PitchShifter.CreatePitchShiftAsync(source, 3.5f, false);
-        foreach (float sample in shifted.Data) Assert.AreEqual(0.25f, sample, 0.00001f);
+        foreach (float sample in shifted.Data)
+        {
+            Assert.AreEqual(0.25f, sample, 0.00001f);
+        }
     }
 
     [TestMethod]

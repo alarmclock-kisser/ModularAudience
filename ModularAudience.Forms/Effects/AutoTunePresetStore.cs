@@ -24,7 +24,11 @@ internal sealed class AutoTunePresetStore
         get
         {
             string appData = Environment.GetFolderPath(Environment.SpecialFolder.ApplicationData, Environment.SpecialFolderOption.DoNotVerify);
-            if (!Path.IsPathFullyQualified(appData)) throw new DirectoryNotFoundException("AppData is unavailable.");
+            if (!Path.IsPathFullyQualified(appData))
+            {
+                throw new DirectoryNotFoundException("AppData is unavailable.");
+            }
+
             return Path.Combine(appData, "ModularAudience", "Effects", "AutoTunePresets.json");
         }
     }
@@ -44,13 +48,21 @@ internal sealed class AutoTunePresetStore
         bool changed = false;
         foreach (AutoTuneBuiltInPreset definition in AutoTuneBuiltInPresets.All)
         {
-            if (presets.Any(preset => string.Equals(preset.BuiltInId, definition.Id, StringComparison.OrdinalIgnoreCase))) continue;
+            if (presets.Any(preset => string.Equals(preset.BuiltInId, definition.Id, StringComparison.OrdinalIgnoreCase)))
+            {
+                continue;
+            }
+
             presets.Add(definition.ToPreset());
             changed = true;
         }
         // Add only missing entries. Existing user and factory parameter values
         // are never replaced just because a catalog entry has the same name.
-        if (changed) this.Write(presets);
+        if (changed)
+        {
+            this.Write(presets);
+        }
+
         var known = AutoTuneBuiltInPresets.All.Select(definition => definition.Id).ToHashSet(StringComparer.OrdinalIgnoreCase);
         return (IReadOnlyList<AutoTunePreset>)AutoTuneBuiltInPresets.All
             .Select(definition => presets.Single(preset => string.Equals(preset.BuiltInId, definition.Id, StringComparison.OrdinalIgnoreCase)))
@@ -73,15 +85,25 @@ internal sealed class AutoTunePresetStore
             {
                 var used = presets.Select(preset => preset.Name).ToHashSet(StringComparer.OrdinalIgnoreCase);
                 int number = 1;
-                while (used.Contains(name = $"Preset#{number}")) number = checked(number + 1);
+                while (used.Contains(name = $"Preset#{number}"))
+                {
+                    number = checked(number + 1);
+                }
             }
             ValidateName(name);
             int existing = presets.FindIndex(preset => !preset.IsBuiltIn && preset.Name.Equals(name, StringComparison.OrdinalIgnoreCase));
             var saved = new AutoTunePreset(existing >= 0 ? presets[existing].Name : name, settings.Copy());
-            if (existing >= 0) presets[existing] = saved;
+            if (existing >= 0)
+            {
+                presets[existing] = saved;
+            }
             else
             {
-                if (presets.Count(preset => !preset.IsBuiltIn) >= 4096) throw new InvalidDataException("The user-preset limit (4096) has been reached.");
+                if (presets.Count(preset => !preset.IsBuiltIn) >= 4096)
+                {
+                    throw new InvalidDataException("The user-preset limit (4096) has been reached.");
+                }
+
                 presets.Add(saved);
             }
             this.Write(presets);
@@ -93,7 +115,11 @@ internal sealed class AutoTunePresetStore
     {
         List<AutoTunePreset> presets = this.Read();
         bool removed = presets.RemoveAll(preset => !preset.IsBuiltIn && preset.Name.Equals(name, StringComparison.OrdinalIgnoreCase)) > 0;
-        if (removed) this.Write(presets);
+        if (removed)
+        {
+            this.Write(presets);
+        }
+
         return removed;
     });
 
@@ -102,33 +128,61 @@ internal sealed class AutoTunePresetStore
         string name = requestedName.Trim(); ValidateName(name);
         List<AutoTunePreset> presets = this.Read();
         int index = presets.FindIndex(preset => !preset.IsBuiltIn && preset.Name.Equals(oldName, StringComparison.OrdinalIgnoreCase));
-        if (index < 0) throw new KeyNotFoundException("The selected user preset no longer exists.");
+        if (index < 0)
+        {
+            throw new KeyNotFoundException("The selected user preset no longer exists.");
+        }
+
         if (presets.Where((_, position) => position != index).Any(preset => !preset.IsBuiltIn && preset.Name.Equals(name, StringComparison.OrdinalIgnoreCase)))
+        {
             throw new InvalidOperationException("A user preset already has that name. Rename never overwrites another preset.");
+        }
+
         AutoTunePreset renamed = presets[index] with { Name = name }; presets[index] = renamed;
         this.Write(presets); return renamed;
     });
 
     private List<AutoTunePreset> Read()
     {
-        if (!File.Exists(this.FilePath)) return [];
-        if (new FileInfo(this.FilePath).Length > 4 * 1024 * 1024) throw new InvalidDataException("Auto Tune presets exceed 4 MiB.");
+        if (!File.Exists(this.FilePath))
+        {
+            return [];
+        }
+
+        if (new FileInfo(this.FilePath).Length > 4 * 1024 * 1024)
+        {
+            throw new InvalidDataException("Auto Tune presets exceed 4 MiB.");
+        }
+
         List<AutoTunePreset> presets = JsonSerializer.Deserialize<List<AutoTunePreset>>(File.ReadAllText(this.FilePath), JsonOptions)
             ?? throw new InvalidDataException("The preset file must contain a JSON array.");
         if (presets.Count > 8192 || presets.Count(preset => preset is not null && !preset.IsBuiltIn) > 4096)
+        {
             throw new InvalidDataException("The preset file contains too many entries.");
+        }
+
         var names = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
         var builtInIds = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
         foreach (AutoTunePreset? preset in presets)
         {
-            if (preset is null || preset.Parameters is null) throw new InvalidDataException("The preset file contains an empty preset.");
+            if (preset is null || preset.Parameters is null)
+            {
+                throw new InvalidDataException("The preset file contains an empty preset.");
+            }
+
             ValidateName(preset.Name);
             if (preset.IsBuiltIn)
             {
                 if (string.IsNullOrWhiteSpace(preset.BuiltInId) || preset.BuiltInId.Length > 64 || preset.BuiltInId.Any(char.IsControl) || !builtInIds.Add(preset.BuiltInId))
+                {
                     throw new InvalidDataException("The preset file contains invalid or duplicate default-preset identifiers.");
+                }
             }
-            else if (!names.Add(preset.Name)) throw new InvalidDataException("The preset file contains duplicate user-preset names.");
+            else if (!names.Add(preset.Name))
+            {
+                throw new InvalidDataException("The preset file contains duplicate user-preset names.");
+            }
+
             preset.Parameters.Validate();
         }
         return presets;
@@ -143,13 +197,27 @@ internal sealed class AutoTunePresetStore
             using (var stream = new FileStream(temporary, FileMode.CreateNew, FileAccess.Write, FileShare.None))
             {
                 JsonSerializer.Serialize(stream, presets, JsonOptions);
-                if (stream.Length > 4 * 1024 * 1024) throw new InvalidDataException("Auto Tune presets exceed 4 MiB.");
+                if (stream.Length > 4 * 1024 * 1024)
+                {
+                    throw new InvalidDataException("Auto Tune presets exceed 4 MiB.");
+                }
+
                 stream.Flush(flushToDisk: true);
             }
-            if (File.Exists(this.FilePath)) File.Replace(temporary, this.FilePath, null);
-            else File.Move(temporary, this.FilePath);
+            if (File.Exists(this.FilePath))
+            {
+                File.Replace(temporary, this.FilePath, null);
+            }
+            else
+            {
+                File.Move(temporary, this.FilePath);
+            }
         }
-        finally { if (File.Exists(temporary)) File.Delete(temporary); }
+        finally { if (File.Exists(temporary))
+            {
+                File.Delete(temporary);
+            }
+        }
     }
 
     private T WithLock<T>(Func<T> action)
@@ -160,16 +228,26 @@ internal sealed class AutoTunePresetStore
         {
             try { held = mutex.WaitOne(TimeSpan.FromSeconds(5)); }
             catch (AbandonedMutexException) { held = true; }
-            if (!held) throw new IOException("Another instance is busy saving Auto Tune presets.");
+            if (!held)
+            {
+                throw new IOException("Another instance is busy saving Auto Tune presets.");
+            }
+
             return action();
         }
-        finally { if (held) mutex.ReleaseMutex(); }
+        finally { if (held)
+            {
+                mutex.ReleaseMutex();
+            }
+        }
     }
 
     private static void ValidateName(string? name)
     {
         if (string.IsNullOrWhiteSpace(name) || name.Length > 120 || name.Any(char.IsControl))
+        {
             throw new InvalidDataException("Preset names must contain 1–120 printable characters.");
+        }
     }
 
     private static JsonSerializerOptions CreateOptions()

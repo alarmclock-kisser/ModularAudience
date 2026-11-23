@@ -49,19 +49,32 @@ namespace ModularAudience.Forms.Modules.Dialogs
         {
             var devices = await MidiControllerService.GetDevicesAsync();
             if (this.IsDisposed || !this.IsHandleCreated)
+            {
                 return;
+            }
 
             this.comboBox_input.Items.Clear();
             this.comboBox_output.Items.Clear();
 
             foreach (var d in devices.Where(d => d.IsInput))
+            {
                 this.comboBox_input.Items.Add(new DeviceItem(d.Id, d.Name));
+            }
 
             foreach (var d in devices.Where(d => d.IsOutput))
+            {
                 this.comboBox_output.Items.Add(new DeviceItem(d.Id, d.Name));
+            }
 
-            if (this.comboBox_input.Items.Count > 0) this.comboBox_input.SelectedIndex = 0;
-            if (this.comboBox_output.Items.Count > 0) this.comboBox_output.SelectedIndex = 0;
+            if (this.comboBox_input.Items.Count > 0)
+            {
+                this.comboBox_input.SelectedIndex = 0;
+            }
+
+            if (this.comboBox_output.Items.Count > 0)
+            {
+                this.comboBox_output.SelectedIndex = 0;
+            }
         }
 
         private void RefreshMappingsGrid()
@@ -99,7 +112,11 @@ namespace ModularAudience.Forms.Modules.Dialogs
 
         private void button_remove_Click(object? sender, EventArgs e)
         {
-            if (this.dataGridView_mappings.SelectedRows.Count == 0) return;
+            if (this.dataGridView_mappings.SelectedRows.Count == 0)
+            {
+                return;
+            }
+
             int row = this.dataGridView_mappings.SelectedRows[0].Index;
             var cells = this.dataGridView_mappings.Rows[row].Cells;
             int ch = Convert.ToInt32(cells[0].Value);
@@ -107,11 +124,17 @@ namespace ModularAudience.Forms.Modules.Dialogs
             int num = Convert.ToInt32(cells[2].Value);
 
             if (type == "CC")
+            {
                 this._mapper.RemoveCustomMapping(ch, 0xB0, num);
+            }
             else if (type == "Note On")
+            {
                 this._mapper.RemoveCustomMapping(ch, 0x90, num);
+            }
             else
+            {
                 this._mapper.RemoveCustomMapping(ch, 0x80, num);
+            }
 
             this.dataGridView_mappings.Rows.RemoveAt(row);
         }
@@ -120,10 +143,14 @@ namespace ModularAudience.Forms.Modules.Dialogs
         {
             if (MessageBox.Show(this, "Remove all custom mappings and restore defaults?", "Reset",
                 MessageBoxButtons.YesNo, MessageBoxIcon.Question) != DialogResult.Yes)
+            {
                 return;
+            }
 
             foreach (var (ch, cmd, d1, _) in this._mapper.GetCustomMappings())
+            {
                 this._mapper.RemoveCustomMapping(ch, cmd, d1);
+            }
 
             this.RefreshMappingsGrid();
         }
@@ -175,11 +202,17 @@ namespace ModularAudience.Forms.Modules.Dialogs
 
         private void OnServiceMessageReceived(object? sender, MidiMessageInfo msg)
         {
-            if (this.IsDisposed || this.IsClosing || !this.IsHandleCreated) return;
+            if (this.IsDisposed || this.IsClosing || !this.IsHandleCreated)
+            {
+                return;
+            }
+
             this.BeginInvoke(() =>
             {
                 if (this.IsDisposed || this.IsClosing)
+                {
                     return;
+                }
 
                 string type = msg.Command == 0x90 ? "Note On" : msg.Command == 0x80 ? "Note Off" : "CC";
                 string command = this._mapper.Map(msg).ToString();
@@ -188,7 +221,9 @@ namespace ModularAudience.Forms.Modules.Dialogs
                 ]);
                 this.listView_messages.Items.Insert(0, item);
                 if (this.listView_messages.Items.Count > 50)
+                {
                     this.listView_messages.Items.RemoveAt(this.listView_messages.Items.Count - 1);
+                }
             });
         }
 
@@ -200,7 +235,9 @@ namespace ModularAudience.Forms.Modules.Dialogs
                 {
                     e.Cancel = true;
                     if (this.dataGridView_mappings.CurrentCell is not null)
+                    {
                         this.dataGridView_mappings.CurrentCell.ErrorText = "0-15";
+                    }
                 }
             }
             else if (e.ColumnIndex == 2)
@@ -209,14 +246,20 @@ namespace ModularAudience.Forms.Modules.Dialogs
                 {
                     e.Cancel = true;
                     if (this.dataGridView_mappings.CurrentCell is not null)
+                    {
                         this.dataGridView_mappings.CurrentCell.ErrorText = "0-127";
+                    }
                 }
             }
         }
 
         private void dataGridView_mappings_CellValueChanged(object? sender, DataGridViewCellEventArgs e)
         {
-            if (e.RowIndex < 0) return;
+            if (e.RowIndex < 0)
+            {
+                return;
+            }
+
             var cells = this.dataGridView_mappings.Rows[e.RowIndex].Cells;
             int ch = Convert.ToInt32(cells[0].Value);
             string type = cells[1].Value?.ToString() ?? "CC";
@@ -225,11 +268,17 @@ namespace ModularAudience.Forms.Modules.Dialogs
             var midiCmd = (MidiCommand)Enum.Parse(typeof(MidiCommand), command);
 
             if (type == "CC")
+            {
                 this._mapper.AddCustomMapping(ch, 0xB0, num, midiCmd);
+            }
             else if (type == "Note On")
+            {
                 this._mapper.AddCustomMapping(ch, 0x90, num, midiCmd);
+            }
             else
+            {
                 this._mapper.AddCustomMapping(ch, 0x80, num, midiCmd);
+            }
 
             this.UpdateTypeColumn(e.RowIndex, type);
         }

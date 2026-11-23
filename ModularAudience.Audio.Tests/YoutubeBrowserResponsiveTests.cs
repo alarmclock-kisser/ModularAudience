@@ -26,7 +26,11 @@ public sealed class YoutubeBrowserResponsiveTests
             new() { Id = "bqwhPlX7daw", Title = "Known upload", Url = "https://www.youtube.com/watch?v=bqwhPlX7daw", UploadDate = new(2024, 1, 2) }
         ];
         typeof(YoutubeBrowserWindow).GetMethod("PopulateResults", BindingFlags.Instance | BindingFlags.NonPublic)!.Invoke(window, [videos]);
-        foreach (var item in Field<ToolStripMenuItem[]>(window, "columnMenuItems")) item.Checked = true;
+        foreach (var item in Field<ToolStripMenuItem[]>(window, "columnMenuItems"))
+        {
+            item.Checked = true;
+        }
+
         CreateHandles(window);
         window.WindowState = FormWindowState.Normal;
         foreach (var size in new[] { new Size(1000, 780), new Size(1180, 820), new Size(1500, 1000), new Size(1000, 780) })
@@ -40,7 +44,10 @@ public sealed class YoutubeBrowserResponsiveTests
                 var control = Field<Control>(window, name);
                 var location = Point.Empty;
                 for (Control? current = control; current is not null && current != window; current = current.Parent)
+                {
                     location.Offset(current.Left, current.Top);
+                }
+
                 var bounds = new Rectangle(location, control.Size);
                 Assert.IsTrue(window.ClientRectangle.Contains(bounds), $"{name}: {bounds} is outside {window.ClientRectangle} at {size}.");
                 Assert.IsTrue(control.Width > 10 && control.Height > 10, $"{name} is collapsed at {size}.");
@@ -83,6 +90,9 @@ public sealed class YoutubeBrowserResponsiveTests
     private static void CreateHandles(Control parent)
     {
         _ = parent.Handle;
-        foreach (Control child in parent.Controls) CreateHandles(child);
+        foreach (Control child in parent.Controls)
+        {
+            CreateHandles(child);
+        }
     }
 }

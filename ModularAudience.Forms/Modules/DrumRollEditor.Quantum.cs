@@ -24,12 +24,31 @@ public partial class DrumRollEditor
         CancellationToken cancellationToken)
     {
         if (Environment.CurrentManagedThreadId != this.quantumUiThreadId)
+        {
             throw new InvalidOperationException("Quantum pattern changes must be started on the editor's UI thread.");
+        }
+
         ObjectDisposedException.ThrowIf(this.quantumResourcesDisposed || this.IsDisposed, this);
-        if (this.quantumService is null) throw new InvalidOperationException("No quantum pattern service has been registered.");
-        if (this.quantumGenerationInProgress) throw new InvalidOperationException("A quantum pattern is already being generated.");
-        if (rowIndex < 0 || rowIndex >= this.patternRows.Count) throw new ArgumentOutOfRangeException(nameof(rowIndex), "Select an existing sample row.");
-        if (this.patternRows[rowIndex].IsLocked) throw new InvalidOperationException("Unlock the row before applying a quantum pattern.");
+        if (this.quantumService is null)
+        {
+            throw new InvalidOperationException("No quantum pattern service has been registered.");
+        }
+
+        if (this.quantumGenerationInProgress)
+        {
+            throw new InvalidOperationException("A quantum pattern is already being generated.");
+        }
+
+        if (rowIndex < 0 || rowIndex >= this.patternRows.Count)
+        {
+            throw new ArgumentOutOfRangeException(nameof(rowIndex), "Select an existing sample row.");
+        }
+
+        if (this.patternRows[rowIndex].IsLocked)
+        {
+            throw new InvalidOperationException("Unlock the row before applying a quantum pattern.");
+        }
+
         cancellationToken.ThrowIfCancellationRequested();
 
         AudioObj source = this.patternRows[rowIndex].Audio;
@@ -50,7 +69,9 @@ public partial class DrumRollEditor
             PatternRowState? row = this.patternRows.FirstOrDefault(candidate => ReferenceEquals(candidate.Audio, source));
             if (this.quantumResourcesDisposed || row is null || row.IsLocked || this.TotalSteps != steps || prepared.Steps.Length != steps ||
                 !ReferenceEquals(source.Data, originalData) || source.SampleRate != originalRate || source.Channels != originalChannels)
+            {
                 throw new InvalidOperationException("The sample or grid changed while the quantum pattern was being generated. Try again.");
+            }
 
             bool resume = this.isPlaying;
             this.StopPlayback();
@@ -59,14 +80,21 @@ public partial class DrumRollEditor
             prepared.Steps.CopyTo(row.Steps, 0);
             prepared = null;
             this.panel_pattern.Invalidate();
-            if (resume) this.StartPlayback();
+            if (resume)
+            {
+                this.StartPlayback();
+            }
+
             return result;
         }
         finally
         {
             prepared?.Dispose();
             this.quantumGenerationInProgress = false;
-            if (!this.quantumResourcesDisposed && !this.IsDisposed) this.label_info_dragndrop.Text = previousInfo;
+            if (!this.quantumResourcesDisposed && !this.IsDisposed)
+            {
+                this.label_info_dragndrop.Text = previousInfo;
+            }
         }
     }
 
@@ -78,7 +106,9 @@ public partial class DrumRollEditor
         this.clearQuantumPatternMenuItem.Click += (_, _) =>
         {
             if (this.contextMenuRowIndex >= 0 && this.contextMenuRowIndex < this.patternRows.Count)
+            {
                 this.ClearQuantumPattern(this.patternRows[this.contextMenuRowIndex].Audio);
+            }
         };
         this.rowContextMenu!.Items.Add(new ToolStripSeparator());
         this.rowContextMenu.Items.Add(this.quantumPatternMenuItem);
@@ -107,7 +137,9 @@ public partial class DrumRollEditor
         catch (Exception ex)
         {
             if (!this.quantumResourcesDisposed && !this.IsDisposed)
+            {
                 MessageBox.Show(this, GetQuantumErrorMessage(ex), "Quantum Pattern Error", MessageBoxButtons.OK, MessageBoxIcon.Warning);
+            }
         }
         finally { this.quantumGenerationCts = null; }
     }
@@ -138,22 +170,38 @@ public partial class DrumRollEditor
 
     private void ClearQuantumPattern(AudioObj source)
     {
-        if (this.quantumPatterns.TryRemove(source, out var previous)) previous.Dispose();
+        if (this.quantumPatterns.TryRemove(source, out var previous))
+        {
+            previous.Dispose();
+        }
     }
 
     private void PruneQuantumPatterns(IReadOnlyCollection<AudioObj> audios, int stepCount)
     {
         foreach (var (source, pattern) in this.quantumPatterns)
-            if (!audios.Contains(source) || pattern.Steps.Length != stepCount) this.ClearQuantumPattern(source);
+        {
+            if (!audios.Contains(source) || pattern.Steps.Length != stepCount)
+            {
+                this.ClearQuantumPattern(source);
+            }
+        }
     }
 
     private void DisposeQuantumResources()
     {
-        if (this.quantumResourcesDisposed) return;
+        if (this.quantumResourcesDisposed)
+        {
+            return;
+        }
+
         this.quantumResourcesDisposed = true;
         this.quantumLifetime.Cancel();
         this.quantumGenerationCts?.Cancel();
-        foreach (AudioObj source in this.quantumPatterns.Keys) this.ClearQuantumPattern(source);
+        foreach (AudioObj source in this.quantumPatterns.Keys)
+        {
+            this.ClearQuantumPattern(source);
+        }
+
         this.quantumLifetime.Dispose();
     }
 }

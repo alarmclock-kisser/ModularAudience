@@ -31,7 +31,10 @@ public sealed class WaveformModellerTests
         var cycle = Enumerable.Range(0, 2048).Select(i => 0.6 * Math.Sin(2 * Math.PI * i / 2048) + 0.2 * Math.Cos(6 * Math.PI * i / 2048)).ToArray();
         string equation = WaveformModel.FourierEquation(cycle, 8);
         var parsed = WaveExpression.Compile(equation);
-        for (int i = 0; i < cycle.Length; i++) Assert.AreEqual(cycle[i], parsed(i / 2048.0), 1e-7);
+        for (int i = 0; i < cycle.Length; i++)
+        {
+            Assert.AreEqual(cycle[i], parsed(i / 2048.0), 1e-7);
+        }
     }
     [TestMethod]
     public void RendersRequestedLengthChannelsPitchAndEnvelope()
@@ -41,7 +44,14 @@ public sealed class WaveformModellerTests
         Assert.IsTrue(audio.Data.Max(Math.Abs) <= 0.401f);
         Assert.AreEqual(0f, audio.Data[0]); Assert.AreEqual(0f, audio.Data[^1]);
         int crosses = 0;
-        for (int i = 1; i < 24000; i++) if (audio.Data[(i - 1) * 3] < 0 && audio.Data[i * 3] >= 0) crosses++;
+        for (int i = 1; i < 24000; i++)
+        {
+            if (audio.Data[(i - 1) * 3] < 0 && audio.Data[i * 3] >= 0)
+            {
+                crosses++;
+            }
+        }
+
         Assert.AreEqual(220, crosses, 2);
     }
     [TestMethod]
@@ -86,7 +96,11 @@ public sealed class WaveformModellerTests
             + 0.3 * Math.Sin(20 * Math.PI * i / 2048)).ToArray();
         float[] table = WaveformModel.BandLimitedTable(cycle, 5000, 44100);
         double harmonic = 0;
-        for (int i = 0; i < table.Length; i++) harmonic += table[i] * Math.Sin(20 * Math.PI * i / table.Length);
+        for (int i = 0; i < table.Length; i++)
+        {
+            harmonic += table[i] * Math.Sin(20 * Math.PI * i / table.Length);
+        }
+
         Assert.IsTrue(Math.Abs(harmonic / table.Length * 2) < 1e-6);
         using var cts = new CancellationTokenSource(); cts.Cancel();
         Assert.Throws<OperationCanceledException>(() => WaveformModel.Render(new(), cts.Token));

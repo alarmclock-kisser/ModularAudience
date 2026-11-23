@@ -268,7 +268,7 @@ public sealed class PolyphonicMidiConversionTests
         await Assert.ThrowsExactlyAsync<OperationCanceledException>(() => MidiFileData.ConvertAsync(audio,
             cancellationToken: before.Token, preset: MidiConversionPreset.Polyphonic));
         using CancellationTokenSource during = new();
-        InlineProgress progress = new(value => { if (value >= 0.1) during.Cancel(); });
+        InlineProgress progress = new(value => { if (value >= 0.1) { during.Cancel(); } });
         await Assert.ThrowsExactlyAsync<OperationCanceledException>(() => MidiFileData.ConvertAsync(audio, 2,
             during.Token, progress, MidiConversionPreset.Polyphonic));
     }

@@ -104,7 +104,10 @@ public sealed class ApplicationUpdateRestartTests
         UpdatedApplicationLauncher.Start(files.TargetPath, start =>
         {
             starts.Add(start);
-            if (!start.UseShellExecute) throw new Win32Exception(5, "Direct start was denied.");
+            if (!start.UseShellExecute)
+            {
+                throw new Win32Exception(5, "Direct start was denied.");
+            }
         });
 
         Assert.HasCount(2, starts);

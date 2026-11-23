@@ -19,7 +19,11 @@ internal sealed record ApplicationUpdateInstallation(
 
         string? backupWarning = AtomicUpdateReplacement.Apply(TargetPath, StagedPath, OriginalHash, UpdateHash);
         var warnings = new List<string>();
-        if (backupWarning is not null) warnings.Add(backupWarning);
+        if (backupWarning is not null)
+        {
+            warnings.Add(backupWarning);
+        }
+
         try { new ReleaseUpdateSettingsStore(SettingsPath).RecordInstalledRelease(ReleaseNumber); }
         catch (Exception error) when (UpdateDiagnostics.IsExpected(error))
         {

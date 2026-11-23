@@ -41,7 +41,10 @@ internal sealed class MixWindowGroup : IDisposable
         form.FormClosed += (_, _) => this.Remove(form); form.Disposed += (_, _) => this.Remove(form);
         this.ApplyBlocking();
         if (this.root.WindowState == FormWindowState.Minimized) { this.minimized = true; entry.ShowOnRestore = true; }
-        else form.Show(owner);
+        else
+        {
+            form.Show(owner);
+        }
     }
 
     internal Task<DialogResult> ShowAsync(Form form, Form? parent = null)
@@ -50,7 +53,10 @@ internal sealed class MixWindowGroup : IDisposable
         void Complete() => completion.TrySetResult(form.DialogResult == DialogResult.None ? DialogResult.Cancel : form.DialogResult);
         form.FormClosed += (_, _) => Complete(); form.Disposed += (_, _) => Complete();
         foreach (Button button in Descendants(form).OfType<Button>().Where(button => button.DialogResult != DialogResult.None))
+        {
             button.Click += (_, _) => { if (!form.IsDisposed) { form.DialogResult = button.DialogResult; form.Close(); } };
+        }
+
         this.Show(form, parent); return completion.Task;
     }
 
@@ -69,8 +75,15 @@ internal sealed class MixWindowGroup : IDisposable
         foreach (DialogResult result in results)
         {
             var button = new Button { Text = result.ToString(), DialogResult = result, AutoSize = true }; buttons.Controls.Add(button);
-            if (result == DialogResult.Cancel) form.CancelButton = button;
-            if (result is DialogResult.Yes or DialogResult.OK) form.AcceptButton = button;
+            if (result == DialogResult.Cancel)
+            {
+                form.CancelButton = button;
+            }
+
+            if (result is DialogResult.Yes or DialogResult.OK)
+            {
+                form.AcceptButton = button;
+            }
         }
         form.Controls.Add(label); form.Controls.Add(buttons); return await this.ShowAsync(form, parent);
     }
@@ -90,7 +103,11 @@ internal sealed class MixWindowGroup : IDisposable
         int started = 0;
         host.Shown += (_, _) =>
         {
-            if (Interlocked.Exchange(ref started, 1) != 0) return;
+            if (Interlocked.Exchange(ref started, 1) != 0)
+            {
+                return;
+            }
+
             IntPtr handle = host.Handle;
             var thread = new Thread(() =>
             {
@@ -104,14 +121,24 @@ internal sealed class MixWindowGroup : IDisposable
                         if (!this.disposed && !host.IsDisposed) { this.native[host] = (id, []); this.nativeWindows.Start(); this.SynchronizeNativeWindows(); }
                     }));
                     T result = action(new WindowHandle(handle));
-                    if (token.IsCancellationRequested) completion.TrySetCanceled(token); else completion.TrySetResult(result);
+                    if (token.IsCancellationRequested)
+                    {
+                        completion.TrySetCanceled(token);
+                    }
+                    else
+                    {
+                        completion.TrySetResult(result);
+                    }
                 }
                 catch (OperationCanceledException) { completion.TrySetCanceled(token); }
                 catch (Exception error) { completion.TrySetException(error); }
                 finally
                 {
                     if (!this.root.IsDisposed && this.root.IsHandleCreated)
-                        try { this.root.BeginInvoke((Action)(() => { this.native.Remove(host); if (!host.IsDisposed) host.Close(); })); } catch (InvalidOperationException) { }
+                    {
+                        try { this.root.BeginInvoke((Action)(() => { this.native.Remove(host); if (!host.IsDisposed) { host.Close(); } })); } catch (InvalidOperationException) { }
+                    }
+
                     cancellation.Dispose();
                 }
             }) { IsBackground = true, Name = "Mix native dialog" };
@@ -120,29 +147,47 @@ internal sealed class MixWindowGroup : IDisposable
         int hostClosed = 0;
         void OnHostClosed()
         {
-            if (Interlocked.Exchange(ref hostClosed, 1) != 0) return;
+            if (Interlocked.Exchange(ref hostClosed, 1) != 0)
+            {
+                return;
+            }
+
             if (!completion.Task.IsCompleted)
             {
                 try { cancellation.Cancel(); } catch (ObjectDisposedException) { }
                 // Once started, let the native loop return before completing the
                 // task: callers may dispose their FileDialog immediately after
                 // awaiting it, and must not race an active native event sink.
-                if (Volatile.Read(ref started) == 0) completion.TrySetCanceled(token);
+                if (Volatile.Read(ref started) == 0)
+                {
+                    completion.TrySetCanceled(token);
+                }
             }
-            if (Volatile.Read(ref started) == 0) cancellation.Dispose();
+            if (Volatile.Read(ref started) == 0)
+            {
+                cancellation.Dispose();
+            }
         }
         host.FormClosed += (_, _) => OnHostClosed(); host.Disposed += (_, _) => OnHostClosed();
         this.Show(host, parent);
         try { return await completion.Task; }
-        finally { if (!host.IsDisposed) host.Close(); this.native.Remove(host); }
+        finally { if (!host.IsDisposed) { host.Close(); } this.native.Remove(host); }
     }
 
     internal void SynchronizeWindowState() => this.RootResized(this.root, EventArgs.Empty);
     private void RootResized(object? sender, EventArgs e)
     {
-        if (this.disposed) return;
+        if (this.disposed)
+        {
+            return;
+        }
+
         bool minimizing = this.root.WindowState == FormWindowState.Minimized;
-        if (minimizing == this.minimized) return;
+        if (minimizing == this.minimized)
+        {
+            return;
+        }
+
         this.minimized = minimizing;
         if (minimizing)
         {
@@ -153,24 +198,39 @@ internal sealed class MixWindowGroup : IDisposable
                 child.ShowOnRestore = child.Form.Visible; child.RestoreState = child.Form.WindowState;
             }
             foreach (var value in this.native.Values)
-                EnumThreadWindows(value.Thread, (handle, _) => { if (IsWindowVisible(handle) || IsNativeDialog(handle)) value.Hidden.Add(handle); return true; }, IntPtr.Zero);
+            {
+                EnumThreadWindows(value.Thread, (handle, _) => { if (IsWindowVisible(handle) || IsNativeDialog(handle)) { value.Hidden.Add(handle); } return true; }, IntPtr.Zero);
+            }
+
             foreach (Child child in this.children.AsEnumerable().Reverse())
             {
-                if (child.Form.IsHandleCreated) ShowOwnedPopups(child.Form.Handle, false);
+                if (child.Form.IsHandleCreated)
+                {
+                    ShowOwnedPopups(child.Form.Handle, false);
+                }
+
                 child.Form.Hide();
             }
             foreach (var value in this.native.Values)
-                foreach (IntPtr handle in value.Hidden) ShowWindow(handle, 0);
+            {
+                foreach (IntPtr handle in value.Hidden)
+                {
+                    ShowWindow(handle, 0);
+                }
+            }
         }
         else
         {
             foreach (Child child in this.children.ToArray())
+            {
                 if (!child.Form.IsDisposed && child.ShowOnRestore)
                 {
                     child.Form.WindowState = child.RestoreState; child.Form.Show(child.Owner);
                     ShowOwnedPopups(child.Form.Handle, true);
                 }
-            foreach (var value in this.native.Values) { foreach (IntPtr handle in value.Hidden) if (IsWindow(handle)) ShowWindow(handle, 5); value.Hidden.Clear(); }
+            }
+
+            foreach (var value in this.native.Values) { foreach (IntPtr handle in value.Hidden) { if (IsWindow(handle)) { ShowWindow(handle, 5); } } value.Hidden.Clear(); }
             this.ApplyBlocking();
         }
     }
@@ -179,7 +239,10 @@ internal sealed class MixWindowGroup : IDisposable
     private void Remove(Form form)
     {
         this.children.RemoveAll(child => child.Form == form); this.native.Remove(form);
-        if (!this.disposed) this.ApplyBlocking();
+        if (!this.disposed)
+        {
+            this.ApplyBlocking();
+        }
     }
     private void ApplyBlocking()
     {
@@ -188,39 +251,78 @@ internal sealed class MixWindowGroup : IDisposable
         {
             foreach (Control control in this.root.Controls)
             { this.rootEnabled.TryAdd(control, control.Enabled); control.Enabled = false; }
-            foreach (Child child in this.children) if (!child.Form.IsDisposed) child.Form.Enabled = child == active && child.WasEnabled;
+            foreach (Child child in this.children)
+            {
+                if (!child.Form.IsDisposed)
+                {
+                    child.Form.Enabled = child == active && child.WasEnabled;
+                }
+            }
         }
         else
         {
-            foreach (var pair in this.rootEnabled) if (!pair.Key.IsDisposed) pair.Key.Enabled = pair.Value;
+            foreach (var pair in this.rootEnabled)
+            {
+                if (!pair.Key.IsDisposed)
+                {
+                    pair.Key.Enabled = pair.Value;
+                }
+            }
+
             this.rootEnabled.Clear();
         }
         this.SynchronizeNativeWindows();
     }
     private void SynchronizeNativeWindows()
     {
-        if (this.disposed) return;
+        if (this.disposed)
+        {
+            return;
+        }
+
         if (this.native.Count == 0) { this.nativeWindows.Stop(); return; }
         Form? active = this.children.LastOrDefault()?.Form;
         foreach (var pair in this.native.ToArray())
+        {
             EnumThreadWindows(pair.Value.Thread, (handle, _) =>
             {
                 if (this.minimized && (IsWindowVisible(handle) || IsNativeDialog(handle))) { pair.Value.Hidden.Add(handle); ShowWindow(handle, 0); }
                 EnableWindow(handle, active == pair.Key);
                 return true;
             }, IntPtr.Zero);
+        }
     }
     private static IEnumerable<Control> Descendants(Control root)
-    { foreach (Control control in root.Controls) { yield return control; foreach (Control child in Descendants(control)) yield return child; } }
+    { foreach (Control control in root.Controls) { yield return control; foreach (Control child in Descendants(control)) { yield return child; } } }
     public void Dispose()
     {
-        if (this.disposed) return; this.disposed = true;
+        if (this.disposed)
+        {
+            return;
+        }
+
+        this.disposed = true;
         this.root.Resize -= this.RootResized; this.root.ControlAdded -= this.RootControlAdded;
         this.nativeWindows.Dispose();
-        foreach (var value in this.native.Values.ToArray()) CloseNativeThreadWindows(value.Thread);
-        foreach (Child child in this.children.ToArray()) { child.Form.Close(); if (!child.Form.IsDisposed) child.Form.Dispose(); }
+        foreach (var value in this.native.Values.ToArray())
+        {
+            CloseNativeThreadWindows(value.Thread);
+        }
+
+        foreach (Child child in this.children.ToArray()) { child.Form.Close(); if (!child.Form.IsDisposed)
+            {
+                child.Form.Dispose();
+            }
+        }
         this.children.Clear(); this.native.Clear();
-        foreach (var pair in this.rootEnabled) if (!pair.Key.IsDisposed) pair.Key.Enabled = pair.Value;
+        foreach (var pair in this.rootEnabled)
+        {
+            if (!pair.Key.IsDisposed)
+            {
+                pair.Key.Enabled = pair.Value;
+            }
+        }
+
         this.rootEnabled.Clear();
     }
     private sealed class WindowHandle(IntPtr handle) : IWin32Window { public IntPtr Handle => handle; }
@@ -231,7 +333,11 @@ internal sealed class MixWindowGroup : IDisposable
     private static void CloseNativeThreadWindows(uint id) => EnumThreadWindows(id, (handle, _) =>
     {
         PostMessage(handle, 0x0010, IntPtr.Zero, IntPtr.Zero);
-        if (IsNativeDialog(handle)) PostMessage(handle, 0x0111, new IntPtr(2), IntPtr.Zero); // IDCANCEL
+        if (IsNativeDialog(handle))
+        {
+            PostMessage(handle, 0x0111, new IntPtr(2), IntPtr.Zero); // IDCANCEL
+        }
+
         return true;
     }, IntPtr.Zero);
     private delegate bool EnumWindowProc(IntPtr handle, IntPtr value);

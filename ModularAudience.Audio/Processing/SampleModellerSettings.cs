@@ -89,19 +89,33 @@ public sealed class SampleModellerSettings
     public SampleModellerSettings Clone() => JsonSerializer.Deserialize<SampleModellerSettings>(JsonSerializer.Serialize(this))!;
     public void Validate()
     {
-        if (Version != 1 || Effects == null || Effects.Count > 128) throw new ArgumentException("Unsupported preset or too many effects (maximum 128).");
+        if (Version != 1 || Effects == null || Effects.Count > 128)
+        {
+            throw new ArgumentException("Unsupported preset or too many effects (maximum 128).");
+        }
+
         foreach (var e in Effects)
         {
-            if (e == null || !Enum.IsDefined(e.Kind)) throw new ArgumentException("Unknown effect.");
+            if (e == null || !Enum.IsDefined(e.Kind))
+            {
+                throw new ArgumentException("Unknown effect.");
+            }
+
             double[] values = [e.MixPercent, e.StartPercent, e.EndPercent, e.FrequencyHz, e.Q, e.GainDb, e.Amount, e.TimeMs, e.Feedback, e.Rate, e.Depth, e.Semitones, e.Factor];
             if (values.Any(v => !double.IsFinite(v)) || e.StartPercent < 0 || e.EndPercent > 100 || e.StartPercent >= e.EndPercent
                 || e.MixPercent < 0 || e.MixPercent > 100 || e.FrequencyHz < 0 || e.Q < 0.1 || e.Q > 30
                 || e.GainDb < -96 || e.GainDb > 48 || e.Amount < 0 || e.Amount > 100 || e.TimeMs < 0 || e.TimeMs > 10000
                 || e.Feedback < 0 || e.Feedback > 2000 || e.Rate < 0 || e.Rate > 20000 || Math.Abs(e.Depth) > 100
                 || Math.Abs(e.Semitones) > 24 || e.Factor < 0.125 || e.Factor > 8 || e.Channel < 0 || e.Channel > 32)
+            {
                 throw new ArgumentException("Effect parameters are outside their supported ranges.");
+            }
+
             if (e.Points == null || e.Points.Count > 200000 || e.Points.Any(p => !double.IsFinite(p.Position) || !double.IsFinite(p.Value)
-                || p.Position < 0 || p.Position > 1 || Math.Abs(p.Value) > 4)) throw new ArgumentException("Invalid drawing points.");
+                || p.Position < 0 || p.Position > 1 || Math.Abs(p.Value) > 4))
+            {
+                throw new ArgumentException("Invalid drawing points.");
+            }
         }
     }
 }
@@ -114,7 +128,10 @@ public sealed class SampleModellerPresetStore
     private string PathFor(string name)
     {
         if (string.IsNullOrWhiteSpace(name) || name.Length > 100 || name.IndexOfAny(Path.GetInvalidFileNameChars()) >= 0 || name is "." or "..")
+        {
             throw new ArgumentException("Enter a preset name without file-name special characters (maximum 100 characters).");
+        }
+
         return Path.Combine(directory, name + ".json");
     }
     public string[] Names() => Directory.Exists(directory) ? Directory.GetFiles(directory, "*.json").Select(p => Path.GetFileNameWithoutExtension(p)!).Order(StringComparer.OrdinalIgnoreCase).ToArray() : [];
@@ -128,7 +145,11 @@ public sealed class SampleModellerPresetStore
         settings.Validate(); string path = PathFor(name); Directory.CreateDirectory(directory);
         string temporary = path + "." + Guid.NewGuid().ToString("N") + ".tmp";
         try { File.WriteAllText(temporary, JsonSerializer.Serialize(settings, new JsonSerializerOptions { WriteIndented = true })); File.Move(temporary, path, true); }
-        finally { if (File.Exists(temporary)) File.Delete(temporary); }
+        finally { if (File.Exists(temporary))
+            {
+                File.Delete(temporary);
+            }
+        }
     }
     public void Delete(string name) => File.Delete(PathFor(name));
 }

@@ -59,7 +59,9 @@ public sealed class CoOpPage : ContentPage
         this.displayNameEntry.TextChanged += (_, args) =>
         {
             if (!string.IsNullOrWhiteSpace(args.NewTextValue))
+            {
                 this.session.DisplayName = args.NewTextValue.Trim();
+            }
         };
         this.passwordEntry.TextChanged += (_, args) =>
         {
@@ -116,7 +118,10 @@ public sealed class CoOpPage : ContentPage
         await this.LoadPasswordAsync();
         await this.ReloadSamplesAsync();
         if (this.hostPicker.ItemsSource == null)
+        {
             await this.RefreshHostsAsync();
+        }
+
         this.UpdateControls();
     }
 
@@ -129,7 +134,10 @@ public sealed class CoOpPage : ContentPage
     private async Task LoadPasswordAsync()
     {
         if (this.passwordLoaded)
+        {
             return;
+        }
+
         this.passwordLoaded = true;
         try
         {
@@ -197,7 +205,10 @@ public sealed class CoOpPage : ContentPage
         }
         string password = this.passwordEntry.Text ?? string.Empty;
         if (!await this.ConfirmPasswordChoiceAsync(password, hosting: false))
+        {
             return;
+        }
+
         await this.passwordSaveTask;
 
         await this.RunBusyAsync(async () =>
@@ -212,7 +223,10 @@ public sealed class CoOpPage : ContentPage
     {
         string password = this.passwordEntry.Text ?? string.Empty;
         if (!await this.ConfirmPasswordChoiceAsync(password, hosting: true))
+        {
             return;
+        }
+
         await this.passwordSaveTask;
 
         await this.RunBusyAsync(async () =>
@@ -244,7 +258,9 @@ public sealed class CoOpPage : ContentPage
         }
 
         if (!hosting || !string.IsNullOrEmpty(password))
+        {
             return true;
+        }
 
         string action = hosting ? "host" : "connect to";
         return await this.DisplayAlertAsync(
@@ -304,7 +320,10 @@ public sealed class CoOpPage : ContentPage
         {
             var audios = new List<(SoundboardItem Item, ModularAudience.Audio.Vocal.VocalAudioData Audio)>();
             foreach (SoundboardItem item in selected)
+            {
                 audios.Add((item, await this.store.ReadAudioAsync(item)));
+            }
+
             await this.session.ShareItemsAsync(audios);
             await this.DisplayAlertAsync("Samples sent", $"{selected.Count} sample(s) sent to connected peers.", "OK");
         });
@@ -320,14 +339,18 @@ public sealed class CoOpPage : ContentPage
             "Download",
             "Decline"));
         if (!accepted)
+        {
             return false;
+        }
 
         try
         {
             foreach (CoOpIncomingBatch batch in transfer.Collections)
             {
                 foreach (var snapshot in batch.Audios)
+                {
                     await this.store.AddSnapshotAsync(snapshot, batch.Name);
+                }
             }
             await MainThread.InvokeOnMainThreadAsync(this.ReloadSamplesAsync);
             return true;
@@ -345,7 +368,9 @@ public sealed class CoOpPage : ContentPage
         string preferenceKey = $"coop.trustedHost.{hostKey}";
         string savedFingerprint = Preferences.Default.Get(preferenceKey, string.Empty);
         if (string.Equals(savedFingerprint, fingerprint, StringComparison.OrdinalIgnoreCase))
+        {
             return true;
+        }
 
         string message = string.IsNullOrEmpty(savedFingerprint)
             ? $"Confirm this co-op host certificate before sending a password or audio:\n\n{host}:{port}\nSHA-256:\n{fingerprint}"
@@ -353,7 +378,10 @@ public sealed class CoOpPage : ContentPage
         bool trusted = await MainThread.InvokeOnMainThreadAsync(() =>
             this.DisplayAlertAsync("Trust co-op host certificate?", message, "Trust", "Cancel"));
         if (trusted)
+        {
             Preferences.Default.Set(preferenceKey, fingerprint.ToUpperInvariant());
+        }
+
         return trusted;
     }
 
@@ -369,7 +397,10 @@ public sealed class CoOpPage : ContentPage
     private async Task RunBusyAsync(Func<Task> action)
     {
         if (this.busy)
+        {
             return;
+        }
+
         this.busy = true;
         this.UpdateControls();
         try

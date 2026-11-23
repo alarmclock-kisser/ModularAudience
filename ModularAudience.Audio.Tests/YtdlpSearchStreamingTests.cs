@@ -47,8 +47,15 @@ public sealed class YtdlpSearchStreamingTests
     {
         string url = YtdlpClient.CreateSearchUrl("  synth & drums + Ü  ", type);
         StringAssert.StartsWith(url, "https://www.youtube.com/results?search_query=synth%20%26%20drums%20%2B%20%C3%9C");
-        if (filter is null) Assert.IsFalse(url.Contains("&sp="));
-        else StringAssert.EndsWith(url, "&sp=" + Uri.EscapeDataString(filter));
+        if (filter is null)
+        {
+            Assert.IsFalse(url.Contains("&sp="));
+        }
+        else
+        {
+            StringAssert.EndsWith(url, "&sp=" + Uri.EscapeDataString(filter));
+        }
+
         Assert.ThrowsExactly<ArgumentOutOfRangeException>(() => YtdlpClient.CreateSearchUrl("query", (YtdlpResultType)99));
     }
 

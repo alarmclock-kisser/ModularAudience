@@ -121,9 +121,15 @@ namespace ModularAudience.Audio
                 string baseName = Path.GetFileNameWithoutExtension(targetPath);
                 string ext = Path.GetExtension(targetPath);
                 if (Directory.Exists(dir))
+                {
                     foreach (string f in Directory.GetFiles(dir, baseName + "*"))
+                    {
                         if (string.Equals(Path.GetExtension(f), ext, StringComparison.OrdinalIgnoreCase))
+                        {
                             preExistingFiles.Add(f);
+                        }
+                    }
+                }
             }
             catch { }
 
@@ -252,9 +258,15 @@ namespace ModularAudience.Audio
                     string baseName = Path.GetFileNameWithoutExtension(finalPath);
                     string ext = Path.GetExtension(finalPath);
                     if (Directory.Exists(targetDirectory))
+                    {
                         foreach (string f in Directory.GetFiles(targetDirectory, baseName + "*"))
+                        {
                             if (string.Equals(Path.GetExtension(f), ext, StringComparison.OrdinalIgnoreCase))
+                            {
                                 preExistingFiles.Add(f);
+                            }
+                        }
+                    }
                 }
                 catch { }
             }
@@ -337,7 +349,11 @@ namespace ModularAudience.Audio
                     float fileSizeMb = new FileInfo(finalPath).Length / (1024f * 1024f);
 
                     LogCollection.Log($"Exported {audio.Name} to {finalPath} ({fileSizeMb:F2} MB)");
-                    if (uniqueName) finalPath = DeduplicateExport(finalPath, preExistingFiles, preExistingSnapshotTime);
+                    if (uniqueName)
+                    {
+                        finalPath = DeduplicateExport(finalPath, preExistingFiles, preExistingSnapshotTime);
+                    }
+
                     audio.LastExportPath = finalPath;
                 }
 
@@ -565,18 +581,41 @@ namespace ModularAudience.Audio
         {
             try
             {
-                if (string.IsNullOrEmpty(newPath) || !File.Exists(newPath)) return newPath;
+                if (string.IsNullOrEmpty(newPath) || !File.Exists(newPath))
+                {
+                    return newPath;
+                }
+
                 var newInfo = new FileInfo(newPath);
                 byte[] newHash = ComputeFileHash(newPath);
                 foreach (string existing in preExisting.OrderBy(x => x, StringComparer.OrdinalIgnoreCase))
                 {
-                    if (string.Equals(existing, newPath, StringComparison.OrdinalIgnoreCase)) continue;
-                    if (!File.Exists(existing)) continue;
+                    if (string.Equals(existing, newPath, StringComparison.OrdinalIgnoreCase))
+                    {
+                        continue;
+                    }
+
+                    if (!File.Exists(existing))
+                    {
+                        continue;
+                    }
                     // Only dedup against files that existed BEFORE this export batch.
-                    if (new FileInfo(existing).LastWriteTimeUtc >= snapshotTime) continue;
+                    if (new FileInfo(existing).LastWriteTimeUtc >= snapshotTime)
+                    {
+                        continue;
+                    }
+
                     var ei = new FileInfo(existing);
-                    if (ei.Length != newInfo.Length) continue;
-                    if (!FastPrefixSuffixEqual(existing, newPath, 64)) continue;
+                    if (ei.Length != newInfo.Length)
+                    {
+                        continue;
+                    }
+
+                    if (!FastPrefixSuffixEqual(existing, newPath, 64))
+                    {
+                        continue;
+                    }
+
                     byte[] oldHash = ComputeFileHash(existing);
                     if (oldHash.SequenceEqual(newHash))
                     {
@@ -595,12 +634,24 @@ namespace ModularAudience.Audio
             {
                 using var fa = new FileStream(a, FileMode.Open, FileAccess.Read, FileShare.Read);
                 using var fb = new FileStream(b, FileMode.Open, FileAccess.Read, FileShare.Read);
-                if (fa.Length != fb.Length) return false;
+                if (fa.Length != fb.Length)
+                {
+                    return false;
+                }
+
                 byte[] ba = new byte[bytes], bb = new byte[bytes];
                 int ra = fa.Read(ba, 0, bytes);
                 int rb = fb.Read(bb, 0, bytes);
-                if (ra != rb || !ba.AsSpan(0, ra).SequenceEqual(bb.AsSpan(0, rb))) return false;
-                if (fa.Length <= bytes * 2) return true;
+                if (ra != rb || !ba.AsSpan(0, ra).SequenceEqual(bb.AsSpan(0, rb)))
+                {
+                    return false;
+                }
+
+                if (fa.Length <= bytes * 2)
+                {
+                    return true;
+                }
+
                 fa.Seek(-bytes, SeekOrigin.End);
                 fb.Seek(-bytes, SeekOrigin.End);
                 ra = fa.Read(ba, 0, bytes);
