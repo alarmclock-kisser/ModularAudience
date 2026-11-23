@@ -122,7 +122,7 @@ namespace ModularAudience.Forms
 
             this.numericUpDown_frameRate.Value = 60;
 
-            Size currentRes = WindowsScreenHelper.GetScreenSize(this) ?? new Size(1024, 1024);
+            Size currentRes = Screen.PrimaryScreen?.Bounds.Size ?? new Size(1024, 1024);
             this.comboBox_resolution.Items.Clear();
             this.comboBox_resolution.Items.Add("Current: " + $"{currentRes.Width}x{currentRes.Height}");
             this.comboBox_resolution.Items.AddRange(NvencVideoRenderer.CommonResolutions.ToArray());
@@ -441,7 +441,7 @@ namespace ModularAudience.Forms
 
                 string fileName = NvencVideoRenderer.SanitizeFileName(
                     mainAssemblyName + "_" + enc.VideoCodec.ToUpperInvariant() + "_" + this.Audio.Name +
-                    (this.audio.Bpm > 0 ? " [" + this.audio.Bpm.ToString("F2") + "]" : "")
+                    (this.Audio.Bpm > 0 ? " [" + this.Audio.Bpm.ToString("F2") + "]" : "")
                 );
 
                 // --- 5) CONSUMER: NVENC ---
@@ -647,7 +647,7 @@ namespace ModularAudience.Forms
             // If right and not left clicked, set to this screens values
             if ((e is MouseEventArgs args && args.Button == MouseButtons.Right) || ModifierKeys.HasFlag(Keys.Control))
             {
-                this.numericUpDown_frameRate.Value = (decimal) (WindowsScreenHelper.GetScreenRefreshRate(this) ?? 24.00f);
+                this.numericUpDown_frameRate.Value = (decimal) WindowsScreenHelper.GetScreenRefreshRate();
                 this.comboBox_resolution.SelectedIndex = Math.Clamp(0, 0, this.comboBox_resolution.Items.Count - 1);
 
                 LogCollection.Log("Visualizer: Set resolution & frame rate to current screen values.");
@@ -753,7 +753,7 @@ namespace ModularAudience.Forms
             finally
             {
                 this.comboBox_codecPreset.EndUpdate();
-                LogCollection.Log(Sorted presets by '{nextState}'.", "", "Visualizer");
+                LogCollection.Log($"Sorted presets by '{nextState}'.");
             }
         }
 
