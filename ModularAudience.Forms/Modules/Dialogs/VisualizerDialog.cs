@@ -100,6 +100,24 @@ namespace ModularAudience.Forms
         {
             string? cudaDevice = GetCudaDeviceName();
             this.label_cuda.Text = cudaDevice != null ? $"CUDA: {cudaDevice}" : "CUDA: <Offline>";
+
+            // Populate GPU device combo box
+            this.comboBox_gpuDevice.Items.Clear();
+            this.comboBox_gpuDevice.Items.Add("<CPU / no GPU>");
+            string? driverVersion = FfmpegNvencInstaller.GetNvidiaDriverVersion();
+            string? gpuName = null;
+            try { gpuName = NvencVideoRenderer.GetGpuName(); } catch { }
+            if (!string.IsNullOrWhiteSpace(gpuName))
+            {
+                string deviceLabel = gpuName + (string.IsNullOrWhiteSpace(driverVersion) ? "" : $" (Driver {driverVersion})");
+                this.comboBox_gpuDevice.Items.Add(deviceLabel);
+                this.comboBox_gpuDevice.SelectedIndex = 1;
+            }
+            else
+            {
+                this.comboBox_gpuDevice.SelectedIndex = 0;
+            }
+
             // (commented out: CudaDevice check not available in ModularAudience)
             this.comboBox_codecPreset.DataSource = NvencVideoRenderer.GetAllPresetEntries(true);
             this.comboBox_codecPreset.DisplayMember = nameof(NvencVideoRenderer.PresetEntry.DisplayName);
@@ -302,6 +320,7 @@ namespace ModularAudience.Forms
             });
 
             var enc = ((PresetEntry?) this.comboBox_codecPreset.SelectedItem)?.Options ?? NvencVideoRenderer.CpuPresets.X264_Default;
+            bool gpuSelected = this.comboBox_gpuDevice.SelectedIndex > 0;
             string mainAssemblyName = System.Reflection.Assembly.GetExecutingAssembly().GetName().Name?.Split('.').FirstOrDefault() ?? "NVENC";
 
             try
@@ -450,41 +469,67 @@ namespace ModularAudience.Forms
                 string? ffmpegPathToUse = null;
                 NvencOptions encToUse = enc;
 
-                // For NVENC codecs, check if the driver actually supports it.
-                // If the driver is too old, fall back to a CPU codec.
-                if (enc.VideoCodec.Contains("nvenc", StringComparison.OrdinalIgnoreCase))
+                // Only use NVENC if a GPU device is selected in the combo box
+                if (!gpuSelected)
                 {
+                    // Force CPU codec when no GPU is selected
+                    if (enc.VideoCodec.Contains("nvenc", StringComparison.OrdinalIgnoreCase))
+                    {
+                        LogCollection.Log("Visualizer: No GPU device selected - using CPU codec instead.");
+                        encToUse = GetCpuFallbackOptions(enc.VideoCodec);
+                    }
+                }
+                else if (enc.VideoCodec.Contains("nvenc", StringComparison.OrdinalIgnoreCase))
+                {
+                    // GPU selected: check if a compatible NVENC FFmpeg is available
                     string? existingNvencFfmpeg = FfmpegNvencInstaller.FindNvencFfmpeg();
 
                     if (existingNvencFfmpeg != null)
                     {
-                        // Check if the driver supports NVENC by trying to open the encoder
-                        if (CheckNvencDriverSupport(existingNvencFfmpeg, enc.VideoCodec, width, height))
+                        // Check if the driver supports this build's NVENC
+                        if (FfmpegNvencInstaller.CanDriverUseNvenc(existingNvencFfmpeg, enc.VideoCodec))
                         {
                             ffmpegPathToUse = existingNvencFfmpeg;
                         }
                         else
                         {
-                            // Driver too old for NVENC - fall back to CPU codec
-                            LogCollection.Log($"Visualizer: NVENC not supported by current driver. Falling back to CPU codec ({GetCpuFallbackCodec(enc.VideoCodec)}).");
-                            encToUse = GetCpuFallbackOptions(enc.VideoCodec);
+                            // Installed build incompatible with driver - offer install of a compatible one
+                            using var installDialog = new FfmpegNvencInstallDialog();
+                            var result = this.ShowDialog(installDialog);
+                            if (result == DialogResult.OK && installDialog.InstalledFfmpegPath != null)
+                            {
+                                if (FfmpegNvencInstaller.CanDriverUseNvenc(installDialog.InstalledFfmpegPath, enc.VideoCodec))
+                                {
+                                    ffmpegPathToUse = installDialog.InstalledFfmpegPath;
+                                }
+                                else
+                                {
+                                    LogCollection.Log($"Visualizer: No NVENC FFmpeg compatible with driver found. Falling back to CPU codec ({GetCpuFallbackCodec(enc.VideoCodec)}).");
+                                    encToUse = GetCpuFallbackOptions(enc.VideoCodec);
+                                }
+                            }
+                            else
+                            {
+                                LogCollection.Log("Visualizer: NVENC FFmpeg installation cancelled - aborting render.");
+                                return;
+                            }
                         }
                     }
                     else
                     {
-                        // No NVENC-capable FFmpeg found - offer installation
+                        // No NVENC FFmpeg found at all - offer installation
                         using var installDialog = new FfmpegNvencInstallDialog();
                         var result = this.ShowDialog(installDialog);
                         if (result == DialogResult.OK && installDialog.InstalledFfmpegPath != null)
                         {
-                            ffmpegPathToUse = installDialog.InstalledFfmpegPath;
-
-                            // Re-check driver support with the new ffmpeg
-                            if (!CheckNvencDriverSupport(installDialog.InstalledFfmpegPath, enc.VideoCodec, width, height))
+                            if (FfmpegNvencInstaller.CanDriverUseNvenc(installDialog.InstalledFfmpegPath, enc.VideoCodec))
                             {
-                                LogCollection.Log($"Visualizer: NVENC not supported by current driver. Falling back to CPU codec ({GetCpuFallbackCodec(enc.VideoCodec)}).");
+                                ffmpegPathToUse = installDialog.InstalledFfmpegPath;
+                            }
+                            else
+                            {
+                                LogCollection.Log($"Visualizer: No NVENC FFmpeg compatible with driver found. Falling back to CPU codec ({GetCpuFallbackCodec(enc.VideoCodec)}).");
                                 encToUse = GetCpuFallbackOptions(enc.VideoCodec);
-                                ffmpegPathToUse = null;
                             }
                         }
                         else
@@ -976,13 +1021,7 @@ namespace ModularAudience.Forms
                 string? nvencFfmpeg = FfmpegNvencInstaller.FindNvencFfmpeg();
                 if (nvencFfmpeg == null)
                 {
-                    return gpuName + " (NVENC not available - update driver or FFmpeg)";
-                }
-
-                // Check driver support
-                if (!CheckNvencDriverSupport(nvencFfmpeg, "h264_nvenc", 1280, 720))
-                {
-                    return gpuName + " (driver too old for NVENC - use CPU codec)";
+                    return gpuName + " (NVENC FFmpeg not installed - will offer install)";
                 }
 
                 return gpuName;
@@ -996,28 +1035,7 @@ namespace ModularAudience.Forms
             {
                 // Quick test: try to open the encoder with a minimal config
                 string args = $"-f lavfi -i nullsrc=s={width}x{height}:r=1 -t 0.1 -c:v {codec} -f null -";
-                var psi = new System.Diagnostics.ProcessStartInfo
-                {
-                    FileName = ffmpegPath,
-                    Arguments = args,
-                    UseShellExecute = false,
-                    RedirectStandardOutput = true,
-                    RedirectStandardError = true,
-                    CreateNoWindow = true
-                };
-
-                using var proc = new System.Diagnostics.Process { StartInfo = psi };
-                proc.Start();
-                string stderr = proc.StandardError.ReadToEnd();
-                string stdout = proc.StandardOutput.ReadToEnd();
-                proc.WaitForExit(10000);
-
-                // If the driver doesn't support it, we'll see "Driver does not support" or similar
-                bool hasError = stderr.Contains("Driver does not support", StringComparison.OrdinalIgnoreCase) ||
-                               stderr.Contains("Error while opening encoder", StringComparison.OrdinalIgnoreCase) ||
-                               proc.ExitCode != 0;
-
-                return !hasError;
+                return FfmpegNvencInstaller.CanDriverUseNvenc(ffmpegPath, codec);
             }
             catch
             {

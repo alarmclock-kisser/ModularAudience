@@ -42,6 +42,8 @@ namespace ModularAudience.Forms
             this.numericUpDown_threads = new NumericUpDown();
             this.label_info_threads = new Label();
             this.label_cuda = new Label();
+            this.label_info_gpuDevice = new Label();
+            this.comboBox_gpuDevice = new ComboBox();
             this.numericUpDown_volume = new NumericUpDown();
             this.label_info_volume = new Label();
             this.label_amplification = new Label();
@@ -213,6 +215,25 @@ namespace ModularAudience.Forms
             this.label_cuda.Size = new Size(97, 15);
             this.label_cuda.TabIndex = 13;
             this.label_cuda.Text = "CUDA: <Offline>";
+            // 
+            // label_info_gpuDevice
+            // 
+            this.label_info_gpuDevice.AutoSize = true;
+            this.label_info_gpuDevice.Location = new Point(336, 9);
+            this.label_info_gpuDevice.Name = "label_info_gpuDevice";
+            this.label_info_gpuDevice.Size = new Size(58, 15);
+            this.label_info_gpuDevice.TabIndex = 36;
+            this.label_info_gpuDevice.Text = "GPU Device";
+            // 
+            // comboBox_gpuDevice
+            // 
+            this.comboBox_gpuDevice.DropDownStyle = ComboBoxStyle.DropDownList;
+            this.comboBox_gpuDevice.FormattingEnabled = true;
+            this.comboBox_gpuDevice.Location = new Point(336, 27);
+            this.comboBox_gpuDevice.Name = "comboBox_gpuDevice";
+            this.comboBox_gpuDevice.Size = new Size(116, 23);
+            this.comboBox_gpuDevice.TabIndex = 37;
+            this.comboBox_gpuDevice.Text = "<CPU / no GPU>";
             // 
             // numericUpDown_volume
             // 
@@ -439,6 +460,8 @@ namespace ModularAudience.Forms
             this.AutoScaleDimensions = new SizeF(7F, 15F);
             this.AutoScaleMode = AutoScaleMode.Font;
             this.ClientSize = new Size(464, 441);
+            this.Controls.Add(this.comboBox_gpuDevice);
+            this.Controls.Add(this.label_info_gpuDevice);
             this.Controls.Add(this.button_addSubtitlesTxt);
             this.Controls.Add(this.label_info_threshold);
             this.Controls.Add(this.numericUpDown_threshold);
@@ -508,6 +531,8 @@ namespace ModularAudience.Forms
 		private NumericUpDown numericUpDown_threads;
 		private Label label_info_threads;
 		private Label label_cuda;
+		private Label label_info_gpuDevice;
+		private ComboBox comboBox_gpuDevice;
 		private NumericUpDown numericUpDown_volume;
 		private Label label_info_volume;
         private Label label_amplification;
