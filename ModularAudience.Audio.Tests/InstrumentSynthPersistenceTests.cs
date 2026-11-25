@@ -42,9 +42,10 @@ public sealed class InstrumentSynthPersistenceTests
     {
         foreach (var family in Enum.GetValues<SynthFamily>())
         {
+            int voiceIndex = Math.Min(2, InstrumentSynthCatalog.Voices(family).Count - 1);
             var settings = new InstrumentSynthSettings
             {
-                Family = family, VoiceIndex = 2, KitIndex = 7, Drum = SynthDrum.OpenHiHat,
+                Family = family, VoiceIndex = voiceIndex, KitIndex = 7, Drum = SynthDrum.OpenHiHat,
                 MidiNote = 73, PitchSemitones = -3.25, Bpm = 137.5, NoteBeats = 0.125, DurationMultiplier = 2d / 3,
                 AttackMs = 14, DecaySeconds = 1.37, SustainPercent = 34, ReleaseSeconds = 0.79,
                 Brightness = 28, Body = 41, Noise = 19, Drive = 21, DetuneCents = 12.25, VibratoCents = 23,
@@ -125,7 +126,7 @@ public sealed class InstrumentSynthPersistenceTests
             using var dialog = new InstrumentSampleSynthDialog(family, store);
             var numbers = (Dictionary<string, NumericUpDown>)Field(dialog, "numbers");
             var type = (ComboBox)Field(dialog, family == SynthFamily.DrumSet ? "kit" : "voice");
-            type.SelectedIndex = 2;
+            type.SelectedIndex = Math.Min(2, type.Items.Count - 1);
             if (family == SynthFamily.DrumSet)
             {
                 ((ComboBox)Field(dialog, "drum")).SelectedIndex = (int)SynthDrum.OpenHiHat;

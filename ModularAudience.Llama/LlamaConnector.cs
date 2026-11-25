@@ -11,23 +11,22 @@ namespace ModularAudience.Llama
 {
     public class LlamaConnector
     {
-        public readonly string ApiUrl;
+        public string ApiUrl { get; private set; }
         public string Model { get; set; } = "gemma-4";
+
+        /// <summary>
+        /// Optional log sink. The Instrument Coder connects this to its own log list and to LogManager.
+        /// </summary>
+        public Action<string>? Logger { get; set; }
+
         private readonly HttpClient _httpClient;
 
-        public LlamaConnector(string apiUrl = "http://127.0.0.1:8080", string model = "gemma-4")
+        public LlamaConnector(string apiUrl = "http://localhost:9931", string model = "gemma-4")
         {
-            // Normalize the URL: strip trailing /v1/, /v1, /v1/chat/completions, etc.
-            string url = apiUrl.Trim().TrimEnd('/');
-            int v1Index = url.IndexOf("/v1", StringComparison.OrdinalIgnoreCase);
-            if (v1Index >= 0)
-            {
-                url = url[..v1Index];
-            }
-            this.ApiUrl = url.TrimEnd('/');
+            this.ApiUrl = NormalizeUrl(apiUrl);
             this.Model = model;
 
-            // Audio-Inferencing kann dauern, großzügiger Timeout
+            // Audio inference can take a while, so use a generous timeout.
             var handler = new HttpClientHandler();
             handler.ServerCertificateCustomValidationCallback = static (message, cert, chain, errors) =>
                 errors == System.Net.Security.SslPolicyErrors.None || message?.RequestUri?.IsLoopback == true;
@@ -35,31 +34,66 @@ namespace ModularAudience.Llama
         }
 
         /// <summary>
-        /// Sends an audio file as a legacy <c>audio_url</c> data URL block (backward compatible with
-        /// existing <see cref="AnalyzeTrackElementsAsync"/> callers).
+        /// Updates the endpoint at runtime so a changed server URL also affects an existing connector.
+        /// </summary>
+        public void SetApiUrl(string apiUrl)
+        {
+            string normalized = NormalizeUrl(apiUrl);
+            if (normalized == this.ApiUrl) return;
+
+            this.ApiUrl = normalized;
+            this.Log($"LLM endpoint set to {this.ApiUrl}.");
+        }
+
+        private static string NormalizeUrl(string apiUrl)
+        {
+            // Strip trailing /v1/, /v1, /v1/chat/completions, etc.
+            string url = apiUrl.Trim().TrimEnd('/');
+            int v1Index = url.IndexOf("/v1", StringComparison.OrdinalIgnoreCase);
+            if (v1Index >= 0)
+            {
+                url = url[..v1Index];
+            }
+            return url.TrimEnd('/');
+        }
+
+        private void Log(string message)
+        {
+            Console.WriteLine($"[LlamaConnector] {message}");
+            try
+            {
+                this.Logger?.Invoke(message);
+            }
+            catch
+            {
+                // A broken log sink must never break the request.
+            }
+        }
+
+        /// <summary>
+        /// Sends an audio file as an OpenAI-compatible input_audio block. Current llama-server
+        /// builds accept raw base64 in input_audio.data and detect the format automatically.
         /// </summary>
         public async Task<string?> SendAudioAsync(AudioObj audio, string prompt = "Analyze the audio elements in this track.")
         {
             if (audio == null || string.IsNullOrWhiteSpace(audio.FilePath) || !File.Exists(audio.FilePath))
             {
+                this.Log("Audio analysis skipped: no file was available.");
                 return null;
             }
 
             try
             {
-                // 1. Audio in RAM laden und Base64 encoden
                 byte[] audioBytes = await File.ReadAllBytesAsync(audio.FilePath);
-                string base64Audio = Convert.ToBase64String(audioBytes);
-
-                // Endung dynamisch ermitteln (wav, mp3, flac)
                 string extension = Path.GetExtension(audio.FilePath).TrimStart('.').ToLowerInvariant();
-                string mimeType = extension == "mp3" ? "mpeg" : extension;
-                string audioDataUrl = $"data:audio/{mimeType};base64,{base64Audio}";
+                if (extension != "wav" && extension != "mp3" && extension != "flac")
+                {
+                    extension = "wav";
+                }
 
-                // 2. Multimodal Payload nach OAI-Spec aufbauen
                 var payload = new
                 {
-                    model = this.Model, // llama.cpp ignoriert den Namen meist bei lokalem Hosting, erfordert aber das Feld
+                    model = this.Model,
                     messages = new[]
                     {
                         new
@@ -68,45 +102,46 @@ namespace ModularAudience.Llama
                             content = new object[]
                             {
                                 new { type = "text", text = prompt },
-                                new { type = "audio_url", audio_url = new { url = audioDataUrl } }
+                                CreateAudioBlock(audioBytes, extension)
                             }
                         }
                     },
-                    temperature = 0.2, // Niedrige Temp für präzisere Timing/Element-Erkennung
+                    temperature = 0.2,
                     max_tokens = 800
                 };
 
-                string jsonPayload = JsonSerializer.Serialize(payload);
-                using var content = new StringContent(jsonPayload, Encoding.UTF8, "application/json");
+                this.Log($"Sending audio analysis request ({audioBytes.Length} bytes, model '{this.Model}').");
+                using var response = await PostChatAsync(payload);
 
-                // 3. Request an llama-server abfeuern
-                var response = await this._httpClient.PostAsync($"{this.ApiUrl}/v1/chat/completions", content);
-                response.EnsureSuccessStatusCode();
+                if (!response.IsSuccessStatusCode)
+                {
+                    string errorBody = await response.Content.ReadAsStringAsync();
+                    this.Log($"Audio analysis failed: HTTP {(int)response.StatusCode} {errorBody}");
+                    return null;
+                }
 
                 string responseJson = await response.Content.ReadAsStringAsync();
-
-                // 4. Antwort parsen (einfacher JsonDocument Parse, um keine dicken DTOs anlegen zu müssen)
                 using var doc = JsonDocument.Parse(responseJson);
-                var messageContent = doc.RootElement
+                string? messageContent = doc.RootElement
                     .GetProperty("choices")[0]
                     .GetProperty("message")
                     .GetProperty("content")
                     .GetString();
 
+                this.Log("Audio analysis succeeded.");
                 return messageContent?.Trim();
             }
             catch (Exception ex)
             {
-                // Hier z.B. an den internen Logger weiterleiten
-                Console.WriteLine($"[LlamaConnector] Error sending audio: {ex.Message}");
+                this.Log($"Error sending audio: {ex}");
                 return null;
             }
         }
 
         /// <summary>
-        /// Sends a multimodal refinement prompt to the llama-server using OpenAI structured content blocks:
-        /// text + <c>input_audio</c> (base64 WAV, format "wav") for the reference and synthesized audio,
-        /// plus an optional <c>image_url</c> PNG spectrogram. Returns the model's text response (improved C# DSP code).
+        /// Sends a multimodal refinement prompt to llama-server using OpenAI typed content blocks:
+        /// text + input_audio (raw base64 WAV) for reference and synthesized audio, plus an optional
+        /// image_url PNG spectrogram. Returns the model's text response (improved C# DSP code).
         /// </summary>
         /// <param name="referenceAudio">WAV bytes of the reference instrument sample.</param>
         /// <param name="synthesizedAudio">WAV bytes of the current synth render.</param>
@@ -120,89 +155,191 @@ namespace ModularAudience.Llama
             string prompt,
             bool includeSpectrogram = false)
         {
+            return await SendMultimodalSynthPromptStreamingAsync(
+                referenceAudio, synthesizedAudio, spectrogramPng, prompt, includeSpectrogram, null);
+        }
+
+        /// <summary>
+        /// Streaming variant: sends the multimodal prompt and delivers partial text chunks
+        /// via <paramref name="onChunk"/> as they arrive (SSE). Returns the full accumulated text.
+        /// </summary>
+        public virtual async Task<string?> SendMultimodalSynthPromptStreamingAsync(
+            byte[] referenceAudio,
+            byte[] synthesizedAudio,
+            byte[]? spectrogramPng,
+            string prompt,
+            bool includeSpectrogram = false,
+            Action<string>? onChunk = null)
+        {
             if (referenceAudio == null || referenceAudio.Length == 0)
             {
+                this.Log("Multimodal request skipped: reference audio is empty.");
                 return null;
             }
             if (synthesizedAudio == null || synthesizedAudio.Length == 0)
             {
+                this.Log("Multimodal request skipped: synthesized audio is empty.");
                 return null;
             }
 
             try
             {
-                var contentBlocks = new List<object>
-                {
-                    new { type = "text", text = prompt },
-                    new
-                    {
-                        type = "input_audio",
-                        input_audio = new
-                        {
-                            data = $"data:audio/wav;base64,{Convert.ToBase64String(referenceAudio)}",
-                            format = "wav"
-                        }
-                    },
-                    new
-                    {
-                        type = "input_audio",
-                        input_audio = new
-                        {
-                            data = $"data:audio/wav;base64,{Convert.ToBase64String(synthesizedAudio)}",
-                            format = "wav"
-                        }
-                    }
-                };
-
-                if (includeSpectrogram && spectrogramPng != null && spectrogramPng.Length > 0)
-                {
-                    contentBlocks.Add(new
-                    {
-                        type = "image_url",
-                        image_url = new
-                        {
-                            url = $"data:image/png;base64,{Convert.ToBase64String(spectrogramPng)}"
-                        }
-                    });
-                }
+                // llama-server uses OpenAI-style typed content blocks. Audio must be sent as
+                // input_audio with raw base64 data; audio_url is not supported by current builds.
+                var contentBlocks = BuildContentBlocks(
+                    prompt, referenceAudio, synthesizedAudio, spectrogramPng, includeSpectrogram);
 
                 var payload = new
                 {
                     model = this.Model,
-                    messages = new[]
-                    {
-                        new
-                        {
-                            role = "user",
-                            content = contentBlocks
-                        }
-                    },
+                    messages = new[] { new { role = "user", content = contentBlocks } },
                     temperature = 0.2,
-                    max_tokens = 4000
+                    max_tokens = 4000,
+                    stream = true
                 };
 
-                string jsonPayload = JsonSerializer.Serialize(payload);
-                using var content = new StringContent(jsonPayload, Encoding.UTF8, "application/json");
+                this.Log($"Sending multimodal synth request (reference {referenceAudio.Length} bytes, " +
+                         $"synth {synthesizedAudio.Length} bytes, model '{this.Model}').");
 
-                var response = await this._httpClient.PostAsync($"{this.ApiUrl}/v1/chat/completions", content);
-                response.EnsureSuccessStatusCode();
+                string errorBody;
+                int statusCode;
+                using (var response = await PostChatAsync(payload))
+                {
+                    if (response.IsSuccessStatusCode)
+                    {
+                        return await ReadSseAsync(response, onChunk);
+                    }
 
-                string responseJson = await response.Content.ReadAsStringAsync();
+                    statusCode = (int)response.StatusCode;
+                    errorBody = await response.Content.ReadAsStringAsync();
+                }
 
-                using var doc = JsonDocument.Parse(responseJson);
-                var messageContent = doc.RootElement
-                    .GetProperty("choices")[0]
-                    .GetProperty("message")
-                    .GetProperty("content")
-                    .GetString();
+                this.Log($"Multimodal request failed: HTTP {statusCode} {errorBody}");
 
-                return messageContent?.Trim();
+                // Some servers reject typed audio blocks. Keep code generation usable by
+                // falling back to text plus the optional spectrogram image.
+                this.Log("Retrying with text-only prompt (and spectrogram if enabled).");
+                string fallbackPrompt = prompt +
+                    "\n\n(Note: Audio input was rejected by the server. Generate based on the text description only.)";
+                var fallbackBlocks = BuildContentBlocks(
+                    fallbackPrompt, null, null, spectrogramPng, includeSpectrogram);
+                var fallbackPayload = new
+                {
+                    model = this.Model,
+                    messages = new[] { new { role = "user", content = fallbackBlocks } },
+                    temperature = 0.2,
+                    max_tokens = 4000,
+                    stream = true
+                };
+
+                using var fallbackResponse = await PostChatAsync(fallbackPayload);
+                fallbackResponse.EnsureSuccessStatusCode();
+                return await ReadSseAsync(fallbackResponse, onChunk);
             }
             catch (Exception ex)
             {
-                Console.WriteLine($"[LlamaConnector] Error sending multimodal synth prompt: {ex.Message}");
+                this.Log($"Error sending multimodal synth prompt: {ex}");
                 return null;
             }
+        }
+
+        private static object CreateAudioBlock(byte[] audioBytes, string format = "wav")
+        {
+            return new
+            {
+                type = "input_audio",
+                input_audio = new
+                {
+                    // Raw base64 is documented by llama-server; the format is detected automatically.
+                    data = Convert.ToBase64String(audioBytes),
+                    format = format
+                }
+            };
+        }
+
+        private static List<object> BuildContentBlocks(
+            string prompt,
+            byte[]? referenceAudio,
+            byte[]? synthesizedAudio,
+            byte[]? spectrogramPng,
+            bool includeSpectrogram)
+        {
+            var blocks = new List<object> { new { type = "text", text = prompt } };
+
+            if (referenceAudio != null && referenceAudio.Length > 0)
+            {
+                blocks.Add(CreateAudioBlock(referenceAudio));
+            }
+            if (synthesizedAudio != null && synthesizedAudio.Length > 0)
+            {
+                blocks.Add(CreateAudioBlock(synthesizedAudio));
+            }
+            if (includeSpectrogram && spectrogramPng != null && spectrogramPng.Length > 0)
+            {
+                blocks.Add(new
+                {
+                    type = "image_url",
+                    image_url = new
+                    {
+                        url = $"data:image/png;base64,{Convert.ToBase64String(spectrogramPng)}"
+                    }
+                });
+            }
+
+            return blocks;
+        }
+
+        private async Task<HttpResponseMessage> PostChatAsync(object payload)
+        {
+            string json = JsonSerializer.Serialize(payload);
+            using var httpContent = new StringContent(json, Encoding.UTF8, "application/json");
+            return await this._httpClient.PostAsync($"{this.ApiUrl}/v1/chat/completions", httpContent);
+        }
+
+        private async Task<string?> ReadSseAsync(HttpResponseMessage response, Action<string>? onChunk)
+        {
+            response.EnsureSuccessStatusCode();
+
+            using var stream = await response.Content.ReadAsStreamAsync();
+            using var reader = new StreamReader(stream);
+            var accumulated = new StringBuilder();
+
+            string? line;
+            while ((line = await reader.ReadLineAsync()) != null)
+            {
+                if (string.IsNullOrWhiteSpace(line)) continue;
+                if (!line.StartsWith("data:", StringComparison.Ordinal)) continue;
+
+                string data = line["data:".Length..].Trim();
+                if (data == "[DONE]") break;
+
+                try
+                {
+                    using var doc = JsonDocument.Parse(data);
+                    if (doc.RootElement.TryGetProperty("choices", out var choices) && choices.GetArrayLength() > 0)
+                    {
+                        var delta = choices[0];
+                        if (delta.TryGetProperty("delta", out var deltaObj) &&
+                            deltaObj.TryGetProperty("content", out var contentProp))
+                        {
+                            string? chunk = contentProp.GetString();
+                            if (!string.IsNullOrEmpty(chunk))
+                            {
+                                accumulated.Append(chunk);
+                                onChunk?.Invoke(chunk);
+                            }
+                        }
+                    }
+                }
+                catch (JsonException)
+                {
+                    // Ignore malformed or keep-alive chunks.
+                }
+            }
+
+            string result = accumulated.ToString().Trim();
+            this.Log($"LLM stream finished ({result.Length} characters).");
+            return result.Length > 0 ? result : null;
         }
 
         // ====================================================================================
@@ -210,53 +347,53 @@ namespace ModularAudience.Llama
         // ====================================================================================
 
         /// <summary>
-        /// Hört in einen Track rein und gibt eine Liste der gefundenen Elemente (Vocals, Kick, Snare, Synths, Vogelgezwitscher) zurück.
+        /// Listens to a track and returns the prominent elements (vocals, kick, snare, synths, etc.).
         /// </summary>
         public async Task<List<string>> AnalyzeTrackElementsAsync(AudioObj audio)
         {
             string prompt = "List all prominent audio elements, stems, and sound effects in this track as a comma-separated list.";
-            string? response = await this.SendAudioAsync(audio, prompt);
+            _ = await this.SendAudioAsync(audio, prompt);
 
-            // TODO: String splitten und bereinigen
-            throw new NotImplementedException();
+            // TODO: Split and clean the returned string.
+            throw new NotImplementedException("Track element analysis is not implemented yet.");
         }
 
         /// <summary>
-        /// Bewertet, ob Track B harmonisch (Key/Vibe) zu Track A passt.
+        /// Checks whether track B is harmonically compatible with track A.
         /// </summary>
         public async Task<bool> AssessHarmonicCompatibilityAsync(AudioObj trackA, AudioObj trackB)
         {
-            // Erfordert ggf. das Senden beider Audios im selben Context, falls llama-server multi-audio im Array unterstützt
-            throw new NotImplementedException();
+            // This may require sending both audio clips in the same context if llama-server
+            // supports multi-audio arrays.
+            throw new NotImplementedException("Harmonic compatibility assessment is not implemented yet.");
         }
 
         /// <summary>
-        /// Lauscht in das aktuell laufende Ensemble hinein und prüft, ob Rhythmen auseinander driften ("Clashing").
-        /// Gibt true zurück, wenn ein Timeout/Pause zum Resync nötig ist.
+        /// Listens to the currently playing ensemble and checks whether rhythms are clashing.
         /// </summary>
         public async Task<bool> EvaluateEnsembleSyncAsync(IReadOnlyList<AudioObj> playingTracks)
         {
-            // Idee: Tracks on-the-fly zusammenmischen in einen kleinen Puffer, Base64 encoden, 
-            // Modell fragen: "Are the kicks and transients in this audio perfectly synced or clashing?"
-            throw new NotImplementedException();
+            // Idea: mix the tracks on the fly into a small buffer, encode it as base64 and ask:
+            // "Are the kicks and transients in this audio perfectly synced or clashing?"
+            throw new NotImplementedException("Ensemble sync evaluation is not implemented yet.");
         }
 
         /// <summary>
-        /// Schlägt einen Timestamp (in Samples oder Millisekunden) vor, an dem Track B in das Ensemble gedroppt werden sollte.
+        /// Suggests a timestamp (in samples or milliseconds) at which track B should enter the ensemble.
         /// </summary>
         public async Task<long> SuggestMixInPointSamplesAsync(AudioObj targetTrack, AudioObj upcomingTrack)
         {
-            throw new NotImplementedException();
+            throw new NotImplementedException("Mix-in point suggestion is not implemented yet.");
         }
 
         /// <summary>
-        /// Analysiert das Audio und generiert ein Raster aus aktiven/inaktiven Steps für komplexe Breakbeat-Slicings.
-        /// Jeder Eintrag in der Liste repräsentiert einen Takt, das bool-Array die Slices.
+        /// Analyzes the audio and generates a grid of active/inactive steps for breakbeat slicing.
+        /// Each list entry represents one bar; the bool array represents the slices.
         /// </summary>
         public async Task<List<bool[]>> GenerateBreakPatternAsync(AudioObj audio)
         {
-            // Prompt-Idee: "Analyze the rhythm and return a 16-step grid as JSON arrays where 1 is a hit and 0 is silence."
-            throw new NotImplementedException();
+            // Prompt idea: "Analyze the rhythm and return a 16-step grid as JSON arrays where 1 is a hit and 0 is silence."
+            throw new NotImplementedException("Break pattern generation is not implemented yet.");
         }
     }
 }

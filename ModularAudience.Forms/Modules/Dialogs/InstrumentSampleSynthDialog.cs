@@ -665,6 +665,10 @@ public sealed partial class InstrumentSampleSynthDialog : Form
         else
         {
             snapshot.VoiceIndex = voice.SelectedIndex;
+            if (family == SynthFamily.Custom && voice.SelectedIndex >= 0 && voice.SelectedIndex < InstrumentSynthCatalog.Voices(family).Count)
+            {
+                snapshot.CustomInstrumentName = InstrumentSynthCatalog.Voices(family)[voice.SelectedIndex].Name;
+            }
         }
 
         snapshot.MidiNote = Math.Max(0, Array.IndexOf(noteNames, note.Text)) + 12;

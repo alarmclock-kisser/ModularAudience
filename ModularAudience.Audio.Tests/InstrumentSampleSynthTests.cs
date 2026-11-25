@@ -416,7 +416,9 @@ public sealed class InstrumentSampleSynthTests
         using var menu = WindowMain.CreateSampleSynthesizerMenu(_ => { });
         string?[] actual = menu.DropDownItems.Cast<ToolStripItem>().Select(item => item.Text).ToArray();
         string[] expected = Enum.GetValues<SynthFamily>()
+            .Where(family => family != SynthFamily.Custom)
             .Select(InstrumentSynthCatalog.FamilyName)
+            .Concat(new[] { "", "Custom instruments" })
             .ToArray();
 
         CollectionAssert.AreEqual(expected, actual);

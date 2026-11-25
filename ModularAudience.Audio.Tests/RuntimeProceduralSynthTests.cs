@@ -11,7 +11,6 @@ using System.Text;
 using System.Text.Json;
 using System.Threading;
 using System.Threading.Tasks;
-using System;
 
 namespace ModularAudience.Audio.Tests;
 
@@ -48,16 +47,17 @@ public sealed class RuntimeProceduralSynthTests
     {
         var compiler = new SynthCompiler();
         string code = @"using System;
+using ModularAudience.Audio.Synthesis.Runtime;
 public class CustomSynth
 {
-    public static float[] Render(int sampleRate, int channels, int frameCount, double noteFrequencyHz)
+    public static float[] Render(SynthRenderContext ctx)
     {
-        var data = new float[frameCount * channels];
-        for (int i = 0; i < frameCount; i++)
+        var data = new float[ctx.FrameCount * ctx.Channels];
+        for (int i = 0; i < ctx.FrameCount; i++)
         {
-            double t = i / (double)sampleRate;
-            float s = (float)(0.5 * Math.Sin(2 * Math.PI * noteFrequencyHz * t));
-            for (int c = 0; c < channels; c++) data[i * channels + c] = s;
+            double t = i / (double)ctx.SampleRate;
+            float s = (float)(0.5 * Math.Sin(2 * Math.PI * ctx.NoteFrequencyHz * t));
+            for (int c = 0; c < ctx.Channels; c++) data[i * ctx.Channels + c] = s;
         }
         return data;
     }
@@ -66,7 +66,6 @@ public class CustomSynth
         Assert.IsTrue(result.IsSuccess, "Valid code should compile successfully.");
         Assert.IsNotNull(result.Assembly, "Compiled assembly should not be null.");
 
-        // Verify the assembly can be loaded into a synth.
         var descriptor = new CustomInstrumentDescriptor("TestSynth", code) { SampleRate = 44100, Channels = 2, MidiNote = 69 };
         var synth = new CustomInstrumentSynth(descriptor, result.Assembly);
         var buffer = new float[44100 * 2];
@@ -86,7 +85,7 @@ public class CustomSynth
         string code = @"using System;
 public class CustomSynth
 {
-    public static float[] Render(int sampleRate, int channels, int frameCount, double noteFrequencyHz)
+    public static float[] Render(SynthRenderContext ctx)
     {
         this is invalid C# syntax !!!;
         return new float[0];
@@ -95,6 +94,41 @@ public class CustomSynth
         var result = compiler.Compile(code);
         Assert.IsFalse(result.IsSuccess, "Invalid code should fail to compile.");
         Assert.IsTrue(result.Errors.Length > 0, "Should return compile errors.");
+
+        compiler.Dispose();
+    }
+
+    [TestMethod]
+    public void CustomInstrumentSynth_WrongSignature_ErrorIncludesContract()
+    {
+        var compiler = new SynthCompiler();
+        string code = @"using System;
+public class CustomSynth
+{
+    public static float[] Render(int sampleRate, int channels, int frameCount, double noteFrequencyHz)
+    {
+        return new float[0];
+    }
+}";
+        var result = compiler.Compile(code);
+        Assert.IsTrue(result.IsSuccess, "Wrong-signature code must still compile.");
+
+        var descriptor = new CustomInstrumentDescriptor("WrongSignature", code);
+        InvalidOperationException? ex = null;
+        try
+        {
+            _ = new CustomInstrumentSynth(descriptor, result.Assembly!);
+        }
+        catch (InvalidOperationException caught)
+        {
+            ex = caught;
+        }
+        Assert.IsNotNull(ex, "A wrong Render signature must be rejected.");
+
+        StringAssert.Contains(ex!.Message, "public static float[] Render(SynthRenderContext ctx)");
+        StringAssert.Contains(ex.Message, "SampleRate");
+        StringAssert.Contains(ex.Message, "PitchSemitones");
+        StringAssert.Contains(ex.Message, "do NOT redeclare it");
 
         compiler.Dispose();
     }
@@ -114,10 +148,10 @@ public class CustomSynth
         string code = $@"using System;
 public class CustomSynth
 {{
-    public static float[] Render(int sampleRate, int channels, int frameCount, double noteFrequencyHz)
+    public static float[] Render(SynthRenderContext ctx)
     {{
         {forbiddenSnippet};
-        return new float[frameCount * channels];
+        return new float[ctx.FrameCount * ctx.Channels];
     }}
 }}";
         var result = compiler.Compile(code);
@@ -135,7 +169,6 @@ public class CustomSynth
         WeakReference assemblyRef = CreateAndUnloadCompiler(out bool compileSuccess);
         Assert.IsTrue(compileSuccess, "Code should compile successfully.");
 
-        // Force GC to collect the collectible context.
         for (int i = 0; i < 20; i++)
         {
             GC.Collect(GC.MaxGeneration, GCCollectionMode.Forced, true, true);
@@ -150,11 +183,12 @@ public class CustomSynth
     {
         var compiler = new SynthCompiler();
         string code = @"using System;
+using ModularAudience.Audio.Synthesis.Runtime;
 public class CustomSynth
 {
-    public static float[] Render(int sampleRate, int channels, int frameCount, double noteFrequencyHz)
+    public static float[] Render(SynthRenderContext ctx)
     {
-        return new float[frameCount * channels];
+        return new float[ctx.FrameCount * ctx.Channels];
     }
 }";
         var result = compiler.Compile(code);
@@ -173,20 +207,20 @@ public class CustomSynth
     [TestMethod]
     public void SynthSandboxDecorator_ClampsNanAndInfinity()
     {
-        // Create a synth that produces NaN and Infinity.
         var descriptor = new CustomInstrumentDescriptor("NanSynth", "") { SampleRate = 44100, Channels = 1, MidiNote = 60 };
         var compiler = new SynthCompiler();
         string code = @"using System;
+using ModularAudience.Audio.Synthesis.Runtime;
 public class CustomSynth
 {
-    public static float[] Render(int sampleRate, int channels, int frameCount, double noteFrequencyHz)
+    public static float[] Render(SynthRenderContext ctx)
     {
-        var data = new float[frameCount * channels];
+        var data = new float[ctx.FrameCount * ctx.Channels];
         data[0] = float.NaN;
         data[1] = float.PositiveInfinity;
         data[2] = float.NegativeInfinity;
-        data[3] = 5.0f;  // out of range
-        data[4] = -5.0f; // out of range
+        data[3] = 5.0f;
+        data[4] = -5.0f;
         return data;
     }
 }";
@@ -217,11 +251,12 @@ public class CustomSynth
         var descriptor = new CustomInstrumentDescriptor("WavTest", "") { SampleRate = 44100, Channels = 2, MidiNote = 60 };
         var compiler = new SynthCompiler();
         string code = @"using System;
+using ModularAudience.Audio.Synthesis.Runtime;
 public class CustomSynth
 {
-    public static float[] Render(int sampleRate, int channels, int frameCount, double noteFrequencyHz)
+    public static float[] Render(SynthRenderContext ctx)
     {
-        var data = new float[frameCount * channels];
+        var data = new float[ctx.FrameCount * ctx.Channels];
         for (int i = 0; i < data.Length; i++) data[i] = 0.5f;
         return data;
     }
@@ -236,7 +271,6 @@ public class CustomSynth
         var buffer = new float[frames * 2];
         safeSynth.Render(buffer, frames);
 
-        // Write to WAV and validate header.
         using var ms = new MemoryStream();
         using var writer = new NAudio.Wave.WaveFileWriter(ms, new NAudio.Wave.WaveFormat(44100, 2));
         for (int i = 0; i < buffer.Length; i++) writer.WriteSample(buffer[i]);
@@ -245,19 +279,16 @@ public class CustomSynth
         byte[] wavBytes = ms.ToArray();
         Assert.IsTrue(wavBytes.Length > 44, "WAV file must have at least 44-byte header.");
 
-        // Check RIFF header.
         Assert.AreEqual((byte)'R', wavBytes[0]);
         Assert.AreEqual((byte)'I', wavBytes[1]);
         Assert.AreEqual((byte)'F', wavBytes[2]);
         Assert.AreEqual((byte)'F', wavBytes[3]);
 
-        // Check WAVE marker.
         Assert.AreEqual((byte)'W', wavBytes[8]);
         Assert.AreEqual((byte)'A', wavBytes[9]);
         Assert.AreEqual((byte)'V', wavBytes[10]);
         Assert.AreEqual((byte)'E', wavBytes[11]);
 
-        // Check fmt chunk.
         Assert.AreEqual((byte)'f', wavBytes[12]);
         Assert.AreEqual((byte)'m', wavBytes[13]);
         Assert.AreEqual((byte)'t', wavBytes[14]);
@@ -271,39 +302,27 @@ public class CustomSynth
     [TestMethod]
     public async Task LlamaConnector_MultimodalSerialization_ContainsInputAudioAndImageUrl()
     {
-        var handler = new TestMockHttpHandler(snapshot =>
-        {
-            // Verify the request body contains input_audio and image_url blocks.
-            Assert.IsTrue(snapshot.Body.Contains("input_audio"), "Request should contain input_audio block.");
-            Assert.IsTrue(snapshot.Body.Contains("image_url"), "Request should contain image_url block.");
-            Assert.IsTrue(snapshot.Body.Contains("\"format\":\"wav\""), "input_audio should specify format wav.");
-
-            string responseJson = "{\"choices\":[{\"message\":{\"content\":\"improved code\"}}]}";
-            return Task.FromResult(new HttpResponseMessage(HttpStatusCode.OK)
-            {
-                Content = new StringContent(responseJson, Encoding.UTF8, "application/json")
-            });
-        });
-
-        var httpClient = new HttpClient(handler);
-        // We can't easily inject HttpClient into LlamaConnector, so test serialization directly.
-        // Instead, verify the payload structure by serializing manually.
         byte[] refAudio = new byte[100];
         byte[] synthAudio = new byte[200];
         byte[] spectrogram = new byte[50];
 
-        var contentBlocks = new List<object>
+        var method = typeof(LlamaConnector).GetMethod(
+            "BuildContentBlocks",
+            System.Reflection.BindingFlags.NonPublic | System.Reflection.BindingFlags.Static);
+        Assert.IsNotNull(method, "BuildContentBlocks must exist.");
+
+        var contentBlocks = method.Invoke(null, new object?[]
         {
-            new { type = "text", text = "Improve this synth." },
-            new { type = "input_audio", input_audio = new { data = $"data:audio/wav;base64,{Convert.ToBase64String(refAudio)}", format = "wav" } },
-            new { type = "input_audio", input_audio = new { data = $"data:audio/wav;base64,{Convert.ToBase64String(synthAudio)}", format = "wav" } },
-            new { type = "image_url", image_url = new { url = $"data:image/png;base64,{Convert.ToBase64String(spectrogram)}" } }
-        };
+            "Improve this synth.", refAudio, synthAudio, spectrogram, true
+        }) as List<object>;
+        Assert.IsNotNull(contentBlocks);
 
         string json = JsonSerializer.Serialize(contentBlocks);
-        Assert.IsTrue(json.Contains("input_audio"));
+        Assert.IsTrue(json.Contains("input_audio"), "Audio must use the supported input_audio content type.");
+        Assert.IsFalse(json.Contains("audio_url"), "audio_url is rejected by current llama-server builds.");
+        Assert.IsTrue(json.Contains(Convert.ToBase64String(refAudio)), "Reference audio must be raw base64.");
+        Assert.IsTrue(json.Contains(Convert.ToBase64String(synthAudio)), "Synth audio must be raw base64.");
         Assert.IsTrue(json.Contains("image_url"));
-        Assert.IsTrue(json.Contains("\"format\":\"wav\""));
 
         await Task.CompletedTask;
     }
@@ -315,26 +334,19 @@ public class CustomSynth
     {
         var mockLlm = new MockLlamaConnector(code => @"```csharp
 using System;
+using ModularAudience.Audio.Synthesis.Runtime;
 public class CustomSynth
 {
-    public static float[] Render(int sampleRate, int channels, int frameCount, double noteFrequencyHz)
+    public static float[] Render(SynthRenderContext ctx)
     {
-        var data = new float[frameCount * channels];
+        var data = new float[ctx.FrameCount * ctx.Channels];
         for (int i = 0; i < data.Length; i++) data[i] = 0.3f;
         return data;
     }
 }```");
 
         var compiler = new SynthCompiler();
-        var descriptor = new CustomInstrumentDescriptor("HappySynth", @"using System;
-public class CustomSynth
-{
-    public static float[] Render(int sampleRate, int channels, int frameCount, double noteFrequencyHz)
-    {
-        var data = new float[frameCount * channels];
-        return data;
-    }
-}") { SampleRate = 22050, Channels = 1, MidiNote = 60, Bpm = 120, NoteBeats = 0.25 };
+        var descriptor = new CustomInstrumentDescriptor("HappySynth", "") { SampleRate = 22050, Channels = 1, MidiNote = 60, Bpm = 120, NoteBeats = 0.25 };
 
         var orch = new SynthRefinementOrchestrator(mockLlm, compiler, store, descriptor)
         {
@@ -374,17 +386,16 @@ public class CustomSynth
             callCount++;
             if (callCount == 1)
             {
-                // First call returns invalid code.
                 return "```csharp\nthis is invalid C#;\n```";
             }
-            // Second call (retry) returns valid code.
             return @"```csharp
 using System;
+using ModularAudience.Audio.Synthesis.Runtime;
 public class CustomSynth
 {
-    public static float[] Render(int sampleRate, int channels, int frameCount, double noteFrequencyHz)
+    public static float[] Render(SynthRenderContext ctx)
     {
-        var data = new float[frameCount * channels];
+        var data = new float[ctx.FrameCount * ctx.Channels];
         for (int i = 0; i < data.Length; i++) data[i] = 0.2f;
         return data;
     }
@@ -392,15 +403,7 @@ public class CustomSynth
         });
 
         var compiler = new SynthCompiler();
-        var descriptor = new CustomInstrumentDescriptor("HealSynth", @"using System;
-public class CustomSynth
-{
-    public static float[] Render(int sampleRate, int channels, int frameCount, double noteFrequencyHz)
-    {
-        var data = new float[frameCount * channels];
-        return data;
-    }
-}") { SampleRate = 22050, Channels = 1, MidiNote = 60, Bpm = 120, NoteBeats = 0.25 };
+        var descriptor = new CustomInstrumentDescriptor("HealSynth", "") { SampleRate = 22050, Channels = 1, MidiNote = 60, Bpm = 120, NoteBeats = 0.25 };
 
         var orch = new SynthRefinementOrchestrator(mockLlm, compiler, store, descriptor)
         {
@@ -439,15 +442,7 @@ public class CustomSynth
         var mockLlm = new MockLlamaConnector(code => { mockCallCount++; Thread.Sleep(50); return "```csharp\n// delayed\n```"; });
 
         var compiler = new SynthCompiler();
-        var descriptor = new CustomInstrumentDescriptor("CancelSynth", @"using System;
-public class CustomSynth
-{
-    public static float[] Render(int sampleRate, int channels, int frameCount, double noteFrequencyHz)
-    {
-        var data = new float[frameCount * channels];
-        return data;
-    }
-}") { SampleRate = 22050, Channels = 1, MidiNote = 60, Bpm = 120, NoteBeats = 0.25 };
+        var descriptor = new CustomInstrumentDescriptor("CancelSynth", "") { SampleRate = 22050, Channels = 1, MidiNote = 60, Bpm = 120, NoteBeats = 0.25 };
 
         var orch = new SynthRefinementOrchestrator(mockLlm, compiler, store, descriptor)
         {
@@ -501,51 +496,23 @@ public class CustomSynth
     {
         private readonly Func<string, string> responder;
 
-        public MockLlamaConnector(Func<string, string> responder) : base("http://127.0.0.1:8080")
+        public MockLlamaConnector(Func<string, string> responder) : base("http://localhost:9931")
         {
             this.responder = responder;
         }
 
-        public override Task<string?> SendMultimodalSynthPromptAsync(
+        public override Task<string?> SendMultimodalSynthPromptStreamingAsync(
             byte[] referenceAudio, byte[] synthesizedAudio, byte[]? spectrogramPng,
-            string prompt, bool includeSpectrogram = false)
+            string prompt, bool includeSpectrogram = false,
+            Action<string>? onChunk = null)
         {
             string response = this.responder(prompt);
+            if (onChunk != null && response != null)
+            {
+                // Simulate streaming by sending the whole response as one chunk.
+                onChunk(response);
+            }
             return Task.FromResult<string?>(response);
         }
     }
-
-    // ---- Test mock HTTP handler ----
-
-    private sealed class TestMockHttpHandler : HttpMessageHandler
-    {
-        private readonly Func<RecordedRequest, Task<HttpResponseMessage>> responder;
-        private readonly List<RecordedRequest> requests = [];
-        private readonly Lock requestLock = new();
-
-        public TestMockHttpHandler(Func<RecordedRequest, Task<HttpResponseMessage>> respond)
-        {
-            this.responder = respond;
-        }
-
-        public RecordedRequest[] Requests
-        {
-            get { lock (this.requestLock) { return this.requests.ToArray(); } }
-        }
-
-        protected override async Task<HttpResponseMessage> SendAsync(HttpRequestMessage request, CancellationToken cancellationToken)
-        {
-            var snapshot = new RecordedRequest(
-                request.Method, request.RequestUri!,
-                request.Headers.Authorization?.ToString(),
-                null, null, request.Content?.Headers.ContentType?.MediaType,
-                request.Content is null ? string.Empty : await request.Content.ReadAsStringAsync(cancellationToken));
-            lock (this.requestLock) { this.requests.Add(snapshot); }
-            return await this.responder(snapshot);
-        }
-    }
-
-    private sealed record RecordedRequest(
-        HttpMethod Method, Uri Uri, string? Authorization,
-        string? ServiceCrn, string? ApiVersion, string? ContentType, string Body);
 }

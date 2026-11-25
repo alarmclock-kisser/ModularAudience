@@ -7,7 +7,6 @@ namespace ModularAudience.Forms;
 public partial class WindowMain
 {
     private readonly Dictionary<SynthFamily, InstrumentSampleSynthDialog> sampleSynthesizers = [];
-    private readonly Dictionary<string, CustomInstrumentSynthWindow> customSynthWindows = [];
     private ToolStripMenuItem CreateSampleSynthesizerMenu()
         => CreateSampleSynthesizerMenu(this.ShowSampleSynthesizer, this.ShowInstrumentCoderDialog);
 
@@ -19,6 +18,9 @@ public partial class WindowMain
         var menu = new ToolStripMenuItem("Sample Synthesizer") { Name = "toolStripMenuItem_sampleSynthesizer" };
         foreach (var family in Enum.GetValues<SynthFamily>())
         {
+            // Custom instruments get their own submenu below instead of a generic family entry.
+            if (family == SynthFamily.Custom) continue;
+
             var selected = family;
             menu.DropDownItems.Add(InstrumentSynthCatalog.FamilyName(family), null, (_, _) => onSelected(selected));
         }
@@ -33,14 +35,15 @@ public partial class WindowMain
             var selectedName = name;
             customMenu.DropDownItems.Add(name, null, (_, _) =>
             {
-                var descriptor = CustomInstrumentStore.Shared.Load(selectedName);
-                var host = new CustomInstrumentSynthHost(descriptor);
-                var window = new CustomInstrumentSynthWindow(host);
-                window.Show();
+                var settings = new InstrumentSynthSettings { Family = SynthFamily.Custom, CustomInstrumentName = selectedName };
+                settings.Validate();
+                var dialog = new InstrumentSampleSynthDialog(SynthFamily.Custom, initialSettings: settings);
+                dialog.Show();
+                dialog.Activate();
             });
         }
         customMenu.DropDownItems.Add(new ToolStripSeparator());
-        customMenu.DropDownItems.Add("Open Instrument Coder…", null, (_, _) =>
+        customMenu.DropDownItems.Add("Open Instrument Coder...", null, (_, _) =>
         {
             if (onOpenCoder != null) { onOpenCoder(); }
             else { new InstrumentCoderDialog().Show(); }

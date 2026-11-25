@@ -1,8 +1,12 @@
+using System;
+
 namespace ModularAudience.Forms.Modules;
 
 internal sealed class TextHistoryTextBox : TextBox
 {
     private readonly TextEditHistory history;
+    private bool creatingHandle;
+    private bool disposePending;
 
     public TextHistoryTextBox()
     {
@@ -38,11 +42,37 @@ internal sealed class TextHistoryTextBox : TextBox
         return false;
     }
 
+    // WinForms rejects Dispose() while CreateHandle() is still running. This can happen when a
+    // dialog closes during handle creation. Defer the base disposal until CreateHandle() finished.
+    protected override void CreateHandle()
+    {
+        creatingHandle = true;
+        try
+        {
+            base.CreateHandle();
+        }
+        finally
+        {
+            creatingHandle = false;
+            if (disposePending)
+            {
+                disposePending = false;
+                Dispose(true);
+            }
+        }
+    }
+
     protected override void Dispose(bool disposing)
     {
         if (disposing)
         {
             history.Dispose();
+        }
+
+        if (disposing && creatingHandle)
+        {
+            disposePending = true;
+            return;
         }
 
         base.Dispose(disposing);
@@ -52,6 +82,8 @@ internal sealed class TextHistoryTextBox : TextBox
 internal sealed class TextHistoryRichTextBox : RichTextBox
 {
     private readonly TextEditHistory history;
+    private bool creatingHandle;
+    private bool disposePending;
 
     public TextHistoryRichTextBox()
     {
@@ -88,11 +120,37 @@ internal sealed class TextHistoryRichTextBox : RichTextBox
         return base.ProcessCmdKey(ref message, keyData);
     }
 
+    // WinForms rejects Dispose() while CreateHandle() is still running. This can happen when a
+    // dialog closes during handle creation. Defer the base disposal until CreateHandle() finished.
+    protected override void CreateHandle()
+    {
+        creatingHandle = true;
+        try
+        {
+            base.CreateHandle();
+        }
+        finally
+        {
+            creatingHandle = false;
+            if (disposePending)
+            {
+                disposePending = false;
+                Dispose(true);
+            }
+        }
+    }
+
     protected override void Dispose(bool disposing)
     {
         if (disposing)
         {
             history.Dispose();
+        }
+
+        if (disposing && creatingHandle)
+        {
+            disposePending = true;
+            return;
         }
 
         base.Dispose(disposing);

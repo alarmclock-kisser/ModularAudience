@@ -1,4 +1,5 @@
 using System.Globalization;
+using ModularAudience.Audio.Synthesis.Runtime;
 
 namespace ModularAudience.Audio.Synthesis;
 
@@ -7,6 +8,10 @@ public static class InstrumentSampleSynth
 {
     public static AudioObj Render(InstrumentSynthSettings settings, CancellationToken token = default)
     {
+        if (settings.Family == SynthFamily.Custom)
+        {
+            return RenderCustom(settings, token);
+        }
         settings.Validate(); token.ThrowIfCancellationRequested();
         var s = settings.Clone(); int rate = s.SampleRate, channels = s.Channels;
         int frames = checked((int)Math.Ceiling((s.GateSeconds + s.ReleaseSeconds) * rate));
@@ -100,6 +105,50 @@ public static class InstrumentSampleSynth
         };
         string pitch = s.PitchSemitones == 0 ? "" : $" {s.PitchSemitones.ToString("+0.##;-0.##", CultureInfo.InvariantCulture)} st";
         result.Rename($"{s.VoiceName} · {note}{pitch} · {s.KeyDurationName} [{s.Bpm.ToString("0.##", CultureInfo.InvariantCulture)}]");
+        return result;
+    }
+
+    public static AudioObj RenderCustom(InstrumentSynthSettings settings, CancellationToken token = default)
+    {
+        token.ThrowIfCancellationRequested();
+        string instrumentName = settings.CustomInstrumentName;
+        if (string.IsNullOrWhiteSpace(instrumentName))
+        {
+            instrumentName = InstrumentSynthCatalog.Voices(SynthFamily.Custom)[settings.VoiceIndex].Name;
+        }
+
+        // Load and compile the custom instrument from the store.
+        var descriptor = CustomInstrumentStore.Shared.Load(instrumentName);
+        var compiler = new SynthCompiler();
+        var compileResult = compiler.Compile(descriptor.Code, token);
+        if (!compileResult.IsSuccess)
+        {
+            throw new InvalidOperationException($"Custom instrument '{instrumentName}' failed to compile: {string.Join(" | ", compileResult.Errors)}");
+        }
+
+        var synth = new CustomInstrumentSynth(descriptor, compileResult.Assembly!);
+        var safeSynth = new SynthSandboxDecorator(synth);
+
+        int rate = settings.SampleRate;
+        int channels = settings.Channels;
+        int frames = checked((int)Math.Ceiling((settings.GateSeconds + settings.ReleaseSeconds) * rate));
+        var data = new float[checked(frames * channels)];
+        int written = safeSynth.Render(data, frames, token);
+
+        var result = new AudioObj
+        {
+            Data = data[..written],
+            SampleRate = rate,
+            Channels = channels,
+            BitDepth = 32,
+            Length = written,
+            Duration = TimeSpan.FromSeconds(frames / (double)rate),
+            Bpm = (float)settings.Bpm,
+            Volume = 100
+        };
+        result.Rename($"{instrumentName} · {NoteName(settings.MidiNote)} · {settings.KeyDurationName} [{settings.Bpm.ToString("0.##", CultureInfo.InvariantCulture)}]");
+
+        compiler.Dispose();
         return result;
     }
 

@@ -16,6 +16,7 @@ public sealed class CustomInstrumentDescriptor
     public int Channels { get; set; } = 2;
     public double GainPercent { get; set; } = 75;
     public int MidiNote { get; set; } = 60;
+    public double PitchSemitones { get; set; } = 0;
     public double Bpm { get; set; } = 120;
     public double NoteBeats { get; set; } = 1;
     public DateTime CreatedAt { get; set; } = DateTime.UtcNow;

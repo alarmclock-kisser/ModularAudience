@@ -10,6 +10,7 @@ using System.Drawing.Imaging;
 using System.IO;
 using System.Linq;
 using System.Reflection;
+using System.Text;
 using System.Text.RegularExpressions;
 using System.Threading;
 using System.Threading.Tasks;
@@ -61,7 +62,7 @@ public sealed class SynthRefinementProgress
 }
 
 /// <summary>
-/// Orchestrates the LLM refinement loop: render → critique → compile → hot-swap → repeat.
+/// Orchestrates the LLM refinement loop: render -> critique -> compile -> hot-swap -> repeat.
 /// Runs entirely on background threads; all UI marshalling is delegated to the caller via IProgress.
 /// </summary>
 public sealed class SynthRefinementOrchestrator : IDisposable
@@ -87,6 +88,7 @@ public sealed class SynthRefinementOrchestrator : IDisposable
     public event Action<SynthRefinementProgress>? ProgressChanged;
     public event Action<SynthRefinementIteration>? IterationCompleted;
     public event Action<IRuntimeProceduralSynth>? HotSwapped;
+    public event Action<string>? CodeStreaming;
 
     public SynthRefinementState State
     {
@@ -187,7 +189,7 @@ public sealed class SynthRefinementOrchestrator : IDisposable
                 int iterationNum = this.currentIteration;
 
                 Report(SynthRefinementState.Rendering, iterationNum,
-                    $"Rendering iteration {iterationNum} of {this.maxIterations}…", 0.1);
+                    $"Rendering iteration {iterationNum} of {this.maxIterations}...", 0.1);
 
                 // --- Phase 1: Render current code to audio ---
                 var renderSw = System.Diagnostics.Stopwatch.StartNew();
@@ -206,8 +208,30 @@ public sealed class SynthRefinementOrchestrator : IDisposable
 
                 if (rendered == null || rendered.Data.Length == 0)
                 {
-                    ReportFault("Render produced empty audio.");
-                    return;
+                    // If no code exists yet (first iteration), skip rendering and let LLM generate from scratch.
+                    if (string.IsNullOrWhiteSpace(this.descriptor.Code))
+                    {
+                        // Generate silence buffer for the LLM to compare against reference.
+                        int sr = this.descriptor.SampleRate;
+                        int ch = this.descriptor.Channels;
+                        int frames = (int)Math.Ceiling(GateSeconds() * sr);
+                        rendered = new AudioObj
+                        {
+                            Data = new float[frames * ch],
+                            SampleRate = sr,
+                            Channels = ch,
+                            BitDepth = 32,
+                            Length = frames * ch,
+                            Duration = TimeSpan.FromSeconds(frames / (double)sr),
+                            Volume = 100
+                        };
+                        rendered.Rename(this.descriptor.Name);
+                    }
+                    else
+                    {
+                        ReportFault("Render produced empty audio.");
+                        return;
+                    }
                 }
 
                 float peak = 0f;
@@ -224,7 +248,7 @@ public sealed class SynthRefinementOrchestrator : IDisposable
 
                 // --- Phase 2: Analyze with LLM ---
                 Report(SynthRefinementState.AnalyzingWithLlm, iterationNum,
-                    "Asking LLM for critique and improved DSP code…", 0.4);
+                    "Asking LLM for critique and improved DSP code...", 0.4);
 
                 byte[] referenceWav = await LoadReferenceWavAsync(token);
                 byte[] synthesizedWav = AudioObjToWavBytes(rendered);
@@ -234,9 +258,19 @@ public sealed class SynthRefinementOrchestrator : IDisposable
                 string? llmResponse;
                 try
                 {
-                    llmResponse = await this.llm.SendMultimodalSynthPromptAsync(
+                    var accumulated = new StringBuilder();
+                    llmResponse = await this.llm.SendMultimodalSynthPromptStreamingAsync(
                         referenceWav, synthesizedWav, spectrogramPng,
-                        BuildSynthPrompt(iterationNum), this.includeSpectrogram);
+                        BuildSynthPrompt(iterationNum), this.includeSpectrogram,
+                        chunk =>
+                        {
+                            accumulated.Append(chunk);
+                            CodeStreaming?.Invoke(accumulated.ToString());
+                        });
+                    if (llmResponse == null && accumulated.Length > 0)
+                    {
+                        llmResponse = accumulated.ToString();
+                    }
                 }
                 catch (OperationCanceledException) { break; }
                 catch (Exception ex)
@@ -257,7 +291,7 @@ public sealed class SynthRefinementOrchestrator : IDisposable
                 }
 
                 Report(SynthRefinementState.Compiling, iterationNum,
-                    "Compiling improved DSP code…", 0.7);
+                    "Compiling improved DSP code...", 0.7);
 
                 var compileSw = System.Diagnostics.Stopwatch.StartNew();
                 CompileResult compileResult;
@@ -300,7 +334,7 @@ public sealed class SynthRefinementOrchestrator : IDisposable
 
                 // --- Phase 4: Hot-swap into live playback ---
                 Report(SynthRefinementState.HotSwapping, iterationNum,
-                    "Hot-swapping into live synth slot…", 0.9);
+                    "Hot-swapping into live synth slot...", 0.9);
 
                 try
                 {
@@ -339,14 +373,27 @@ public sealed class SynthRefinementOrchestrator : IDisposable
             if (this.State != SynthRefinementState.Cancelled &&
                 this.State != SynthRefinementState.Faulted)
             {
-                Report(SynthRefinementState.Completed, this.currentIteration,
-                    "Refinement complete.", 1.0);
+                ProgressChanged?.Invoke(new SynthRefinementProgress
+                {
+                    State = SynthRefinementState.Completed,
+                    Iteration = this.currentIteration,
+                    MaxIterations = this.maxIterations,
+                    Message = "Refinement complete.",
+                    Progress01 = 1.0
+                });
             }
         }
         catch (OperationCanceledException)
         {
             lock (this.stateGate) { this.state = SynthRefinementState.Cancelled; }
-            Report(SynthRefinementState.Cancelled, this.currentIteration, "Cancelled.", 1.0);
+            ProgressChanged?.Invoke(new SynthRefinementProgress
+            {
+                State = SynthRefinementState.Cancelled,
+                Iteration = this.currentIteration,
+                MaxIterations = this.maxIterations,
+                Message = "Cancelled.",
+                Progress01 = 1.0
+            });
         }
         catch (Exception ex)
         {
@@ -358,6 +405,26 @@ public sealed class SynthRefinementOrchestrator : IDisposable
 
     private async Task<AudioObj> RenderCurrentAsync(CancellationToken token)
     {
+        if (string.IsNullOrWhiteSpace(this.descriptor.Code))
+        {
+            // No code yet - return silence for the first LLM generation.
+            int sr = this.descriptor.SampleRate;
+            int ch = this.descriptor.Channels;
+            int frames = (int)Math.Ceiling(GateSeconds() * sr);
+            var silence = new AudioObj
+            {
+                Data = new float[frames * ch],
+                SampleRate = sr,
+                Channels = ch,
+                BitDepth = 32,
+                Length = frames * ch,
+                Duration = TimeSpan.FromSeconds(frames / (double)sr),
+                Volume = 100
+            };
+            silence.Rename(this.descriptor.Name);
+            return silence;
+        }
+
         if (this.activeSynth != null)
         {
             int sampleRate = this.activeSynth.SampleRate;
@@ -439,6 +506,11 @@ public sealed class SynthRefinementOrchestrator : IDisposable
 Here is the code that failed:
 
 {failedCode}
+
+Keep this exact contract:
+{SynthContract.RequiredUsing}
+{SynthContract.ExpectedSignature}
+DTO shape (compact reference only, do NOT redeclare it): {SynthContract.DtoShape}
 
 Please fix the compilation errors and return only the corrected C# code in a ```csharp block. Do not change the algorithm logic, only fix syntax/type errors so it compiles under the restricted sandbox (no System.IO, System.Net, System.Reflection, DllImport, unsafe).";
 
@@ -542,19 +614,26 @@ MIDI note: {this.descriptor.MidiNote}, BPM: {this.descriptor.Bpm}, Note beats: {
 
 User refinement request: {this.UserPrompt}
 
-Current C# code:
+Current C# code (empty on first iteration - generate from scratch):
 ```csharp
 {this.descriptor.Code}
 ```
 
-Listen to the reference audio (input_audio[0]) and the current synthesized output (input_audio[1]){(this.includeSpectrogram ? ", and review the spectrogram image (image_url)" : "")}.
+Listen to the reference audio (input_audio[0]) and{(string.IsNullOrWhiteSpace(this.descriptor.Code) ? " generate a matching instrument from scratch" : " the current synthesized output (input_audio[1])")}{(this.includeSpectrogram ? ", and review the spectrogram image (image_url)" : "")}.
 
-Return improved C# code in a ```csharp code block. The code must:
-- Define a public class with a public static (or instance) method: public static float[] Render(int sampleRate, int channels, int frameCount, double noteFrequencyHz)
-- Return interleaved float32 PCM in [-1, 1]
+Return {(string.IsNullOrWhiteSpace(this.descriptor.Code) ? "new" : "improved")} C# code in a ```csharp code block. The code must:
+- Start with {SynthContract.RequiredUsing}
+- Define a public class named CustomSynth with exactly: {SynthContract.ExpectedSignature}
+- Use the host-provided SynthRenderContext; do NOT declare it yourself
+- DTO shape (compact reference only): {SynthContract.DtoShape}
+- Access parameters via ctx.SampleRate, ctx.Channels, ctx.FrameCount, ctx.NoteFrequencyHz, ctx.Bpm, ctx.NoteBeats, ctx.GateSeconds, ctx.MidiNote, ctx.GainPercent, ctx.PitchSemitones
+- Return interleaved float32 PCM in [-1, 1] (array length = ctx.FrameCount * ctx.Channels)
 - NOT use System.IO, System.Net, System.Reflection, DllImport, unsafe, or any process/file/network APIs
 - Only use System.Math, System.Numerics, and basic arithmetic
 - Be a complete, compilable C# file with the class and method
+
+Exact method header: {SynthContract.ExpectedSignature}
+Use System.Math for trigonometry and envelopes.
 
 Focus on timbre, envelope, and spectral match to the reference. Return ONLY the code block, no explanation.";
     }
@@ -593,7 +672,12 @@ Focus on timbre, envelope, and spectral match to the reference. Return ONLY the 
 
     private void Report(SynthRefinementState state, int iteration, string? message, double progress01, bool isWarning = false)
     {
-        lock (this.stateGate) { this.state = state; }
+        lock (this.stateGate)
+        {
+            // Don't overwrite Cancelled state.
+            if (this.state == SynthRefinementState.Cancelled) return;
+            this.state = state;
+        }
         ProgressChanged?.Invoke(new SynthRefinementProgress
         {
             State = state,
@@ -606,7 +690,12 @@ Focus on timbre, envelope, and spectral match to the reference. Return ONLY the 
 
     private void ReportFault(string message)
     {
-        lock (this.stateGate) { this.state = SynthRefinementState.Faulted; }
+        lock (this.stateGate)
+        {
+            if (this.state == SynthRefinementState.Cancelled) return;
+            this.state = SynthRefinementState.Faulted;
+        }
+        if (this.State == SynthRefinementState.Cancelled) return;
         ProgressChanged?.Invoke(new SynthRefinementProgress
         {
             State = SynthRefinementState.Faulted,

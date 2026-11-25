@@ -1,8 +1,9 @@
 using System.Globalization;
+using ModularAudience.Audio.Synthesis.Runtime;
 
 namespace ModularAudience.Audio.Synthesis;
 
-public enum SynthFamily { Keyboard, DrumSet, Woodwinds, Brass, PluckedStrings, BowedStrings, MalletsAndBells, Organ, SynthBassAndLead, SynthPadsAndPoly, SynthKeysAndPlucks, OtherSoundFx, OrientalSounds }
+public enum SynthFamily { Keyboard, DrumSet, Woodwinds, Brass, PluckedStrings, BowedStrings, MalletsAndBells, Organ, SynthBassAndLead, SynthPadsAndPoly, SynthKeysAndPlucks, OtherSoundFx, OrientalSounds, Custom }
 public enum SynthDrum { Kick, BassDrum, Snare, SnareRattle, Rimshot, Clap, ClosedHiHat, OpenHiHat, LowTom, MidTom, HighTom, Ride, Crash, Cowbell, Shaker, PedalHiHat }
 
 public sealed record SynthVoice(string Name, double Brightness, double Decay, double Release, double Body, double Noise, double Drive, double Detune, double Vibrato)
@@ -27,6 +28,7 @@ public static class InstrumentSynthCatalog
         SynthFamily.SynthKeysAndPlucks => "Synth Keys & Plucks",
         SynthFamily.OtherSoundFx => "Other Sound FX",
         SynthFamily.OrientalSounds => "Oriental Sounds",
+        SynthFamily.Custom => "Custom Instruments",
         _ => family.ToString()
     };
     public static string DrumName(SynthDrum drum) => drum switch
@@ -70,6 +72,7 @@ public static class InstrumentSynthCatalog
         SynthFamily.SynthKeysAndPlucks => SynthKeys,
         SynthFamily.OtherSoundFx => SoundFx,
         SynthFamily.OrientalSounds => Oriental,
+        SynthFamily.Custom => CustomVoices(),
         _ => Keyboards
     };
     private static readonly SynthVoice[] Keyboards =
@@ -185,6 +188,16 @@ public static class InstrumentSynthCatalog
         new("Alarm Siren", 62, 1.8, 0.2, 45, 0, 10, 0, 0),
         new("Radio Static", 95, 0.7, 0.18, 22, 95, 10, 0, 0)
     ];
+    public static IReadOnlyList<SynthVoice> CustomVoices()
+    {
+        var names = CustomInstrumentStore.Shared.Names();
+        if (names.Length == 0)
+        {
+            return [new SynthVoice("No custom instruments", 50, 1, 0.5, 50, 10, 0, 0, 0)];
+        }
+        return names.Select(n => new SynthVoice(n, 50, 1, 0.5, 50, 10, 0, 0, 0)).ToArray();
+    }
+
     private static readonly SynthVoice[] Oriental =
     [
         new("Zurna", 96, 2.1, 0.25, 35, 18, 18, 0, 8),
@@ -208,6 +221,7 @@ public sealed class InstrumentSynthSettings
     ];
     public SynthFamily Family { get; set; }
     public int VoiceIndex { get; set; }
+    public string CustomInstrumentName { get; set; } = "";
     public int KitIndex { get; set; }
     public SynthDrum Drum { get; set; }
     public int MidiNote { get; set; } = 60;
@@ -239,7 +253,7 @@ public sealed class InstrumentSynthSettings
     public int SampleRate { get; set; } = 44100;
     public int Channels { get; set; } = 2;
     public double GateSeconds => 60 / Bpm * NoteBeats * DurationMultiplier;
-    public string VoiceName => Family == SynthFamily.DrumSet ? $"{InstrumentSynthCatalog.DrumKits[KitIndex].Name} {InstrumentSynthCatalog.DrumName(Drum)}" : InstrumentSynthCatalog.Voices(Family)[VoiceIndex].Name;
+    public string VoiceName => Family == SynthFamily.DrumSet ? $"{InstrumentSynthCatalog.DrumKits[KitIndex].Name} {InstrumentSynthCatalog.DrumName(Drum)}" : Family == SynthFamily.Custom ? (string.IsNullOrWhiteSpace(CustomInstrumentName) ? InstrumentSynthCatalog.Voices(Family)[VoiceIndex].Name : CustomInstrumentName) : InstrumentSynthCatalog.Voices(Family)[VoiceIndex].Name;
     public string KeyDurationName
     {
         get
@@ -256,6 +270,10 @@ public sealed class InstrumentSynthSettings
     public InstrumentSynthSettings Clone() => (InstrumentSynthSettings)MemberwiseClone();
     public void ApplyVoiceDefaults()
     {
+        if (Family == SynthFamily.Custom)
+        {
+            return;
+        }
         var voice = InstrumentSynthCatalog.Voices(Family)[VoiceIndex];
         Brightness = voice.Brightness; DecaySeconds = voice.Decay; ReleaseSeconds = voice.Release;
         Body = voice.Body; Noise = voice.Noise; Drive = voice.Drive; DetuneCents = voice.Detune; VibratoCents = voice.Vibrato;
@@ -393,7 +411,7 @@ public sealed class InstrumentSynthSettings
     }
     public void Validate()
     {
-        if (!Enum.IsDefined(Family) || !Enum.IsDefined(Drum) || VoiceIndex < 0 || VoiceIndex >= InstrumentSynthCatalog.Voices(Family).Count
+        if (!Enum.IsDefined(Family) || !Enum.IsDefined(Drum) || (Family != SynthFamily.Custom && (VoiceIndex < 0 || VoiceIndex >= InstrumentSynthCatalog.Voices(Family).Count))
             || KitIndex < 0 || KitIndex >= InstrumentSynthCatalog.DrumKits.Count || MidiNote is < 0 or > 127
             || SampleRate is not (22050 or 44100 or 48000 or 96000) || Channels is < 1 or > 2 || Seed < 0)
         {

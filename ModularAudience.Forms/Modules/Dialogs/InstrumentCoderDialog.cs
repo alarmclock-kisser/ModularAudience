@@ -1,4 +1,5 @@
 using ModularAudience.Audio;
+using ModularAudience.Audio.Synthesis;
 using ModularAudience.Audio.Synthesis.Runtime;
 using ModularAudience.Forms.Synthesis.Runtime;
 
@@ -17,7 +18,7 @@ namespace ModularAudience.Forms.Modules.Dialogs;
 
 /// <summary>
 /// Non-modal dialog for LLM-driven procedural instrument synthesis.
-/// Runs a render → critique → compile → hot-swap refinement loop against a local
+/// Runs a render -> critique -> compile -> hot-swap refinement loop against a local
 /// llama-server, with all UI marshalling via SynchronizationContext / IProgress.
 /// </summary>
 public sealed partial class InstrumentCoderDialog : Form
@@ -37,11 +38,12 @@ public sealed partial class InstrumentCoderDialog : Form
     private readonly ComboBox referenceAudioCombo = new() { DropDownStyle = ComboBoxStyle.DropDownList, Width = 260 };
     private readonly Button referencePlayButton = new() { Text = "Play", AutoSize = true, Enabled = false };
     private readonly TextBox promptText = new() { Multiline = true, Height = 90, Width = 500 };
-    private readonly TextBox serverUrlText = new() { Text = "http://127.0.0.1:8080", Width = 200 };
+    private readonly TextBox serverUrlText = new() { Text = "http://localhost:9931", Width = 200 };
     private readonly ComboBox modelCombo = new() { DropDownStyle = ComboBoxStyle.DropDownList, Width = 200 };
     private readonly NumericUpDown maxIterations = new() { Minimum = 1, Maximum = 50, Value = 10, Width = 80 };
     private readonly CheckBox includeSpectrogram = new() { Text = "Include Spectrogram Image", Checked = true, AutoSize = true };
     private readonly Button startButton = new() { Text = "Start Auto-Refine (send prompt to LLM)", AutoSize = true };
+    private readonly Button setPromptButton = new() { Text = "Set Instrument Prompt...", AutoSize = true };
     private readonly Button stopButton = new() { Text = "Stop / Cancel", AutoSize = true, Enabled = false };
     private readonly Button compileButton = new() { Text = "Compile & Audition Current Code", AutoSize = true };
     private readonly Button loadButton = new() { Text = "Load into Active Synth Slot", AutoSize = true };
@@ -55,12 +57,12 @@ public sealed partial class InstrumentCoderDialog : Form
     private AudioObj? referenceAudio;
     private WaveOut? referenceOutput;
     private readonly Dictionary<string, AudioObj> referenceAudioMap = new();
+    private TextBox? instrumentNameBox;
 
     // Settings persistence
     private static string SettingsPath => Path.Combine(
         Environment.GetFolderPath(Environment.SpecialFolder.ApplicationData),
         "ModularAudience", "InstrumentCoder", "settings.json");
-    private CustomInstrumentSynthWindow? synthWindow;
     private bool disposed;
 
     public InstrumentCoderDialog(
@@ -71,6 +73,7 @@ public sealed partial class InstrumentCoderDialog : Form
     {
         this.uiContext = SynchronizationContext.Current ?? new SynchronizationContext();
         this.llm = llm ?? new LlamaConnector();
+        this.llm.Logger = line => AddLogLine($"[Llama] {line}");
         this.compiler = compiler ?? new SynthCompiler();
         this.store = store ?? CustomInstrumentStore.Shared;
         this.host = host ?? new CustomInstrumentSynthHost(new CustomInstrumentDescriptor("New Instrument", ""));
@@ -82,7 +85,7 @@ public sealed partial class InstrumentCoderDialog : Form
 
         WireOrchestratorEvents();
 
-        Text = "Instrument Coder — Runtime Procedural Synthesizer"; Name = "InstrumentCoderDialog";
+        Text = "Instrument Coder - Runtime Procedural Synthesizer"; Name = "InstrumentCoderDialog";
         ClientSize = new Size(1100, 820); MinimumSize = new Size(900, 700); StartPosition = FormStartPosition.CenterScreen;
         BuildUi();
 
@@ -90,6 +93,7 @@ public sealed partial class InstrumentCoderDialog : Form
         includeSpectrogram.CheckedChanged += (_, _) => { orchestrator.IncludeSpectrogram = includeSpectrogram.Checked; };
 
         startButton.Click += async (_, _) => await StartRefineAsync();
+        setPromptButton.Click += (_, _) => ShowInstrumentPromptDialog();
         stopButton.Click += (_, _) => StopRefine();
         compileButton.Click += async (_, _) => await CompileAndAuditionAsync();
         loadButton.Click += (_, _) => LoadIntoActiveSlot();
@@ -120,6 +124,8 @@ public sealed partial class InstrumentCoderDialog : Form
         };
 
         LoadSettings();
+        AddLogLine("Instrument Coder dialog opened.");
+        try { ModularAudience.Audio.LogManager.Log("[InstrumentCoder] Dialog opened."); } catch (Exception ex) { Console.WriteLine($"LogManager.Log failed: {ex}"); }
 
         Disposed += (_, _) =>
         {
@@ -172,6 +178,7 @@ public sealed partial class InstrumentCoderDialog : Form
         promptLayout.Controls.Add(new Label { Text = "Instrument name:", AutoSize = true }, 0, 0);
         var instrumentName = new TextBox { Text = this.host.Descriptor.Name, Width = 250 };
         instrumentName.TextChanged += (_, _) => { this.host.Descriptor.Name = instrumentName.Text; };
+        this.instrumentNameBox = instrumentName;
         promptLayout.Controls.Add(instrumentName, 1, 0);
         promptLayout.Controls.Add(new Label { Text = "Refinement prompt:", AutoSize = true }, 0, 1);
         promptLayout.Controls.Add(promptText, 1, 1);
@@ -198,6 +205,7 @@ public sealed partial class InstrumentCoderDialog : Form
 
         // Row 3: Action buttons
         var actionBar = new FlowLayoutPanel { AutoSize = true, WrapContents = true, FlowDirection = FlowDirection.LeftToRight };
+        actionBar.Controls.Add(setPromptButton);
         actionBar.Controls.Add(startButton);
         actionBar.Controls.Add(stopButton);
         actionBar.Controls.Add(compileButton);
@@ -249,7 +257,8 @@ public sealed partial class InstrumentCoderDialog : Form
         {
             uiContext.Post(_ =>
             {
-                statusLabel.Text = $"{progress.State} · {progress.Message}";
+                LogMultiline($"{progress.State}: {progress.Message}");
+                statusLabel.Text = $"{progress.State} | {progress.Message}";
                 if (progress.State == SynthRefinementState.Rendering ||
                     progress.State == SynthRefinementState.AnalyzingWithLlm ||
                     progress.State == SynthRefinementState.Compiling ||
@@ -268,7 +277,7 @@ public sealed partial class InstrumentCoderDialog : Form
                 RefreshIterationList();
                 AddLogLine($"Iteration {iteration.Index}: {iteration.State}");
                 if (!string.IsNullOrEmpty(iteration.LlmCritique))
-                    AddLogLine($"  LLM critique ({iteration.LlmLatency.TotalSeconds:0.##}s): {iteration.LlmCritique[..Math.Min(200, iteration.LlmCritique.Length)]}…");
+                    AddLogLine($"  LLM critique ({iteration.LlmLatency.TotalSeconds:0.##}s): {iteration.LlmCritique[..Math.Min(200, iteration.LlmCritique.Length)]}...");
                 if (!string.IsNullOrEmpty(iteration.CompileError))
                     AddLogLine($"  Compile error ({iteration.CompileTime.TotalSeconds:0.##}s): {iteration.CompileError}");
                 if (iteration.State == SynthRefinementState.HotSwapping)
@@ -285,14 +294,47 @@ public sealed partial class InstrumentCoderDialog : Form
                 statusLabel.Text = "Synth hot-swapped into active slot.";
             }, null);
         };
+
+        orchestrator.CodeStreaming += partialCode =>
+        {
+            uiContext.Post(_ =>
+            {
+                codeBox.Text = partialCode;
+            }, null);
+        };
     }
 
     private void AddLogLine(string line)
     {
         if (disposed || IsDisposed) return;
-        logList.Items.Add($"[{DateTime.Now:HH:mm:ss}] {line}");
-        logList.TopIndex = logList.Items.Count - 1;
+        string stamped = $"[{DateTime.Now:HH:mm:ss}] {line}";
+
+        void AppendToUi()
+        {
+            if (disposed || IsDisposed) return;
+            logList.Items.Add(stamped);
+            logList.TopIndex = logList.Items.Count - 1;
+        }
+
+        if (uiContext != SynchronizationContext.Current)
+        {
+            uiContext.Post(_ => AppendToUi(), null);
+        }
+        else
+        {
+            AppendToUi();
+        }
+
         Console.WriteLine($"[InstrumentCoderDialog] {line}");
+        try { ModularAudience.Audio.LogManager.Log($"[InstrumentCoder] {line}"); } catch { }
+    }
+
+    private void LogMultiline(string text)
+    {
+        foreach (string line in text.Replace("\r\n", "\n").Split('\n'))
+        {
+            if (!string.IsNullOrWhiteSpace(line)) AddLogLine(line.TrimEnd());
+        }
     }
 
     private void ShowCopyableError(string title, string message)
@@ -338,7 +380,7 @@ public sealed partial class InstrumentCoderDialog : Form
         for (int i = 0; i < orchestrator.History.Count; i++)
         {
             var it = orchestrator.History[i];
-            iterationList.Items.Add($"Iteration {it.Index} · {it.State}");
+            iterationList.Items.Add($"Iteration {it.Index} | {it.State}");
         }
         if (iterationList.Items.Count > 0) iterationList.SelectedIndex = iterationList.Items.Count - 1;
     }
@@ -416,13 +458,18 @@ public sealed partial class InstrumentCoderDialog : Form
                     modelCombo.Items.Clear();
                     foreach (var model in dataArr.EnumerateArray())
                     {
+                        // Try "id" first, then "name", then "model".
+                        string? modelId = null;
                         if (model.TryGetProperty("id", out var idProp) && idProp.ValueKind == System.Text.Json.JsonValueKind.String)
+                            modelId = idProp.GetString();
+                        else if (model.TryGetProperty("name", out var nameProp) && nameProp.ValueKind == System.Text.Json.JsonValueKind.String)
+                            modelId = nameProp.GetString();
+                        else if (model.TryGetProperty("model", out var modelProp) && modelProp.ValueKind == System.Text.Json.JsonValueKind.String)
+                            modelId = modelProp.GetString();
+
+                        if (!string.IsNullOrWhiteSpace(modelId) && !modelCombo.Items.Contains(modelId))
                         {
-                            string? modelId = idProp.GetString();
-                            if (!string.IsNullOrWhiteSpace(modelId))
-                            {
-                                modelCombo.Items.Add(modelId);
-                            }
+                            modelCombo.Items.Add(modelId);
                         }
                     }
                     if (modelCombo.Items.Count > 0 && modelCombo.SelectedIndex < 0)
@@ -431,26 +478,23 @@ public sealed partial class InstrumentCoderDialog : Form
                     }
                 }
             }
-            catch { /* Ignore parse errors */ }
-
-            // Now test the chat completions endpoint with a simple text prompt.
-            var testConnector = new LlamaConnector(url);
-            byte[] testWav = await CreateTestToneWavAsync();
-            string tempPath = Path.Combine(Path.GetTempPath(), "test_tone.wav");
-            await File.WriteAllBytesAsync(tempPath, testWav);
-            var testAudio = AudioObj.FromFile(tempPath);
-            if (testAudio == null)
+            catch (Exception ex)
             {
-                throw new InvalidOperationException("Could not load test audio file.");
+                AddLogLine($"LLM model list could not be parsed: {ex.Message}");
             }
 
-            string? result = await testConnector.SendAudioAsync(
-                testAudio,
-                "Respond with just 'OK' if you can hear this audio.");
+            // Test the chat completions endpoint with a text-only request (no audio).
+            // Audio content types may not be supported by all server versions.
+            var testConnector = new LlamaConnector(url)
+            {
+                Model = modelCombo.SelectedItem as string ?? this.llm.Model
+            };
+            testConnector.Logger = line => AddLogLine($"[Llama] {line}");
+            string? result = await TestTextCompletionAsync(testConnector);
 
             if (result != null)
             {
-                AddLogLine($"LLM connection test: OK — {result}");
+                AddLogLine($"LLM connection test: OK - {result}");
                 statusLabel.Text = "Connected.";
             }
             else
@@ -465,7 +509,55 @@ public sealed partial class InstrumentCoderDialog : Form
             Console.WriteLine($"[InstrumentCoderDialog] Connection test failed: {fullError}");
             AddLogLine($"LLM connection test failed: {ex.Message}");
             statusLabel.Text = "Connection failed.";
+            try { ModularAudience.Audio.LogManager.Log($"[InstrumentCoder] Connection test failed: {fullError}"); } catch { }
             ShowCopyableError("LLM Connection Error", fullError);
+        }
+    }
+
+    private async Task<string?> TestTextCompletionAsync(LlamaConnector connector)
+    {
+        // Send a direct text-only request so unsupported audio content cannot break the test.
+        try
+        {
+            using var httpClient = CreateLlmHttpClient();
+            httpClient.Timeout = TimeSpan.FromSeconds(30);
+            string normalizedUrl = connector.ApiUrl.TrimEnd('/');
+            string chatUrl = normalizedUrl + "/v1/chat/completions";
+
+            var payload = new
+            {
+                model = connector.Model,
+                messages = new[] { new { role = "user", content = "Respond with just 'OK'." } },
+                temperature = 0.2,
+                max_tokens = 50,
+                stream = false
+            };
+
+            string json = System.Text.Json.JsonSerializer.Serialize(payload);
+            using var content = new StringContent(json, System.Text.Encoding.UTF8, "application/json");
+            using var response = await httpClient.PostAsync(chatUrl, content);
+
+            if (!response.IsSuccessStatusCode)
+            {
+                string errorBody = await response.Content.ReadAsStringAsync();
+                Console.WriteLine($"[InstrumentCoderDialog] Chat test failed: {(int)response.StatusCode} {errorBody}");
+                AddLogLine($"Chat test HTTP {(int)response.StatusCode}: {errorBody[..Math.Min(200, errorBody.Length)]}");
+                return null;
+            }
+
+            string responseJson = await response.Content.ReadAsStringAsync();
+            using var doc = System.Text.Json.JsonDocument.Parse(responseJson);
+            return doc.RootElement
+                .GetProperty("choices")[0]
+                .GetProperty("message")
+                .GetProperty("content")
+                .GetString()?.Trim();
+        }
+        catch (Exception ex)
+        {
+            Console.WriteLine($"[InstrumentCoderDialog] Text completion test failed: {ex}");
+            AddLogLine($"Text completion test failed: {ex.Message}");
+            return null;
         }
     }
 
@@ -492,22 +584,18 @@ public sealed partial class InstrumentCoderDialog : Form
 
     private async Task StartRefineAsync()
     {
-        if (string.IsNullOrWhiteSpace(this.host.Descriptor.Code))
-        {
-            MessageBox.Show(this, "Enter some C# DSP code first.", "Instrument Coder", MessageBoxButtons.OK, MessageBoxIcon.Information);
-            return;
-        }
-
         AddLogLine("Starting auto-refine loop.");
-        statusLabel.Text = "Refining…";
+        statusLabel.Text = "Refining...";
 
         orchestrator.MaxIterations = (int)maxIterations.Value;
         orchestrator.IncludeSpectrogram = includeSpectrogram.Checked;
         orchestrator.UserPrompt = promptText.Text;
+        this.llm.SetApiUrl(serverUrlText.Text);
         if (modelCombo.SelectedItem is string selectedModel && !string.IsNullOrWhiteSpace(selectedModel))
         {
             this.llm.Model = selectedModel;
         }
+        AddLogLine($"Using LLM endpoint {this.llm.ApiUrl} with model '{this.llm.Model}'.");
         orchestrator.Start();
     }
 
@@ -529,7 +617,7 @@ public sealed partial class InstrumentCoderDialog : Form
             return;
         }
 
-        AddLogLine("Compiling current code…");
+        AddLogLine("Compiling current code...");
         var result = this.compiler.Compile(code, dialogCts.Token);
         if (!result.IsSuccess)
         {
@@ -550,7 +638,7 @@ public sealed partial class InstrumentCoderDialog : Form
         }
         catch (Exception ex)
         {
-            AddLogLine($"Load/audition failed: {ex.Message}");
+            LogMultiline($"Load/audition failed: {ex}");
             statusLabel.Text = "Load failed.";
         }
     }
@@ -591,15 +679,19 @@ public sealed partial class InstrumentCoderDialog : Form
 
     private async Task AuditionSynthAsync()
     {
-        if (synthWindow != null && !synthWindow.IsDisposed)
+        var settings = new InstrumentSynthSettings
         {
-            synthWindow.WindowState = FormWindowState.Normal;
-            synthWindow.BringToFront();
-            return;
-        }
-
-        synthWindow = new CustomInstrumentSynthWindow(host);
-        synthWindow.Show();
+            Family = SynthFamily.Custom,
+            CustomInstrumentName = this.host.Descriptor.Name,
+            SampleRate = this.host.Descriptor.SampleRate,
+            Channels = this.host.Descriptor.Channels,
+            MidiNote = this.host.Descriptor.MidiNote,
+            Bpm = this.host.Descriptor.Bpm,
+            GainPercent = this.host.Descriptor.GainPercent
+        };
+        var dialog = new InstrumentSampleSynthDialog(SynthFamily.Custom, initialSettings: settings);
+        dialog.Show();
+        dialog.Activate();
     }
 
     private async Task ToggleReferencePlaybackAsync()
@@ -633,9 +725,107 @@ public sealed partial class InstrumentCoderDialog : Form
         }
     }
 
+    private void ShowInstrumentPromptDialog()
+    {
+        using var dialog = new Form
+        {
+            Text = "Set Instrument Prompt",
+            StartPosition = FormStartPosition.CenterParent,
+            FormBorderStyle = FormBorderStyle.SizableToolWindow,
+            ClientSize = new Size(500, 320),
+            ShowInTaskbar = false
+        };
+
+        var layout = new TableLayoutPanel { Dock = DockStyle.Fill, ColumnCount = 2, RowCount = 4, Padding = new Padding(10) };
+        layout.ColumnStyles.Add(new(SizeType.AutoSize));
+        layout.ColumnStyles.Add(new(SizeType.Percent, 100));
+        layout.RowStyles.Add(new(SizeType.AutoSize));
+        layout.RowStyles.Add(new(SizeType.AutoSize));
+        layout.RowStyles.Add(new(SizeType.AutoSize));
+        layout.RowStyles.Add(new(SizeType.Percent, 100));
+
+        // Family ComboBox
+        var familyCombo = new ComboBox { DropDownStyle = ComboBoxStyle.DropDownList, Width = 200 };
+        foreach (var f in Enum.GetValues<SynthFamily>())
+        {
+            familyCombo.Items.Add(InstrumentSynthCatalog.FamilyName(f));
+        }
+        familyCombo.SelectedIndex = 0;
+
+        // Voice ComboBox
+        var voiceCombo = new ComboBox { DropDownStyle = ComboBoxStyle.DropDownList, Width = 200 };
+        void PopulateVoices()
+        {
+            voiceCombo.Items.Clear();
+            var family = (SynthFamily)familyCombo.SelectedIndex;
+            foreach (var v in InstrumentSynthCatalog.Voices(family))
+            {
+                voiceCombo.Items.Add(v.Name);
+            }
+            if (voiceCombo.Items.Count > 0) voiceCombo.SelectedIndex = 0;
+        }
+        PopulateVoices();
+        familyCombo.SelectedIndexChanged += (_, _) => PopulateVoices();
+
+        // Prompt text
+        var promptBox = new TextBox { Multiline = true, Height = 100, Dock = DockStyle.Fill };
+        promptBox.Text = promptText.Text;
+
+        // Optional: allow empty selection
+        var noneCheck = new CheckBox { Text = "From scratch (no base instrument)", AutoSize = true, Checked = string.IsNullOrWhiteSpace(promptText.Text) };
+        noneCheck.CheckedChanged += (_, _) =>
+        {
+            familyCombo.Enabled = !noneCheck.Checked;
+            voiceCombo.Enabled = !noneCheck.Checked;
+        };
+
+        layout.Controls.Add(new Label { Text = "Instrument family:", AutoSize = true }, 0, 0);
+        layout.Controls.Add(familyCombo, 1, 0);
+        layout.Controls.Add(new Label { Text = "Voice / subtype:", AutoSize = true }, 0, 1);
+        layout.Controls.Add(voiceCombo, 1, 1);
+        layout.Controls.Add(noneCheck, 0, 2);
+        layout.SetColumnSpan(noneCheck, 2);
+        layout.Controls.Add(new Label { Text = "Prompt:", AutoSize = true }, 0, 3);
+        layout.Controls.Add(promptBox, 1, 3);
+
+        var buttonPanel = new FlowLayoutPanel { Dock = DockStyle.Bottom, AutoSize = true, FlowDirection = FlowDirection.RightToLeft };
+        var okButton = new Button { Text = "OK", AutoSize = true };
+        var cancelButton = new Button { Text = "Cancel", AutoSize = true, DialogResult = DialogResult.Cancel };
+        okButton.Click += (_, _) =>
+        {
+            if (noneCheck.Checked)
+            {
+                promptText.Text = promptBox.Text;
+                if (instrumentNameBox != null) instrumentNameBox.Text = "Custom Instrument";
+            }
+            else
+            {
+                string familyName = InstrumentSynthCatalog.FamilyName((SynthFamily)familyCombo.SelectedIndex);
+                string voiceName = voiceCombo.SelectedItem?.ToString() ?? "";
+                string prefix = $"Create a synth inspired by {familyName} / {voiceName}. ";
+                promptText.Text = prefix + promptBox.Text;
+                if (instrumentNameBox != null) instrumentNameBox.Text = voiceName;
+            }
+            dialog.DialogResult = DialogResult.OK;
+            dialog.Close();
+        };
+        buttonPanel.Controls.Add(okButton);
+        buttonPanel.Controls.Add(cancelButton);
+
+        dialog.Controls.Add(layout);
+        dialog.Controls.Add(buttonPanel);
+        dialog.AcceptButton = okButton;
+        dialog.CancelButton = cancelButton;
+
+        if (dialog.ShowDialog(this) == DialogResult.OK)
+        {
+            AddLogLine($"Instrument prompt set: {promptText.Text[..Math.Min(80, promptText.Text.Length)]}...");
+        }
+    }
+
     private sealed class CoderSettings
     {
-        public string ServerUrl { get; set; } = "http://127.0.0.1:8080";
+        public string ServerUrl { get; set; } = "http://localhost:9931";
         public string Model { get; set; } = "";
         public int MaxIterations { get; set; } = 10;
         public bool IncludeSpectrogram { get; set; } = true;
@@ -674,8 +864,17 @@ public sealed partial class InstrumentCoderDialog : Form
                 int idx = referenceAudioCombo.Items.IndexOf(settings.SelectedReferenceAudio);
                 if (idx >= 0) referenceAudioCombo.SelectedIndex = idx;
             }
+
+            this.llm.SetApiUrl(serverUrlText.Text);
+            if (modelCombo.SelectedItem is string savedModel && !string.IsNullOrWhiteSpace(savedModel))
+            {
+                this.llm.Model = savedModel;
+            }
         }
-        catch { /* Ignore corrupt settings */ }
+        catch (Exception ex)
+        {
+            LogMultiline($"Instrument Coder settings could not be loaded: {ex}");
+        }
     }
 
     private void SaveSettings()
@@ -697,7 +896,10 @@ public sealed partial class InstrumentCoderDialog : Form
             string json = System.Text.Json.JsonSerializer.Serialize(settings, new System.Text.Json.JsonSerializerOptions { WriteIndented = true });
             File.WriteAllText(SettingsPath, json);
         }
-        catch { /* Ignore save errors */ }
+        catch (Exception ex)
+        {
+            LogMultiline($"Instrument Coder settings could not be saved: {ex}");
+        }
     }
 
     protected override void Dispose(bool disposing)
@@ -709,7 +911,6 @@ public sealed partial class InstrumentCoderDialog : Form
             referenceOutput?.Stop();
             referenceOutput?.Dispose();
             referenceAudio?.Dispose();
-            synthWindow?.Close();
             dialogCts.Dispose();
         }
         base.Dispose(disposing);
