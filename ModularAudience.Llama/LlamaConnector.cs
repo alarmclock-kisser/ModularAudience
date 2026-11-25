@@ -12,19 +12,31 @@ namespace ModularAudience.Llama
     public class LlamaConnector
     {
         public readonly string ApiUrl;
+        public string Model { get; set; } = "gemma-4";
         private readonly HttpClient _httpClient;
 
-        public LlamaConnector(string apiUrl = "http://127.0.0.1:8080")
+        public LlamaConnector(string apiUrl = "http://127.0.0.1:8080", string model = "gemma-4")
         {
-            this.ApiUrl = apiUrl;
+            // Normalize the URL: strip trailing /v1/, /v1, /v1/chat/completions, etc.
+            string url = apiUrl.Trim().TrimEnd('/');
+            int v1Index = url.IndexOf("/v1", StringComparison.OrdinalIgnoreCase);
+            if (v1Index >= 0)
+            {
+                url = url[..v1Index];
+            }
+            this.ApiUrl = url.TrimEnd('/');
+            this.Model = model;
 
             // Audio-Inferencing kann dauern, großzügiger Timeout
-            this._httpClient = new HttpClient { Timeout = TimeSpan.FromMinutes(3) };
+            var handler = new HttpClientHandler();
+            handler.ServerCertificateCustomValidationCallback = static (message, cert, chain, errors) =>
+                errors == System.Net.Security.SslPolicyErrors.None || message?.RequestUri?.IsLoopback == true;
+            this._httpClient = new HttpClient(handler) { Timeout = TimeSpan.FromMinutes(3) };
         }
 
         /// <summary>
-        /// Konvertiert ein AudioObj in Base64 und sendet es mit einem Prompt an das lokale multimodale Modell.
-        /// Nutzt den OpenAI-kompatiblen Endpunkt des llama-servers.
+        /// Sends an audio file as a legacy <c>audio_url</c> data URL block (backward compatible with
+        /// existing <see cref="AnalyzeTrackElementsAsync"/> callers).
         /// </summary>
         public async Task<string?> SendAudioAsync(AudioObj audio, string prompt = "Analyze the audio elements in this track.")
         {
@@ -47,7 +59,7 @@ namespace ModularAudience.Llama
                 // 2. Multimodal Payload nach OAI-Spec aufbauen
                 var payload = new
                 {
-                    model = "gemma-4", // llama.cpp ignoriert den Namen meist bei lokalem Hosting, erfordert aber das Feld
+                    model = this.Model, // llama.cpp ignoriert den Namen meist bei lokalem Hosting, erfordert aber das Feld
                     messages = new[]
                     {
                         new
@@ -87,6 +99,108 @@ namespace ModularAudience.Llama
             {
                 // Hier z.B. an den internen Logger weiterleiten
                 Console.WriteLine($"[LlamaConnector] Error sending audio: {ex.Message}");
+                return null;
+            }
+        }
+
+        /// <summary>
+        /// Sends a multimodal refinement prompt to the llama-server using OpenAI structured content blocks:
+        /// text + <c>input_audio</c> (base64 WAV, format "wav") for the reference and synthesized audio,
+        /// plus an optional <c>image_url</c> PNG spectrogram. Returns the model's text response (improved C# DSP code).
+        /// </summary>
+        /// <param name="referenceAudio">WAV bytes of the reference instrument sample.</param>
+        /// <param name="synthesizedAudio">WAV bytes of the current synth render.</param>
+        /// <param name="spectrogramPng">Optional PNG spectrogram bytes.</param>
+        /// <param name="prompt">Text instruction for the LLM.</param>
+        /// <param name="includeSpectrogram">Whether to attach the spectrogram image block.</param>
+        public virtual async Task<string?> SendMultimodalSynthPromptAsync(
+            byte[] referenceAudio,
+            byte[] synthesizedAudio,
+            byte[]? spectrogramPng,
+            string prompt,
+            bool includeSpectrogram = false)
+        {
+            if (referenceAudio == null || referenceAudio.Length == 0)
+            {
+                return null;
+            }
+            if (synthesizedAudio == null || synthesizedAudio.Length == 0)
+            {
+                return null;
+            }
+
+            try
+            {
+                var contentBlocks = new List<object>
+                {
+                    new { type = "text", text = prompt },
+                    new
+                    {
+                        type = "input_audio",
+                        input_audio = new
+                        {
+                            data = $"data:audio/wav;base64,{Convert.ToBase64String(referenceAudio)}",
+                            format = "wav"
+                        }
+                    },
+                    new
+                    {
+                        type = "input_audio",
+                        input_audio = new
+                        {
+                            data = $"data:audio/wav;base64,{Convert.ToBase64String(synthesizedAudio)}",
+                            format = "wav"
+                        }
+                    }
+                };
+
+                if (includeSpectrogram && spectrogramPng != null && spectrogramPng.Length > 0)
+                {
+                    contentBlocks.Add(new
+                    {
+                        type = "image_url",
+                        image_url = new
+                        {
+                            url = $"data:image/png;base64,{Convert.ToBase64String(spectrogramPng)}"
+                        }
+                    });
+                }
+
+                var payload = new
+                {
+                    model = this.Model,
+                    messages = new[]
+                    {
+                        new
+                        {
+                            role = "user",
+                            content = contentBlocks
+                        }
+                    },
+                    temperature = 0.2,
+                    max_tokens = 4000
+                };
+
+                string jsonPayload = JsonSerializer.Serialize(payload);
+                using var content = new StringContent(jsonPayload, Encoding.UTF8, "application/json");
+
+                var response = await this._httpClient.PostAsync($"{this.ApiUrl}/v1/chat/completions", content);
+                response.EnsureSuccessStatusCode();
+
+                string responseJson = await response.Content.ReadAsStringAsync();
+
+                using var doc = JsonDocument.Parse(responseJson);
+                var messageContent = doc.RootElement
+                    .GetProperty("choices")[0]
+                    .GetProperty("message")
+                    .GetProperty("content")
+                    .GetString();
+
+                return messageContent?.Trim();
+            }
+            catch (Exception ex)
+            {
+                Console.WriteLine($"[LlamaConnector] Error sending multimodal synth prompt: {ex.Message}");
                 return null;
             }
         }
