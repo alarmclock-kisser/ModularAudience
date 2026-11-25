@@ -13,6 +13,7 @@ public sealed partial class VocalSynthDialog
     private DateTime lastLlmStatusUpdate;
     private int llmTurnDeltas;
     private int llmTurnCharacters;
+    private bool llmStatusStuckOnError;
     private readonly System.Windows.Forms.Timer llmIdleHint = new() { Interval = 15000 };
 
     private void RestoreLlmState()
@@ -91,6 +92,7 @@ public sealed partial class VocalSynthDialog
     private Task StartLlmStreamAsync()
     {
         StopLlmStream(saveEnabledState: false);
+        llmStatusStuckOnError = false;
         VocalLlmStreamSettings config = llmSettings ?? VocalLlmStreamSettings.Load();
 
         var proxy = new LlamaStreamProxy();
@@ -138,7 +140,7 @@ public sealed partial class VocalSynthDialog
             + $"IMPORTANT: open llama UI in the browser at {proxy.ListenUrl}, NOT at {config.UpstreamUrl}; "
             + "otherwise the proxy never sees any chat stream. "
             + $"Engine: {(settings.UseWindowsSpeech ? "Natural speech (Windows)" : "VocalSynth formant engine")}, "
-            + $"speed {settings.Speed:F2}.");
+            + $"speed {settings.Speed:F2}, audio queue limit {VocalStreamSpeaker.DefaultMaxBufferedBytes / (1024L * 1024 * 1024)} GiB.");
         llmIdleHint.Stop();
         llmIdleHint.Start();
         return Task.CompletedTask;
@@ -218,10 +220,15 @@ public sealed partial class VocalSynthDialog
             return;
         }
 
+        if (llmStatusStuckOnError)
+        {
+            return;
+        }
+
         lastLlmStatusUpdate = DateTime.UtcNow;
         Ui(() =>
         {
-            if (llmSpeaker != null)
+            if (!llmStatusStuckOnError && llmSpeaker != null)
             {
                 llmStatusLabel.Text = $"Speaking... buffer {llmSpeaker.BufferedMilliseconds:F0} ms, speed x{llmSpeaker.EffectiveSpeed:F2}";
             }
@@ -238,8 +245,19 @@ public sealed partial class VocalSynthDialog
 
     private void OnTurnAudioCompleted()
     {
+        if (llmStatusStuckOnError)
+        {
+            return;
+        }
+
         LogManager.LogInfo("[Vocal LLM] All streamed text has been spoken; listening for the next answer.");
-        Ui(() => { if (llmSpeaker != null) { llmStatusLabel.Text = "Waiting for LLM..."; } });
+        Ui(() =>
+        {
+            if (!llmStatusStuckOnError && llmSpeaker != null)
+            {
+                llmStatusLabel.Text = "Waiting for LLM...";
+            }
+        });
     }
 
     private void OnStreamChunkRendered(string text, double durationSeconds)
@@ -251,14 +269,23 @@ public sealed partial class VocalSynthDialog
 
     private void OnLlmError(string message)
     {
+        // An error can stop the speaker's render loop while SSE deltas keep
+        // arriving. Do not let those deltas overwrite the terminal status.
+        llmStatusStuckOnError = true;
         LogManager.LogError($"[Vocal LLM] {message}");
-        Ui(() => { llmStatusLabel.Text = $"LLM stream: {message}"; });
+        Ui(() => { llmStatusLabel.Text = $"LLM stream stopped: {message}"; });
     }
 
     private void OnLlmDiagnostic(string message)
     {
         LogManager.LogInfo($"[Vocal LLM] {message}");
-        Ui(() => { llmStatusLabel.Text = message; });
+        Ui(() =>
+        {
+            if (!llmStatusStuckOnError)
+            {
+                llmStatusLabel.Text = message;
+            }
+        });
     }
 
     private static string Truncate(string value, int length) =>

@@ -3,7 +3,6 @@ using System;
 using System.Collections.Generic;
 using System.IO;
 using System.Net.Http;
-using System.Net.Http.Headers;
 using System.Text;
 using System.Text.Json;
 using System.Threading.Tasks;
@@ -306,10 +305,7 @@ namespace ModularAudience.Llama
             {
                 Content = new StringContent(json, Encoding.UTF8, "application/json"),
             };
-            if (!string.IsNullOrWhiteSpace(this.ApiKey))
-            {
-                request.Headers.Authorization = new AuthenticationHeaderValue("Bearer", this.ApiKey.Trim());
-            }
+            LlamaHttp.SetBearer(request, this.ApiKey);
 
             return await this._httpClient.SendAsync(request);
         }

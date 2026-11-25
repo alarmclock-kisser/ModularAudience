@@ -8,17 +8,20 @@ namespace ModularAudience.Forms.Synthesis;
 /// <summary>
 /// Turns LLM text deltas into a continuous spoken stream. Text is buffered into
 /// coherent chunks, rendered with the current VocalSynth voice and fed into one
-/// WaveOut through a BufferedWaveProvider, so chunks never cause playback gaps.
-/// When the token stream is slower than the requested reading speed, the speed
-/// of upcoming chunks is scaled down smoothly instead of stuttering.
+/// WaveOut through a growable audio queue, so chunks never cause playback gaps
+/// and a long answer is never dropped. When the token stream is slower than the
+/// requested reading speed, the speed of upcoming chunks is scaled down smoothly
+/// instead of stuttering.
 /// </summary>
 public sealed class VocalStreamSpeaker : IDisposable
 {
+    public const long DefaultMaxBufferedBytes = StreamingWaveBuffer.DefaultMaxBufferedBytes;
+
     private readonly Func<VocalSynthSettings> settingsFactory;
     private readonly VocalStreamChunker chunker;
     private readonly Channel<string> deltas = Channel.CreateUnbounded<string>();
     private readonly CancellationTokenSource shutdown = new();
-    private readonly BufferedWaveProvider buffer;
+    private readonly StreamingWaveBuffer buffer;
     private readonly int flushMilliseconds;
     private readonly int minBufferMilliseconds;
     private readonly bool adaptiveSpeed;
@@ -49,15 +52,14 @@ public sealed class VocalStreamSpeaker : IDisposable
         this.minSpeedFactor = Math.Clamp(minSpeedFactor, 0.25, 1.0);
         this.configuredSpeed = Math.Clamp(configuredSpeed, 0.25, 4.0);
 
-        buffer = new BufferedWaveProvider(WaveFormat.CreateIeeeFloatWaveFormat(sampleRate, channels))
-        {
-            DiscardOnBufferOverflow = false,
-            ReadFully = true,
-        };
+        buffer = new StreamingWaveBuffer(WaveFormat.CreateIeeeFloatWaveFormat(sampleRate, channels));
     }
 
     /// <summary>Estimated buffered audio in milliseconds.</summary>
     public double BufferedMilliseconds => buffer.BufferedDuration.TotalMilliseconds;
+
+    /// <summary>Soft memory limit for queued audio (1 GiB by default).</summary>
+    public long MaxBufferedBytes => buffer.MaxBufferedBytes;
 
     /// <summary>Current speed multiplier applied on top of the VocalSynth speed.</summary>
     public double SpeedFactor => speedFactor;
@@ -232,20 +234,26 @@ public sealed class VocalStreamSpeaker : IDisposable
     }
 
     /// <summary>
-    /// Waits until the playback buffer is effectively empty. WaveOut keeps
-    /// playing from its own buffers while we wait, so no audio is discarded.
+    /// Waits until every queued chunk of the turn has actually been played.
+    /// There is deliberately no timeout: a long answer must be spoken to the
+    /// end before the turn is reported as completed.
     /// </summary>
     private async Task WaitForAudioDrainAsync(CancellationToken token)
     {
-        const int drainedMilliseconds = 80;
-        const int maxWaitMilliseconds = 30000;
-        int waited = 0;
-        while (!token.IsCancellationRequested
-            && BufferedMilliseconds > drainedMilliseconds
-            && waited < maxWaitMilliseconds)
+        while (!token.IsCancellationRequested && BufferedMilliseconds > 0)
         {
             await Task.Delay(20, token).ConfigureAwait(false);
-            waited += 20;
+        }
+
+        // The provider is empty, but WaveOut may still be playing the last
+        // buffers it already pulled. Wait for that latency too so the turn is
+        // only reported complete after the final sample has been heard.
+        int deviceLatencyMilliseconds = output == null
+            ? 0
+            : Math.Max(0, output.BufferMilliseconds * Math.Max(1, output.NumberOfBuffers));
+        if (deviceLatencyMilliseconds > 0 && !token.IsCancellationRequested)
+        {
+            await Task.Delay(deviceLatencyMilliseconds, token).ConfigureAwait(false);
         }
     }
 
@@ -275,13 +283,6 @@ public sealed class VocalStreamSpeaker : IDisposable
             return;
         }
 
-        // Backpressure: never overflow the playback buffer.
-        int threshold = buffer.WaveFormat.SampleRate * buffer.WaveFormat.Channels * 4;
-        while (buffer.BufferedBytes > threshold && !token.IsCancellationRequested)
-        {
-            await Task.Delay(20, token).ConfigureAwait(false);
-        }
-
         VocalSynthSettings settings = settingsFactory();
         settings.Text = text;
         settings.SingingMidiFile = null;
@@ -306,7 +307,30 @@ public sealed class VocalStreamSpeaker : IDisposable
 
         byte[] pcm = new byte[data.Length * sizeof(float)];
         Buffer.BlockCopy(data, 0, pcm, 0, pcm.Length);
-        buffer.AddSamples(pcm, 0, pcm.Length);
+        await AddSamplesAsync(pcm, token).ConfigureAwait(false);
+        if (token.IsCancellationRequested)
+        {
+            return;
+        }
+
         ChunkRendered?.Invoke(text, data.Length / (double)(buffer.WaveFormat.SampleRate * buffer.WaveFormat.Channels));
+    }
+
+    /// <summary>
+    /// Queues the rendered chunk in full. The growable buffer never throws
+    /// "Buffer full"; only the 1 GiB soft limit can delay further rendering,
+    /// and that delay waits for playback instead of dropping any audio.
+    /// </summary>
+    private async Task AddSamplesAsync(byte[] pcm, CancellationToken token)
+    {
+        while (!buffer.HasRoomFor(pcm.Length) && !token.IsCancellationRequested)
+        {
+            await Task.Delay(20, token).ConfigureAwait(false);
+        }
+
+        if (!token.IsCancellationRequested)
+        {
+            buffer.AddOwnedSamples(pcm);
+        }
     }
 }

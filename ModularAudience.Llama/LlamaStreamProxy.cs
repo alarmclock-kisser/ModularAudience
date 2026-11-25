@@ -1,6 +1,5 @@
 using System.IO.Compression;
 using System.Net;
-using System.Net.Http.Headers;
 using System.Net.Sockets;
 using System.Text;
 using System.Text.Json;
@@ -254,10 +253,9 @@ public sealed class LlamaStreamProxy : IDisposable
                     }
                 }
 
-                if (!string.IsNullOrWhiteSpace(this.apiKey) &&
-                    !request.Headers.Contains("Authorization"))
+                if (!request.Headers.Contains("Authorization"))
                 {
-                    request.Headers.Authorization = new AuthenticationHeaderValue("Bearer", this.apiKey.Trim());
+                    LlamaHttp.SetBearer(request, this.apiKey);
                 }
 
                 if (body.Length > 0)

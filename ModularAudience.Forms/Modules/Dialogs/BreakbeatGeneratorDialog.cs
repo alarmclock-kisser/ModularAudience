@@ -905,7 +905,7 @@ namespace ModularAudience.Forms.Modules.Dialogs
             httpClient.Timeout = Timeout.InfiniteTimeSpan;
 
             using var discoveryCancellationTokenSource = new CancellationTokenSource(LlmDiscoveryTimeout);
-            (Uri modelsUri, string model) = await DiscoverWorkingModelAsync(httpClient, apiUrl, discoveryCancellationTokenSource.Token);
+            (Uri modelsUri, string model) = await DiscoverWorkingModelAsync(httpClient, apiUrl, generationSettings.ApiKey, discoveryCancellationTokenSource.Token);
             if (this.IsDisposed || this.Disposing)
             {
                 throw new TaskCanceledException("The generator window was closed.");
@@ -947,13 +947,13 @@ namespace ModularAudience.Forms.Modules.Dialogs
 
             try
             {
-                return CaptureReply(await SendChatCompletionRequestAsync(httpClient, chatCompletionsUri, payload, requestCancellationTokenSource.Token));
+                return CaptureReply(await SendChatCompletionRequestAsync(httpClient, chatCompletionsUri, payload, requestCancellationTokenSource.Token, generationSettings.ApiKey));
             }
             catch (HttpRequestException error) when (payload.ContainsKey("response_format") && error.StatusCode is System.Net.HttpStatusCode.BadRequest or System.Net.HttpStatusCode.UnprocessableEntity)
             {
                 LogManager.Log("LLM endpoint rejected response_format=json_object. Retrying without response_format.");
                 payload.Remove("response_format");
-                return CaptureReply(await SendChatCompletionRequestAsync(httpClient, chatCompletionsUri, payload, requestCancellationTokenSource.Token));
+                return CaptureReply(await SendChatCompletionRequestAsync(httpClient, chatCompletionsUri, payload, requestCancellationTokenSource.Token, generationSettings.ApiKey));
             }
             catch (OperationCanceledException ex) when (requestCancellationTokenSource.IsCancellationRequested)
             {
@@ -961,7 +961,7 @@ namespace ModularAudience.Forms.Modules.Dialogs
             }
         }
 
-        private static async Task<string> SendChatCompletionRequestAsync(HttpClient httpClient, Uri endpoint, Dictionary<string, object?> payload, CancellationToken cancellationToken)
+        private static async Task<string> SendChatCompletionRequestAsync(HttpClient httpClient, Uri endpoint, Dictionary<string, object?> payload, CancellationToken cancellationToken, string apiKey = "")
         {
             string jsonPayload = JsonSerializer.Serialize(payload);
             LogManager.Log($"LLM POST {endpoint}");
@@ -969,6 +969,7 @@ namespace ModularAudience.Forms.Modules.Dialogs
             {
                 Content = new StringContent(jsonPayload, Encoding.UTF8, "application/json")
             };
+            LlamaHttp.SetBearer(request, apiKey);
 
             using HttpResponseMessage response = await httpClient.SendAsync(request, cancellationToken);
             string responseBody = await response.Content.ReadAsStringAsync(cancellationToken);
@@ -986,7 +987,7 @@ namespace ModularAudience.Forms.Modules.Dialogs
             return content;
         }
 
-        private static async Task<(Uri ModelsUri, string Model)> DiscoverWorkingModelAsync(HttpClient httpClient, string apiUrl, CancellationToken cancellationToken)
+        private static async Task<(Uri ModelsUri, string Model)> DiscoverWorkingModelAsync(HttpClient httpClient, string apiUrl, string apiKey, CancellationToken cancellationToken)
         {
             List<string> errors = [];
             foreach (Uri modelsUri in BuildOpenAiCandidateUris(apiUrl, "models"))
@@ -994,7 +995,9 @@ namespace ModularAudience.Forms.Modules.Dialogs
                 try
                 {
                     LogManager.Log($"LLM connect test: GET {modelsUri}");
-                    using HttpResponseMessage response = await httpClient.GetAsync(modelsUri, cancellationToken);
+                    using var request = new HttpRequestMessage(HttpMethod.Get, modelsUri);
+                    LlamaHttp.SetBearer(request, apiKey);
+                    using HttpResponseMessage response = await httpClient.SendAsync(request, cancellationToken);
                     string responseBody = await response.Content.ReadAsStringAsync(cancellationToken);
                     if (!response.IsSuccessStatusCode)
                     {

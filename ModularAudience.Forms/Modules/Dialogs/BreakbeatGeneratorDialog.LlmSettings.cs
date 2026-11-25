@@ -1,5 +1,6 @@
 using System.Globalization;
 using ModularAudience.Audio;
+using ModularAudience.Llama;
 
 namespace ModularAudience.Forms.Modules.Dialogs;
 
@@ -20,9 +21,10 @@ public partial class BreakbeatGeneratorDialog
         catch (Exception error) when (error is IOException or UnauthorizedAccessException or System.Text.Json.JsonException)
         { LogManager.Log("Unable to load breakbeat LLM settings: " + error.Message); llmSettings.Normalize(); }
         textBox_apiUrl.Text = llmSettings.Address;
+        textBox_apiKey.Text = llmSettings.ApiKey;
         textBox_prompt.Text = llmSettings.Prompt;
         llmSettingsTimer.Tick += (_, _) => { llmSettingsTimer.Stop(); PersistLlmSettings(); };
-        foreach (var text in new[] { textBox_apiUrl, textBox_prompt })
+        foreach (var text in new[] { textBox_apiUrl, textBox_apiKey, textBox_prompt })
         {
             text.TextChanged += (_, _) =>
             {
@@ -31,7 +33,9 @@ public partial class BreakbeatGeneratorDialog
                     return;
                 }
 
-                llmSettings.Address = textBox_apiUrl.Text.Trim(); llmSettings.Prompt = textBox_prompt.Text;
+                llmSettings.Address = textBox_apiUrl.Text.Trim();
+                llmSettings.ApiKey = LlamaHttp.NormalizeApiKey(textBox_apiKey.Text);
+                llmSettings.Prompt = textBox_prompt.Text;
                 PublishLlmSettings();
                 llmSettingsTimer.Stop(); llmSettingsTimer.Start();
             };
@@ -116,7 +120,9 @@ public partial class BreakbeatGeneratorDialog
         }
 
         llmSettingsTimer.Stop();
-        llmSettings.Address = textBox_apiUrl.Text.Trim(); llmSettings.Prompt = textBox_prompt.Text;
+        llmSettings.Address = textBox_apiUrl.Text.Trim();
+        llmSettings.ApiKey = LlamaHttp.NormalizeApiKey(textBox_apiKey.Text);
+        llmSettings.Prompt = textBox_prompt.Text;
         PublishLlmSettings();
         try
         {
@@ -145,8 +151,8 @@ public partial class BreakbeatGeneratorDialog
         llmSettingsTimer.Stop();
         try
         {
-            textBox_apiUrl.Text = updated.Address; textBox_prompt.Text = updated.Prompt;
-            llmSettings.Address = updated.Address; llmSettings.Prompt = updated.Prompt;
+            textBox_apiUrl.Text = updated.Address; textBox_apiKey.Text = updated.ApiKey; textBox_prompt.Text = updated.Prompt;
+            llmSettings.Address = updated.Address; llmSettings.ApiKey = updated.ApiKey; llmSettings.Prompt = updated.Prompt;
             foreach (var definition in BreakbeatLlmSettings.Definitions)
             {
                 var target = llmSettings.Parameters[definition.Key]; var incoming = updated.Parameters[definition.Key];

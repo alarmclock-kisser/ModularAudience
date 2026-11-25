@@ -232,10 +232,7 @@ public sealed class VocalLlmStreamDialog : Form
             // HTTPS llama-servers commonly use a self-signed localhost certificate.
             using HttpClient client = LlamaHttp.CreateClient(TimeSpan.FromSeconds(5));
             using var request = new HttpRequestMessage(HttpMethod.Get, url);
-            if (!string.IsNullOrWhiteSpace(apiKey.Text))
-            {
-                request.Headers.Authorization = new System.Net.Http.Headers.AuthenticationHeaderValue("Bearer", apiKey.Text.Trim());
-            }
+            LlamaHttp.SetBearer(request, apiKey.Text);
 
             using HttpResponseMessage response = await client.SendAsync(request);
             string body = await response.Content.ReadAsStringAsync();

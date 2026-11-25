@@ -1,3 +1,5 @@
+using System.Net.Http;
+using System.Net.Http.Headers;
 using System.Net.Security;
 using System.Security.Authentication;
 using System.Security.Cryptography.X509Certificates;
@@ -54,6 +56,43 @@ public static class LlamaHttp
         };
 
         return new HttpClient(handler) { Timeout = timeout };
+    }
+
+    /// <summary>
+    /// Cleans an API key pasted from a config file: removes surrounding quotes,
+    /// line breaks and an already present "Bearer " prefix so it is never doubled.
+    /// </summary>
+    public static string NormalizeApiKey(string? key)
+    {
+        if (string.IsNullOrWhiteSpace(key))
+        {
+            return "";
+        }
+
+        string value = key.Trim().Replace("\r", "").Replace("\n", "");
+        while (value.Length >= 2 &&
+               ((value[0] == '"' && value[^1] == '"') ||
+                (value[0] == '\'' && value[^1] == '\'')))
+        {
+            value = value[1..^1].Trim();
+        }
+
+        if (value.StartsWith("Bearer ", StringComparison.OrdinalIgnoreCase))
+        {
+            value = value["Bearer ".Length..].Trim();
+        }
+
+        return value;
+    }
+
+    /// <summary>Attaches the bearer token to a request when a key is configured.</summary>
+    public static void SetBearer(HttpRequestMessage request, string? apiKey)
+    {
+        string key = NormalizeApiKey(apiKey);
+        if (key.Length > 0)
+        {
+            request.Headers.Authorization = new AuthenticationHeaderValue("Bearer", key);
+        }
     }
 
     /// <summary>

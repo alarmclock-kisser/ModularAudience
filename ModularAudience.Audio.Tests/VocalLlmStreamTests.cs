@@ -9,7 +9,9 @@ using System.Security.Cryptography.X509Certificates;
 using System.Text;
 using Microsoft.VisualStudio.TestTools.UnitTesting;
 using ModularAudience.Audio.Vocal;
+using ModularAudience.Forms.Synthesis;
 using ModularAudience.Llama;
+using NAudio.Wave;
 
 namespace ModularAudience.Audio.Tests;
 
@@ -191,6 +193,100 @@ public class VocalLlmStreamSettingsTests
         Assert.AreEqual(100, settings.FlushMilliseconds);
         Assert.AreEqual(10000, settings.MinBufferMilliseconds);
         Assert.AreEqual(1.0, settings.MinSpeedFactor);
+    }
+}
+
+[TestClass]
+public class StreamingWaveBufferTests
+{
+    [TestMethod]
+    public void ChunksAreQueuedAndDrainedInOrder()
+    {
+        var format = WaveFormat.CreateIeeeFloatWaveFormat(44100, 1);
+        var buffer = new StreamingWaveBuffer(format, maxBufferedBytes: 1024);
+
+        buffer.AddOwnedSamples([1, 2, 3]);
+        buffer.AddOwnedSamples([4, 5]);
+
+        Assert.AreEqual(5, buffer.BufferedBytes);
+        Assert.IsFalse(buffer.HasRoomFor(1100));
+
+        byte[] first = new byte[4];
+        Assert.AreEqual(4, buffer.Read(first));
+        CollectionAssert.AreEqual(new byte[] {1, 2, 3, 4}, first);
+        Assert.AreEqual(1, buffer.BufferedBytes);
+
+        byte[] second = new byte[4];
+        Assert.AreEqual(4, buffer.Read(second), "missing bytes are padded with silence");
+        CollectionAssert.AreEqual(new byte[] {5, 0, 0, 0}, second);
+        Assert.AreEqual(0, buffer.BufferedBytes);
+        Assert.IsTrue(buffer.IsEmpty);
+    }
+
+    [TestMethod]
+    public void ClearBuffer_DropsQueuedAudio()
+    {
+        var format = WaveFormat.CreateIeeeFloatWaveFormat(44100, 1);
+        var buffer = new StreamingWaveBuffer(format);
+
+        buffer.AddOwnedSamples([1, 2, 3]);
+        buffer.ClearBuffer();
+
+        Assert.AreEqual(0, buffer.BufferedBytes);
+        byte[] data = new byte[2];
+        Assert.AreEqual(2, buffer.Read(data));
+        CollectionAssert.AreEqual(new byte[] {0, 0}, data);
+    }
+
+    [TestMethod]
+    public void DefaultLimit_IsOneGiB()
+    {
+        long oneGiB = 1L * 1024 * 1024 * 1024;
+
+        Assert.IsTrue(StreamingWaveBuffer.DefaultMaxBufferedBytes == oneGiB,
+            "StreamingWaveBuffer must allow a 1 GiB audio queue.");
+        Assert.IsTrue(VocalStreamSpeaker.DefaultMaxBufferedBytes == oneGiB,
+            "VocalStreamSpeaker must expose the 1 GiB queue limit.");
+
+        var buffer = new StreamingWaveBuffer(WaveFormat.CreateIeeeFloatWaveFormat(44100, 1));
+        Assert.AreEqual(oneGiB, buffer.MaxBufferedBytes);
+        Assert.IsTrue(buffer.HasRoomFor(3_000_000));
+    }
+
+    [TestMethod]
+    public void LongAnswer_IsAggregatedAndDrainedCompletely()
+    {
+        var format = WaveFormat.CreateIeeeFloatWaveFormat(44100, 1);
+        var buffer = new StreamingWaveBuffer(format);
+
+        byte[] first = new byte[1_500_000];
+        byte[] second = new byte[1_500_000];
+        first[0] = 11;
+        first[^1] = 12;
+        second[0] = 21;
+        second[^1] = 22;
+        buffer.AddOwnedSamples(first);
+        buffer.AddOwnedSamples(second);
+
+        Assert.AreEqual(3_000_000, buffer.BufferedBytes);
+
+        byte[] readBuffer = new byte[64 * 1024];
+        var drained = new List<byte>();
+        int remaining = (int)buffer.BufferedBytes;
+        while (remaining > 0)
+        {
+            int requested = Math.Min(readBuffer.Length, remaining);
+            int count = buffer.Read(readBuffer.AsSpan(0, requested));
+            drained.AddRange(readBuffer.AsSpan(0, count).ToArray());
+            remaining -= count;
+        }
+
+        Assert.AreEqual(3_000_000, drained.Count);
+        Assert.AreEqual(11, drained[0]);
+        Assert.AreEqual(12, drained[1_499_999]);
+        Assert.AreEqual(21, drained[1_500_000]);
+        Assert.AreEqual(22, drained[^1]);
+        Assert.IsTrue(buffer.IsEmpty);
     }
 }
 

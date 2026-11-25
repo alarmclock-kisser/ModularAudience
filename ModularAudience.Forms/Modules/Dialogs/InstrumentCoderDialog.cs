@@ -544,7 +544,9 @@ public sealed partial class InstrumentCoderDialog : Form
             if (v1Index >= 0) normalizedUrl = normalizedUrl[..v1Index].TrimEnd('/');
             string modelsUrl = normalizedUrl + "/v1/models";
 
-            using var modelsResponse = await httpClient.GetAsync(modelsUrl);
+            using var modelsRequest = new HttpRequestMessage(HttpMethod.Get, modelsUrl);
+            LlamaHttp.SetBearer(modelsRequest, apiKeyText.Text);
+            using var modelsResponse = await httpClient.SendAsync(modelsRequest);
             if (!modelsResponse.IsSuccessStatusCode)
             {
                 string body = await modelsResponse.Content.ReadAsStringAsync();
@@ -593,7 +595,7 @@ public sealed partial class InstrumentCoderDialog : Form
             var testConnector = new LlamaConnector(url)
             {
                 Model = modelCombo.SelectedItem as string ?? this.llm.Model,
-                ApiKey = apiKeyText.Text.Trim(),
+                ApiKey = LlamaHttp.NormalizeApiKey(apiKeyText.Text),
             };
             testConnector.Logger = line => AddLogLine($"[Llama] {line}");
             string? result = await TestTextCompletionAsync(testConnector);
@@ -648,8 +650,12 @@ public sealed partial class InstrumentCoderDialog : Form
             };
 
             string json = System.Text.Json.JsonSerializer.Serialize(payload);
-            using var content = new StringContent(json, System.Text.Encoding.UTF8, "application/json");
-            using var response = await httpClient.PostAsync(chatUrl, content);
+            using var request = new HttpRequestMessage(HttpMethod.Post, chatUrl)
+            {
+                Content = new StringContent(json, System.Text.Encoding.UTF8, "application/json"),
+            };
+            LlamaHttp.SetBearer(request, connector.ApiKey);
+            using var response = await httpClient.SendAsync(request);
 
             if (!response.IsSuccessStatusCode)
             {
@@ -700,7 +706,7 @@ public sealed partial class InstrumentCoderDialog : Form
         orchestrator.AutoRetryCompileErrors = autoRetryCheckBox.Checked;
         orchestrator.UserPrompt = promptText.Text;
         this.llm.SetApiUrl(serverUrlText.Text);
-        this.llm.ApiKey = apiKeyText.Text.Trim();
+        this.llm.ApiKey = LlamaHttp.NormalizeApiKey(apiKeyText.Text);
         if (modelCombo.SelectedItem is string selectedModel && !string.IsNullOrWhiteSpace(selectedModel))
         {
             this.llm.Model = selectedModel;
@@ -1030,7 +1036,7 @@ public sealed partial class InstrumentCoderDialog : Form
             }
 
             this.llm.SetApiUrl(serverUrlText.Text);
-            this.llm.ApiKey = apiKeyText.Text.Trim();
+            this.llm.ApiKey = LlamaHttp.NormalizeApiKey(apiKeyText.Text);
             if (modelCombo.SelectedItem is string savedModel && !string.IsNullOrWhiteSpace(savedModel))
             {
                 this.llm.Model = savedModel;
@@ -1050,7 +1056,7 @@ public sealed partial class InstrumentCoderDialog : Form
             var settings = new CoderSettings
             {
                 ServerUrl = serverUrlText.Text,
-                ProtectedApiKey = new WindowsLlmSecretProtector().Protect(apiKeyText.Text.Trim()),
+                ProtectedApiKey = new WindowsLlmSecretProtector().Protect(LlamaHttp.NormalizeApiKey(apiKeyText.Text)),
                 Model = modelCombo.SelectedItem as string ?? "",
                 MaxIterations = (int)maxIterations.Value,
                 IncludeSpectrogram = includeSpectrogram.Checked,

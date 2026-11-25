@@ -105,7 +105,7 @@ public sealed class VocalLlmStreamSettings
         result.Normalize();
         try
         {
-            result.ApiKey = Protector.Unprotect(result.ProtectedApiKey);
+            result.ApiKey = LlamaHttp.NormalizeApiKey(Protector.Unprotect(result.ProtectedApiKey));
         }
         catch (CryptographicException)
         {
@@ -120,7 +120,7 @@ public sealed class VocalLlmStreamSettings
     {
         path ??= SettingsPath;
         Normalize();
-        ProtectedApiKey = Protector.Protect(ApiKey);
+        ProtectedApiKey = Protector.Protect(LlamaHttp.NormalizeApiKey(ApiKey));
         string? directory = Path.GetDirectoryName(Path.GetFullPath(path));
         if (!string.IsNullOrEmpty(directory))
         {

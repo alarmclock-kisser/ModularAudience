@@ -1,5 +1,8 @@
 using System.Globalization;
+using System.Security.Cryptography;
 using System.Text.Json;
+using System.Text.Json.Serialization;
+using ModularAudience.Llama;
 
 namespace ModularAudience.Forms.Modules.Dialogs;
 
@@ -23,7 +26,17 @@ public sealed class LlmParameterSetting
 }
 public sealed class BreakbeatLlmSettings
 {
+    private static readonly ILlmSecretProtector Protector = new WindowsLlmSecretProtector();
+
     public string Address { get; set; } = "http://127.0.0.1:9931";
+
+    /// <summary>Bearer token for the llama-server. Never written in plaintext.</summary>
+    [JsonIgnore]
+    public string ApiKey { get; set; } = "";
+
+    /// <summary>DPAPI-protected form of <see cref="ApiKey"/> that is persisted.</summary>
+    public string ProtectedApiKey { get; set; } = "";
+
     public string Prompt { get; set; } = "";
     public bool JsonResponse { get; set; } = true;
     public bool KeepContext { get; set; }
@@ -41,7 +54,12 @@ public sealed class BreakbeatLlmSettings
         new("seed", "Seed", 42, 0, int.MaxValue, Integer: true)
     };
     public static string SettingsPath => Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.ApplicationData), "ModularAudience", "breakbeat-llm-settings.json");
-    public BreakbeatLlmSettings Copy() => JsonSerializer.Deserialize<BreakbeatLlmSettings>(JsonSerializer.Serialize(this))!;
+    public BreakbeatLlmSettings Copy()
+    {
+        var copy = JsonSerializer.Deserialize<BreakbeatLlmSettings>(JsonSerializer.Serialize(this))!;
+        copy.ApiKey = this.ApiKey;
+        return copy;
+    }
     public void Normalize()
     {
         Address ??= "http://127.0.0.1:9931"; Prompt ??= ""; Parameters ??= [];
@@ -62,11 +80,21 @@ public sealed class BreakbeatLlmSettings
     {
         path ??= SettingsPath;
         var result = File.Exists(path) ? JsonSerializer.Deserialize<BreakbeatLlmSettings>(File.ReadAllText(path)) ?? new() : new();
-        result.Normalize(); return result;
+        result.Normalize();
+        try
+        {
+            result.ApiKey = LlamaHttp.NormalizeApiKey(Protector.Unprotect(result.ProtectedApiKey));
+        }
+        catch (CryptographicException)
+        {
+            result.ApiKey = "";
+        }
+        return result;
     }
     public void Save(string? path = null)
     {
         path ??= SettingsPath; Normalize();
+        ProtectedApiKey = Protector.Protect(LlamaHttp.NormalizeApiKey(ApiKey));
         Directory.CreateDirectory(Path.GetDirectoryName(Path.GetFullPath(path))!);
         string temporary = path + "." + Guid.NewGuid().ToString("N") + ".tmp";
         try { File.WriteAllText(temporary, JsonSerializer.Serialize(this, new JsonSerializerOptions { WriteIndented = true })); File.Move(temporary, path, true); }

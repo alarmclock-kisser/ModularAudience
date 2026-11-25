@@ -31,6 +31,8 @@
             this.components = new System.ComponentModel.Container();
             this.label_apiUrl = new Label();
             this.textBox_apiUrl = new TextBox();
+            this.label_apiKey = new Label();
+            this.textBox_apiKey = new TextBox();
             this.button_connect = new Button();
             this.label_model = new Label();
             this.label_prompt = new Label();
@@ -68,6 +70,24 @@
             this.textBox_apiUrl.TabIndex = 1;
             this.textBox_apiUrl.Text = "http://127.0.0.1:8080";
             // 
+            // label_apiKey
+            // 
+            this.label_apiKey.AutoSize = true;
+            this.label_apiKey.Location = new Point(12, 43);
+            this.label_apiKey.Name = "label_apiKey";
+            this.label_apiKey.Size = new Size(96, 15);
+            this.label_apiKey.TabIndex = 16;
+            this.label_apiKey.Text = "API Key";
+            // 
+            // textBox_apiKey
+            // 
+            this.textBox_apiKey.Location = new Point(150, 40);
+            this.textBox_apiKey.Name = "textBox_apiKey";
+            this.textBox_apiKey.PlaceholderText = "Optional API key...";
+            this.textBox_apiKey.Size = new Size(200, 23);
+            this.textBox_apiKey.TabIndex = 17;
+            this.textBox_apiKey.UseSystemPasswordChar = true;
+            // 
             // button_connect
             // 
             this.button_connect.Location = new Point(356, 12);
@@ -81,9 +101,9 @@
             // label_model
             // 
             this.label_model.AutoSize = true;
-            this.label_model.Location = new Point(150, 40);
+            this.label_model.Location = new Point(356, 40);
             this.label_model.Name = "label_model";
-            this.label_model.Size = new Size(110, 15);
+            this.label_model.Size = new Size(200, 15);
             this.label_model.TabIndex = 3;
             this.label_model.Text = "Model: not connected";
             // 
@@ -225,6 +245,8 @@
             this.Controls.Add(this.button_connect);
             this.Controls.Add(this.textBox_apiUrl);
             this.Controls.Add(this.label_apiUrl);
+            this.Controls.Add(this.textBox_apiKey);
+            this.Controls.Add(this.label_apiKey);
             this.MinimumSize = new Size(516, 389);
             this.Name = "MidiLlmGenerateDialog";
             this.Text = "MIDI LLM Generate";
@@ -239,6 +261,8 @@
 
         private Label label_apiUrl;
         private TextBox textBox_apiUrl;
+        private Label label_apiKey;
+        private TextBox textBox_apiKey;
         private Button button_connect;
         private Label label_model;
         private Label label_prompt;

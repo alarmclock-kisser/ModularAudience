@@ -58,6 +58,7 @@
             this.textBox_prompt = new TextBox();
             this.button_llm = new Button();
             this.textBox_apiUrl = new TextBox();
+            this.textBox_apiKey = new TextBox();
             this.pictureBox_beatMap = new PictureBox();
             this.button_bot = new Button();
             this.label_info_reroll = new Label();
@@ -345,6 +346,15 @@
             this.textBox_apiUrl.TabIndex = 24;
             this.textBox_apiUrl.Text = "http://127.0.0.1:9931";
             // 
+            // textBox_apiKey
+            // 
+            this.textBox_apiKey.Location = new Point(158, 291);
+            this.textBox_apiKey.Name = "textBox_apiKey";
+            this.textBox_apiKey.PlaceholderText = "API key (optional)";
+            this.textBox_apiKey.Size = new Size(243, 23);
+            this.textBox_apiKey.TabIndex = 30;
+            this.textBox_apiKey.UseSystemPasswordChar = true;
+            // 
             // pictureBox_beatMap
             // 
             this.pictureBox_beatMap.BackColor = Color.White;
@@ -417,6 +427,7 @@
             this.Controls.Add(this.button_bot);
             this.Controls.Add(this.pictureBox_beatMap);
             this.Controls.Add(this.textBox_apiUrl);
+            this.Controls.Add(this.textBox_apiKey);
             this.Controls.Add(this.button_llm);
             this.Controls.Add(this.textBox_prompt);
             this.Controls.Add(this.comboBox_preset);
@@ -494,6 +505,7 @@
         private TextBox textBox_prompt;
         private Button button_llm;
         private TextBox textBox_apiUrl;
+        private TextBox textBox_apiKey;
         private PictureBox pictureBox_beatMap;
         private ToolTip toolTip_beatMap;
         private Button button_bot;

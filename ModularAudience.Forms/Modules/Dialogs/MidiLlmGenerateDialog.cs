@@ -21,6 +21,9 @@ namespace ModularAudience.Forms.Modules.Dialogs
     {
         private static readonly TimeSpan LlmDiscoveryTimeout = TimeSpan.FromSeconds(15);
         private static readonly TimeSpan LlmRequestTimeout = TimeSpan.FromMinutes(5);
+        private readonly LlmApiKeyFileStore apiKeyStore = new(Path.Combine(
+            Environment.GetFolderPath(Environment.SpecialFolder.ApplicationData),
+            "ModularAudience", "midi-llm-api-key.txt"));
 
         private Uri? chatCompletionsUri;
         private string? connectedModel;
@@ -39,7 +42,11 @@ namespace ModularAudience.Forms.Modules.Dialogs
                 (decimal)(initialBpm ?? WorkingBpmResolver.GetWorkingBpm()),
                 this.numericUpDown_bpm.Minimum,
                 this.numericUpDown_bpm.Maximum);
+            this.textBox_apiKey.Text = this.apiKeyStore.Load();
+            this.FormClosing += (_, _) => this.apiKeyStore.Save(this.textBox_apiKey.Text);
         }
+
+        private string ApiKey => LlamaHttp.NormalizeApiKey(this.textBox_apiKey.Text);
 
         private void button_connect_Click(object? sender, EventArgs e)
         {
@@ -59,7 +66,7 @@ namespace ModularAudience.Forms.Modules.Dialogs
                 using HttpClient httpClient = CreateLlmHttpClient();
                 httpClient.Timeout = Timeout.InfiniteTimeSpan;
                 using CancellationTokenSource discoveryCts = new(LlmDiscoveryTimeout);
-                (Uri modelsUri, string model) = await DiscoverWorkingModelAsync(httpClient, apiUrl, discoveryCts.Token);
+                (Uri modelsUri, string model) = await DiscoverWorkingModelAsync(httpClient, apiUrl, this.ApiKey, discoveryCts.Token);
                 this.chatCompletionsUri = ReplaceEndpoint(modelsUri, "chat/completions");
                 this.connectedModel = model;
                 this.label_model.Text = $"Model: {model}";
@@ -102,7 +109,7 @@ namespace ModularAudience.Forms.Modules.Dialogs
                     using HttpClient httpClient = CreateLlmHttpClient();
                     httpClient.Timeout = Timeout.InfiniteTimeSpan;
                     using CancellationTokenSource discoveryCts = new(LlmDiscoveryTimeout);
-                    (Uri modelsUri, string model) = await DiscoverWorkingModelAsync(httpClient, apiUrl, discoveryCts.Token);
+                    (Uri modelsUri, string model) = await DiscoverWorkingModelAsync(httpClient, apiUrl, this.ApiKey, discoveryCts.Token);
                     this.chatCompletionsUri = ReplaceEndpoint(modelsUri, "chat/completions");
                     this.connectedModel = model;
                     this.label_model.Text = $"Model: {model}";
@@ -285,13 +292,13 @@ namespace ModularAudience.Forms.Modules.Dialogs
 
             try
             {
-                return await SendChatCompletionRequestAsync(httpClient, this.chatCompletionsUri, payload, requestCts.Token);
+                return await SendChatCompletionRequestAsync(httpClient, this.chatCompletionsUri, payload, requestCts.Token, this.ApiKey);
             }
             catch (HttpRequestException)
             {
                 LogManager.Log("LLM endpoint rejected response_format=json_object. Retrying without response_format.");
                 payload.Remove("response_format");
-                return await SendChatCompletionRequestAsync(httpClient, this.chatCompletionsUri, payload, requestCts.Token);
+                return await SendChatCompletionRequestAsync(httpClient, this.chatCompletionsUri, payload, requestCts.Token, this.ApiKey);
             }
             catch (OperationCanceledException ex) when (requestCts.IsCancellationRequested)
             {
@@ -299,7 +306,7 @@ namespace ModularAudience.Forms.Modules.Dialogs
             }
         }
 
-        private static async Task<string> SendChatCompletionRequestAsync(HttpClient httpClient, Uri endpoint, Dictionary<string, object?> payload, CancellationToken cancellationToken)
+        private static async Task<string> SendChatCompletionRequestAsync(HttpClient httpClient, Uri endpoint, Dictionary<string, object?> payload, CancellationToken cancellationToken, string apiKey = "")
         {
             string jsonPayload = JsonSerializer.Serialize(payload);
             LogManager.Log($"LLM POST {endpoint}");
@@ -307,6 +314,7 @@ namespace ModularAudience.Forms.Modules.Dialogs
             {
                 Content = new StringContent(jsonPayload, Encoding.UTF8, "application/json")
             };
+            LlamaHttp.SetBearer(request, apiKey);
 
             using HttpResponseMessage response = await httpClient.SendAsync(request, cancellationToken);
             string responseBody = await response.Content.ReadAsStringAsync(cancellationToken);
@@ -324,7 +332,7 @@ namespace ModularAudience.Forms.Modules.Dialogs
             return content;
         }
 
-        private static async Task<(Uri ModelsUri, string Model)> DiscoverWorkingModelAsync(HttpClient httpClient, string apiUrl, CancellationToken cancellationToken)
+        private static async Task<(Uri ModelsUri, string Model)> DiscoverWorkingModelAsync(HttpClient httpClient, string apiUrl, string apiKey, CancellationToken cancellationToken)
         {
             List<string> errors = [];
             foreach (Uri modelsUri in BuildOpenAiCandidateUris(apiUrl, "models"))
@@ -332,7 +340,9 @@ namespace ModularAudience.Forms.Modules.Dialogs
                 try
                 {
                     LogManager.Log($"LLM connect test: GET {modelsUri}");
-                    using HttpResponseMessage response = await httpClient.GetAsync(modelsUri, cancellationToken);
+                    using var request = new HttpRequestMessage(HttpMethod.Get, modelsUri);
+                    LlamaHttp.SetBearer(request, apiKey);
+                    using HttpResponseMessage response = await httpClient.SendAsync(request, cancellationToken);
                     string responseBody = await response.Content.ReadAsStringAsync(cancellationToken);
                     if (!response.IsSuccessStatusCode)
                     {

@@ -64,3 +64,44 @@ public sealed class WindowsLlmSecretProtector : ILlmSecretProtector
         }
     }
 }
+
+/// <summary>Stores a single DPAPI-protected API key in a dedicated file.</summary>
+public sealed class LlmApiKeyFileStore
+{
+    private readonly string path;
+    private readonly ILlmSecretProtector protector = new WindowsLlmSecretProtector();
+
+    public LlmApiKeyFileStore(string path)
+    {
+        this.path = Path.GetFullPath(path);
+    }
+
+    public string Load()
+    {
+        if (!File.Exists(path))
+        {
+            return "";
+        }
+
+        try
+        {
+            return LlamaHttp.NormalizeApiKey(
+                this.protector.Unprotect(File.ReadAllText(path).Trim()));
+        }
+        catch (CryptographicException)
+        {
+            return "";
+        }
+    }
+
+    public void Save(string apiKey)
+    {
+        string? directory = Path.GetDirectoryName(Path.GetFullPath(path));
+        if (!string.IsNullOrEmpty(directory))
+        {
+            Directory.CreateDirectory(directory);
+        }
+
+        File.WriteAllText(path, this.protector.Protect(LlamaHttp.NormalizeApiKey(apiKey)));
+    }
+}
