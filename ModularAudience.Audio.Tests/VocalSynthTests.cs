@@ -1151,7 +1151,7 @@ public class VocalSynthTests
     }
 
     [TestMethod]
-    public void Render_GermanR_HasDistinctFricationFromEnglishR()
+    public void Render_GermanR_KeepsFricationBelowSibilantRange()
     {
         var settings = VocalSynthSettings.FromPreset(VocalVoicePreset.BuiltIn[2], VocalLanguage.German, "r");
         settings.SampleRate = 16000;
@@ -1161,13 +1161,20 @@ public class VocalSynthTests
         using var english = VocalSynth.Render(settings);
         double germanBrightness = DifferenceEnergyRatio(german.Data);
         double englishBrightness = DifferenceEnergyRatio(english.Data);
-        Assert.IsTrue(germanBrightness > englishBrightness * 5.5,
-            $"Expected German uvular frication: {germanBrightness} versus {englishBrightness}.");
+        // The guttural R is a low-band rumble (~450-1600 Hz), not a 3 kHz sibilant hiss.
+        Assert.IsTrue(germanBrightness < englishBrightness * 0.7,
+            $"Expected low-band German frication rather than a hiss: {germanBrightness} versus {englishBrightness}.");
+        Assert.IsTrue(VocalPhonemeInventory.Get("de-r").Noise > VocalPhonemeInventory.Get("r").Noise,
+            "The uvular R needs more frication than the English approximant.");
     }
 
     [TestMethod]
-    public void Render_GermanR_GentlyFluttersEvenWithoutRepeatedLetters()
+    public void Render_GermanR_TapsOnceWithoutRepeatedLetters()
     {
+        // A single written r at a syllable onset is a tapped alveolar R, not a rolled rr.
+        // It must still be clearly articulated, but it is a single closure, not a flutter train.
+        Assert.IsTrue(VocalPhonemizer.Phonemize(VocalLanguage.German, "r").Contains("de-r-tap"));
+
         var settings = CleanVoice(VocalLanguage.German, "r");
         settings.SampleRate = 16000;
         settings.BasePitchHz = 200;
@@ -1177,8 +1184,8 @@ public class VocalSynthTests
         using var english = VocalSynth.Render(settings);
         double germanVariation = ShortTimeLevelVariation(german.Data, settings.SampleRate);
         double englishVariation = ShortTimeLevelVariation(english.Data, settings.SampleRate);
-        Assert.IsTrue(germanVariation > englishVariation + 0.035 && germanVariation < 0.25,
-            $"Expected a gentle German R flutter: German {germanVariation}, English {englishVariation}.");
+        Assert.IsTrue(germanVariation > englishVariation + 0.035 && germanVariation < 0.5,
+            $"Expected one audible German R tap: German {germanVariation}, English {englishVariation}.");
     }
 
     [TestMethod]
@@ -1613,7 +1620,7 @@ public class VocalSynthTests
     }
 
     [TestMethod]
-    [DataRow(VocalLanguage.German, "Klenker", "Klenkerrrrrr", "de-r")]
+    [DataRow(VocalLanguage.German, "Klenker", "Klenkerrrrrr", "de-r-trill")]
     [DataRow(VocalLanguage.English, "hiss", "hissssss", "s")]
     [DataRow(VocalLanguage.English, "cool", "coooool", "oo")]
     public void RepeatedLetters_SustainSuitableSounds_WithoutStretchingNormalDoubles(

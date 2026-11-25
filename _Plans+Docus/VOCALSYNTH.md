@@ -296,6 +296,58 @@ so expressive repetitions remain separate in the shared renderer.
   limits can impose a lower practical ceiling. Windows speech also limits text
   to 100,000 characters and accepts speeds from 0.5 to 4.
 
+## 3a. LLM Live Speech (llama-server SSE bridge)
+
+The VocalSynth dialog has an **LLM Live Speech** checkbox and an
+**LLM Connection...** button on their own row. The checkbox starts/stops the
+live bridge; the button opens the configuration dialog.
+
+- **How it works:** a loopback-only HTTP proxy listens on a configurable port
+  (default `8081`) and forwards every request unchanged to the real
+  llama-server (default `http://127.0.0.1:9931`, matching `LlamaConnector`).
+  Set llama UI's *Server address* to the proxy URL, by default
+  `http://127.0.0.1:8081/`. Leaving llama UI pointed directly at `9931` means
+  the proxy never sees the chat stream and nothing is spoken. The proxy passes SSE events through to
+  the browser byte-for-byte and additionally taps `choices[0].delta.content`
+  (OpenAI chat completions) or root `content` (legacy `/completion`) of assistant
+  messages. Non-streaming chat responses are tapped too. Other endpoints
+  (`/v1/models`, `/health`, `/props`, audio uploads, …) are pure passthrough.
+  CORS preflight is answered locally and the requested headers are echoed.
+- **Optional model filter:** the **Use model filter** checkbox enables it.
+  **Test connection** queries `/v1/models`, fills the model combo box and
+  enables the checkbox with the first/currently loaded model; if no model is
+  reported or the server is unreachable, the filter is cleared and unchecked.
+  Only answers whose request `model` contains the selected text are spoken.
+- **Logging:** all bridge events (settings saved, proxy start/stop with the
+  llama UI hint, assistant turn start/end with delta and character counts,
+  every spoken chunk with buffer and speed, and errors) go through the shared
+  `LogManager` and therefore appear in WindowMain's `listBox_log` and the
+  rolling log file.
+- **Text chunking:** `VocalStreamChunker` accumulates token deltas and cuts at
+  sentence endings (`. ! ? … …`), at comma/semicolon/colon after a minimum word
+  count, at newlines, or at a hard word limit. Abbreviations (`Dr.`, `z. B.`,
+  `e.g.`), initials, decimal numbers and URLs are protected. A remaining
+  partial chunk is flushed after the configured idle timeout or at the end of
+  the assistant turn.
+- **Playback:** `VocalStreamSpeaker` renders each chunk with a clone of the
+  **current VocalSynth settings**, so language, voice preset/profile, Speed,
+  emphasis syntax and the **Natural speech (Windows)** checkbox all apply.
+  MIDI note timing is disabled for streamed chunks. Rendered float PCM is fed
+  into one `BufferedWaveProvider` and a single `WaveOut`, so there are no gaps
+  between chunks. When the token rate is lower than the requested reading
+  speed, adaptive speed scales the speed of upcoming chunks down (and restores
+  it when the buffer recovers) instead of stuttering. The dialog status shows
+  buffered milliseconds and the effective speed factor.
+- Persistence: `%APPDATA%\ModularAudience\vocal-llm-stream-settings.json`
+  (upstream URL, listen port, model filter, chunking, flush timeout, buffer
+  minimum, adaptive-speed factor, enabled flag).
+- Tests: `ModularAudience.Audio.Tests/VocalLlmStreamTests.cs` covers chunk
+  boundaries, token-by-token vs. batch equivalence, abbreviation/decimal/URL
+  protection, settings round-trip and clamping, SSE event parsing and request
+  stream/model inspection, plus a loopback end-to-end test with a tiny fake
+  llama-server that verifies byte-for-byte SSE passthrough and delta tap -
+  no real llama-server or audio device required.
+
 ## 4. Extension points / TODOs
 
 - Improve the independent synthesizer further with larger pronunciation

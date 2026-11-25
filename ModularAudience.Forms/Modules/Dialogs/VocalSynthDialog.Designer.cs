@@ -24,6 +24,10 @@ public sealed partial class VocalSynthDialog
     private CheckBox followSpokenWordCheckBox = null!;
     private FlowLayoutPanel midiOptionsRow = null!;
     private FlowLayoutPanel vocalActionsRow = null!;
+    private FlowLayoutPanel llmRow = null!;
+    private CheckBox llmLiveCheckBox = null!;
+    private Button llmConnectionButton = null!;
+    private Label llmStatusLabel = null!;
     private Panel textContentPanel = null!;
 
     private void InitializeMidiControls(
@@ -173,6 +177,44 @@ public sealed partial class VocalSynthDialog
 
         textContentPanel = new Panel { Dock = DockStyle.Fill };
         textContentPanel.Controls.Add(textEditor);
+    }
+
+    private void InitializeLlmControls()
+    {
+        llmLiveCheckBox = new CheckBox
+        {
+            Name = "llmLiveCheckBox",
+            Text = "LLM Live Speech",
+            AccessibleName = "LLM Live Speech",
+            AutoSize = true,
+            Margin = new Padding(4, 8, 4, 0),
+        };
+        llmConnectionButton = new Button
+        {
+            Name = "llmConnectionButton",
+            Text = "LLM Connection...",
+            AutoSize = true,
+        };
+        llmStatusLabel = new Label
+        {
+            Name = "llmStatusLabel",
+            Text = "Off",
+            AutoSize = true,
+            AutoEllipsis = true,
+            MaximumSize = new Size(360, 0),
+            Margin = new Padding(4, 8, 4, 0),
+        };
+        llmRow = new FlowLayoutPanel
+        {
+            Name = "llmRow",
+            AutoSize = true,
+            AutoSizeMode = AutoSizeMode.GrowAndShrink,
+            WrapContents = false,
+            Margin = Padding.Empty,
+        };
+        llmRow.Controls.AddRange([llmLiveCheckBox, llmConnectionButton, llmStatusLabel]);
+        llmLiveCheckBox.CheckedChanged += LlmLiveCheckedChanged;
+        llmConnectionButton.Click += (_, _) => OpenLlmConnectionDialog();
     }
 
     private void InitializeSpeechBackendControl()

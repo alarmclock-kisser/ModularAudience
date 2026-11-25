@@ -26,11 +26,11 @@ namespace ModularAudience.Llama
             this.ApiUrl = NormalizeUrl(apiUrl);
             this.Model = model;
 
-            // Audio inference can take a while, so use a generous timeout.
+            // Audio inference plus a long code answer can take several minutes on a local model.
             var handler = new HttpClientHandler();
             handler.ServerCertificateCustomValidationCallback = static (message, cert, chain, errors) =>
                 errors == System.Net.Security.SslPolicyErrors.None || message?.RequestUri?.IsLoopback == true;
-            this._httpClient = new HttpClient(handler) { Timeout = TimeSpan.FromMinutes(3) };
+            this._httpClient = new HttpClient(handler) { Timeout = TimeSpan.FromMinutes(10) };
         }
 
         /// <summary>
@@ -182,6 +182,10 @@ namespace ModularAudience.Llama
                 return null;
             }
 
+            // Keep partially streamed text across request failures and timeouts. The caller
+            // can still show it in the code editor instead of leaving the box empty.
+            var accumulated = new StringBuilder();
+
             try
             {
                 // llama-server uses OpenAI-style typed content blocks. Audio must be sent as
@@ -207,7 +211,7 @@ namespace ModularAudience.Llama
                 {
                     if (response.IsSuccessStatusCode)
                     {
-                        return await ReadSseAsync(response, onChunk);
+                        return await ReadSseAsync(response, onChunk, accumulated);
                     }
 
                     statusCode = (int)response.StatusCode;
@@ -234,11 +238,18 @@ namespace ModularAudience.Llama
 
                 using var fallbackResponse = await PostChatAsync(fallbackPayload);
                 fallbackResponse.EnsureSuccessStatusCode();
-                return await ReadSseAsync(fallbackResponse, onChunk);
+                return await ReadSseAsync(fallbackResponse, onChunk, accumulated);
             }
             catch (Exception ex)
             {
                 this.Log($"Error sending multimodal synth prompt: {ex}");
+                string partial = accumulated.ToString().Trim();
+                if (partial.Length > 0)
+                {
+                    this.Log($"Keeping {partial.Length} characters of partially streamed code after the error.");
+                    return partial;
+                }
+
                 return null;
             }
         }
@@ -289,20 +300,23 @@ namespace ModularAudience.Llama
             return blocks;
         }
 
-        private async Task<HttpResponseMessage> PostChatAsync(object payload)
+        protected virtual async Task<HttpResponseMessage> PostChatAsync(object payload)
         {
             string json = JsonSerializer.Serialize(payload);
             using var httpContent = new StringContent(json, Encoding.UTF8, "application/json");
             return await this._httpClient.PostAsync($"{this.ApiUrl}/v1/chat/completions", httpContent);
         }
 
-        private async Task<string?> ReadSseAsync(HttpResponseMessage response, Action<string>? onChunk)
+        private async Task<string?> ReadSseAsync(
+            HttpResponseMessage response,
+            Action<string>? onChunk,
+            StringBuilder accumulated)
         {
             response.EnsureSuccessStatusCode();
 
             using var stream = await response.Content.ReadAsStreamAsync();
             using var reader = new StreamReader(stream);
-            var accumulated = new StringBuilder();
+            int chunkCount = 0;
 
             string? line;
             while ((line = await reader.ReadLineAsync()) != null)
@@ -326,6 +340,15 @@ namespace ModularAudience.Llama
                             if (!string.IsNullOrEmpty(chunk))
                             {
                                 accumulated.Append(chunk);
+                                chunkCount++;
+                                if (chunkCount == 1)
+                                {
+                                    this.Log($"First LLM stream chunk received ({chunk.Length} characters).");
+                                }
+                                else if (chunkCount % 20 == 0)
+                                {
+                                    this.Log($"LLM stream chunk {chunkCount}: {accumulated.Length} characters accumulated.");
+                                }
                                 onChunk?.Invoke(chunk);
                             }
                         }
@@ -338,7 +361,7 @@ namespace ModularAudience.Llama
             }
 
             string result = accumulated.ToString().Trim();
-            this.Log($"LLM stream finished ({result.Length} characters).");
+            this.Log($"LLM stream finished ({result.Length} characters in {chunkCount} chunks).");
             return result.Length > 0 ? result : null;
         }
 

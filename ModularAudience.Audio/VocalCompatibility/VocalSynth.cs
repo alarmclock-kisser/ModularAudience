@@ -20,6 +20,9 @@ public static class VocalSynth
     public static AudioObj Render(VocalSynthSettings settings, CancellationToken cancellationToken = default)
     {
         ArgumentNullException.ThrowIfNull(settings);
+        // Validate once for both engines. The core renderer does this itself, but the
+        // Windows SAPI path must reject unsupported languages and speeds as well.
+        settings.Validate();
         return settings.UseWindowsSpeech
             ? VocalWindowsSpeech.Render(settings, cancellationToken)
             : ToAudioObj(VocalSynthEngine.Render(settings, cancellationToken));

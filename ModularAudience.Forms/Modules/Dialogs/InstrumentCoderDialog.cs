@@ -42,6 +42,7 @@ public sealed partial class InstrumentCoderDialog : Form
     private readonly ComboBox modelCombo = new() { DropDownStyle = ComboBoxStyle.DropDownList, Width = 200 };
     private readonly NumericUpDown maxIterations = new() { Minimum = 1, Maximum = 50, Value = 10, Width = 80 };
     private readonly CheckBox includeSpectrogram = new() { Text = "Include Spectrogram Image", Checked = true, AutoSize = true };
+    private readonly CheckBox autoRetryCheckBox = new() { Text = "Continue (send errors + retry)", Checked = true, AutoSize = true };
     private readonly Button startButton = new() { Text = "Start Auto-Refine (send prompt to LLM)", AutoSize = true };
     private readonly Button setPromptButton = new() { Text = "Set Instrument Prompt...", AutoSize = true };
     private readonly Button stopButton = new() { Text = "Stop / Cancel", AutoSize = true, Enabled = false };
@@ -91,6 +92,11 @@ public sealed partial class InstrumentCoderDialog : Form
 
         maxIterations.ValueChanged += (_, _) => { orchestrator.MaxIterations = (int)maxIterations.Value; };
         includeSpectrogram.CheckedChanged += (_, _) => { orchestrator.IncludeSpectrogram = includeSpectrogram.Checked; };
+        autoRetryCheckBox.CheckedChanged += (_, _) =>
+        {
+            orchestrator.AutoRetryCompileErrors = autoRetryCheckBox.Checked;
+            AddLogLine($"Compile error auto-retry {(autoRetryCheckBox.Checked ? "enabled" : "disabled")}.");
+        };
 
         startButton.Click += async (_, _) => await StartRefineAsync();
         setPromptButton.Click += (_, _) => ShowInstrumentPromptDialog();
@@ -196,6 +202,7 @@ public sealed partial class InstrumentCoderDialog : Form
         llmLayout.Controls.Add(maxIterations);
         llmLayout.Controls.Add(new Label { Text = "max iterations", AutoSize = true, Margin = new Padding(5, 8, 0, 0) });
         llmLayout.Controls.Add(includeSpectrogram);
+        llmLayout.Controls.Add(autoRetryCheckBox);
         var connectButton = new Button { Text = "Test Connection", AutoSize = true };
         connectButton.Click += async (_, _) => await TestConnectionAsync();
         llmLayout.Controls.Add(connectButton);
@@ -251,6 +258,16 @@ public sealed partial class InstrumentCoderDialog : Form
         Controls.Add(root);
     }
 
+    private static bool IsActiveRefinementState(SynthRefinementState state) =>
+        state is SynthRefinementState.Rendering or SynthRefinementState.AnalyzingWithLlm
+            or SynthRefinementState.Compiling or SynthRefinementState.HotSwapping;
+
+    private void SetRefineRunning(bool running)
+    {
+        startButton.Enabled = !running;
+        stopButton.Enabled = running;
+    }
+
     private void WireOrchestratorEvents()
     {
         orchestrator.ProgressChanged += progress =>
@@ -259,14 +276,7 @@ public sealed partial class InstrumentCoderDialog : Form
             {
                 LogMultiline($"{progress.State}: {progress.Message}");
                 statusLabel.Text = $"{progress.State} | {progress.Message}";
-                if (progress.State == SynthRefinementState.Rendering ||
-                    progress.State == SynthRefinementState.AnalyzingWithLlm ||
-                    progress.State == SynthRefinementState.Compiling ||
-                    progress.State == SynthRefinementState.HotSwapping)
-                {
-                    startButton.Enabled = false;
-                    stopButton.Enabled = true;
-                }
+                SetRefineRunning(IsActiveRefinementState(progress.State));
             }, null);
         };
 
@@ -299,7 +309,10 @@ public sealed partial class InstrumentCoderDialog : Form
         {
             uiContext.Post(_ =>
             {
+                if (string.IsNullOrEmpty(partialCode) || codeBox.Text == partialCode) return;
                 codeBox.Text = partialCode;
+                codeBox.SelectionStart = codeBox.TextLength;
+                codeBox.ScrollToCaret();
             }, null);
         };
     }
@@ -326,7 +339,14 @@ public sealed partial class InstrumentCoderDialog : Form
         }
 
         Console.WriteLine($"[InstrumentCoderDialog] {line}");
-        try { ModularAudience.Audio.LogManager.Log($"[InstrumentCoder] {line}"); } catch { }
+        try
+        {
+            ModularAudience.Audio.LogManager.Log($"[InstrumentCoder] {line}");
+        }
+        catch (Exception ex)
+        {
+            Console.WriteLine($"[InstrumentCoderDialog] LogManager.Log failed: {ex}");
+        }
     }
 
     private void LogMultiline(string text)
@@ -509,7 +529,14 @@ public sealed partial class InstrumentCoderDialog : Form
             Console.WriteLine($"[InstrumentCoderDialog] Connection test failed: {fullError}");
             AddLogLine($"LLM connection test failed: {ex.Message}");
             statusLabel.Text = "Connection failed.";
-            try { ModularAudience.Audio.LogManager.Log($"[InstrumentCoder] Connection test failed: {fullError}"); } catch { }
+            try
+            {
+                ModularAudience.Audio.LogManager.Log($"[InstrumentCoder] Connection test failed: {fullError}");
+            }
+            catch (Exception logEx)
+            {
+                Console.WriteLine($"[InstrumentCoderDialog] LogManager.Log failed: {logEx}");
+            }
             ShowCopyableError("LLM Connection Error", fullError);
         }
     }
@@ -589,6 +616,7 @@ public sealed partial class InstrumentCoderDialog : Form
 
         orchestrator.MaxIterations = (int)maxIterations.Value;
         orchestrator.IncludeSpectrogram = includeSpectrogram.Checked;
+        orchestrator.AutoRetryCompileErrors = autoRetryCheckBox.Checked;
         orchestrator.UserPrompt = promptText.Text;
         this.llm.SetApiUrl(serverUrlText.Text);
         if (modelCombo.SelectedItem is string selectedModel && !string.IsNullOrWhiteSpace(selectedModel))
@@ -596,14 +624,15 @@ public sealed partial class InstrumentCoderDialog : Form
             this.llm.Model = selectedModel;
         }
         AddLogLine($"Using LLM endpoint {this.llm.ApiUrl} with model '{this.llm.Model}'.");
+        AddLogLine($"Compile error auto-retry {(autoRetryCheckBox.Checked ? "enabled" : "disabled")}.");
+        SetRefineRunning(true);
         orchestrator.Start();
     }
 
     private void StopRefine()
     {
         orchestrator.Cancel();
-        startButton.Enabled = true;
-        stopButton.Enabled = false;
+        SetRefineRunning(false);
         AddLogLine("Refine cancelled by user.");
         statusLabel.Text = "Idle.";
     }
@@ -829,6 +858,7 @@ public sealed partial class InstrumentCoderDialog : Form
         public string Model { get; set; } = "";
         public int MaxIterations { get; set; } = 10;
         public bool IncludeSpectrogram { get; set; } = true;
+        public bool AutoRetryCompileErrors { get; set; } = true;
         public string Prompt { get; set; } = "Improve this synth to better match the reference instrument's timbre and envelope.";
         public string Code { get; set; } = "";
         public string InstrumentName { get; set; } = "New Instrument";
@@ -855,6 +885,8 @@ public sealed partial class InstrumentCoderDialog : Form
             }
             maxIterations.Value = Math.Clamp(settings.MaxIterations, (int)maxIterations.Minimum, (int)maxIterations.Maximum);
             includeSpectrogram.Checked = settings.IncludeSpectrogram;
+            autoRetryCheckBox.Checked = settings.AutoRetryCompileErrors;
+            orchestrator.AutoRetryCompileErrors = autoRetryCheckBox.Checked;
             promptText.Text = settings.Prompt;
             codeBox.Text = settings.Code;
             this.host.Descriptor.Name = settings.InstrumentName;
@@ -888,6 +920,7 @@ public sealed partial class InstrumentCoderDialog : Form
                 Model = modelCombo.SelectedItem as string ?? "",
                 MaxIterations = (int)maxIterations.Value,
                 IncludeSpectrogram = includeSpectrogram.Checked,
+                AutoRetryCompileErrors = autoRetryCheckBox.Checked,
                 Prompt = promptText.Text,
                 Code = codeBox.Text,
                 InstrumentName = this.host.Descriptor.Name,

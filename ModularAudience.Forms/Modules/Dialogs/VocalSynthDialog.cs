@@ -106,7 +106,7 @@ public sealed partial class VocalSynthDialog : Form
             int startFrame)
         {
             this.data = data;
-            this.cursorRanges = cursorRanges;
+            this.cursorRanges = cursorRanges ?? [];
             WaveFormat = WaveFormat.CreateIeeeFloatWaveFormat(sampleRate, channels);
             long startPosition = (long)startFrame * channels;
             if (startFrame < 0 || startPosition >= data.Length)
@@ -165,6 +165,8 @@ public sealed partial class VocalSynthDialog : Form
         InitializeUnsupportedBeepControl();
         InitializeProfileControls();
         InitializeMidiControls(prehear, textEditor, create, designProfileBtn, emphasisBtn);
+        InitializeLlmControls();
+        RestoreLlmState();
         Text = "VocalSynth"; Name = "VocalSynthDialog";
         ClientSize = new Size(900, 650); MinimumSize = new Size(700, 500); StartPosition = FormStartPosition.CenterScreen;
 
@@ -244,6 +246,8 @@ public sealed partial class VocalSynthDialog : Form
         top.Controls.Add(profileRow);
         top.SetFlowBreak(profileRow, true);
         top.Controls.Add(vocalActionsRow);
+        top.SetFlowBreak(vocalActionsRow, true);
+        top.Controls.Add(llmRow);
 
         var bottom = new FlowLayoutPanel { Dock = DockStyle.Bottom, AutoSize = true, Padding = new Padding(6) };
         bottom.Controls.Add(status);
@@ -1882,9 +1886,11 @@ public sealed partial class VocalSynthDialog : Form
             playbackPreparation?.Cancel();
             CancelSyllablePreview();
             StopHear();
+            StopLlmStream(saveEnabledState: false);
             debounce.Dispose();
             syllablePreviewDebounce.Dispose();
             playbackTimer.Dispose();
+            llmIdleHint.Dispose();
         }
         base.Dispose(disposing);
     }

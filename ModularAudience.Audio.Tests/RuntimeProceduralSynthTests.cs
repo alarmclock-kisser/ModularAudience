@@ -490,6 +490,73 @@ public class CustomSynth
         Assert.IsFalse(store.Names().Contains("RoundTrip"));
     }
 
+    // ---- Failed compile must keep the generated code visible ----
+
+    [TestMethod]
+    public async Task Orchestrator_FailedCompile_StillPublishesLlmCode()
+    {
+        const string invalidCode = "this is invalid C#;";
+        var mockLlm = new MockLlamaConnector(_ => $"```csharp\n{invalidCode}\n```");
+        var compiler = new SynthCompiler();
+        var descriptor = new CustomInstrumentDescriptor("FailedCompileSynth", "")
+        {
+            SampleRate = 22050, Channels = 1, MidiNote = 60, Bpm = 120, NoteBeats = 0.25
+        };
+        var orch = new SynthRefinementOrchestrator(mockLlm, compiler, store, descriptor)
+        {
+            MaxIterations = 1,
+            IncludeSpectrogram = false,
+            AutoRetryCompileErrors = false
+        };
+
+        string lastStreamedCode = "";
+        var messages = new System.Collections.Concurrent.ConcurrentBag<string>();
+        var tcs = new TaskCompletionSource<bool>();
+        orch.CodeStreaming += code => lastStreamedCode = code;
+        orch.ProgressChanged += p =>
+        {
+            if (p.Message != null) messages.Add(p.Message);
+            if (p.State == SynthRefinementState.Faulted || p.State == SynthRefinementState.Completed)
+            {
+                tcs.TrySetResult(p.State == SynthRefinementState.Faulted);
+            }
+        };
+
+        orch.Start();
+        bool faulted = await Task.WhenAny(tcs.Task, Task.Delay(30000)) == tcs.Task;
+        if (faulted) faulted = await tcs.Task;
+        else faulted = orch.State == SynthRefinementState.Faulted;
+
+        Assert.IsTrue(faulted, $"Orchestrator should fault on invalid code. State={orch.State}");
+        Assert.IsTrue(lastStreamedCode.Contains(invalidCode), "The invalid LLM code must still be published to the editor.");
+        Assert.AreEqual(lastStreamedCode, descriptor.Code, "The descriptor must keep the exact code shown in the editor.");
+        Assert.IsTrue(messages.Any(m => m.Contains("Showing latest LLM code in editor even though compilation failed")),
+            "A log message must explain that the code is shown despite the compile failure.");
+
+        orch.Dispose();
+        compiler.Dispose();
+    }
+
+    // ---- Streaming failure must not discard partial code ----
+
+    [TestMethod]
+    public async Task LlamaConnector_StreamingFailure_PreservesPartialCode()
+    {
+        const string partialCode = "using System;\npublic class CustomSynth {";
+        string contentJson = JsonSerializer.Serialize(partialCode);
+        string sseText = $"data: {{\"choices\":[{{\"delta\":{{\"content\":{contentJson}}}}}]}}\n\n";
+
+        var connector = new PartialFailureLlamaConnector(sseText);
+        var chunks = new System.Collections.Generic.List<string>();
+        string? result = await connector.SendMultimodalSynthPromptStreamingAsync(
+            [1, 2, 3], [4, 5, 6], null, "Generate a synth.", false, chunk => chunks.Add(chunk));
+
+        Assert.IsNotNull(result, "Partially streamed code must be returned after the stream fails.");
+        Assert.IsTrue(result.Contains("public class CustomSynth"), "Returned text must contain the partial code.");
+        Assert.AreEqual(1, chunks.Count, "The partial chunk must still be forwarded to the UI.");
+        Assert.AreEqual(partialCode, chunks[0]);
+    }
+
     // ---- Mock LlamaConnector for orchestrator tests ----
 
     private sealed class MockLlamaConnector : LlamaConnector
@@ -514,5 +581,106 @@ public class CustomSynth
             }
             return Task.FromResult<string?>(response);
         }
+    }
+
+    private sealed class PartialFailureLlamaConnector : LlamaConnector
+    {
+        private readonly string sseText;
+
+        public PartialFailureLlamaConnector(string sseText) : base("http://localhost:9931")
+        {
+            this.sseText = sseText;
+        }
+
+        protected override Task<HttpResponseMessage> PostChatAsync(object payload)
+        {
+            return Task.FromResult(new HttpResponseMessage(HttpStatusCode.OK)
+            {
+                Content = new FailingSseContent(this.sseText)
+            });
+        }
+    }
+
+    private sealed class FailingSseContent : HttpContent
+    {
+        private readonly byte[] bytes;
+
+        public FailingSseContent(string sseText)
+        {
+            this.bytes = Encoding.UTF8.GetBytes(sseText);
+        }
+
+        protected override Task SerializeToStreamAsync(Stream stream, TransportContext? context)
+        {
+            return stream.WriteAsync(this.bytes, 0, this.bytes.Length);
+        }
+
+        protected override bool TryComputeLength(out long length)
+        {
+            length = this.bytes.Length;
+            return true;
+        }
+
+        protected override Task<Stream> CreateContentReadStreamAsync()
+        {
+            return Task.FromResult<Stream>(new FailingSseStream(this.bytes));
+        }
+    }
+
+    private sealed class FailingSseStream : Stream
+    {
+        private readonly byte[] bytes;
+        private int position;
+
+        public FailingSseStream(byte[] bytes)
+        {
+            this.bytes = bytes;
+        }
+
+        public override bool CanRead => true;
+        public override bool CanSeek => false;
+        public override bool CanWrite => false;
+        public override long Length => this.bytes.Length;
+        public override long Position
+        {
+            get => this.position;
+            set => throw new NotSupportedException();
+        }
+
+        public override void Flush() { }
+
+        public override int Read(byte[] buffer, int offset, int count)
+        {
+            if (this.position >= this.bytes.Length)
+            {
+                throw new IOException("Simulated timeout after the first SSE chunk.");
+            }
+
+            int length = Math.Min(count, this.bytes.Length - this.position);
+            Array.Copy(this.bytes, this.position, buffer, offset, length);
+            this.position += length;
+            return length;
+        }
+
+        public override Task<int> ReadAsync(
+            byte[] buffer,
+            int offset,
+            int count,
+            CancellationToken cancellationToken)
+        {
+            cancellationToken.ThrowIfCancellationRequested();
+            try
+            {
+                return Task.FromResult(this.Read(buffer, offset, count));
+            }
+            catch (Exception ex)
+            {
+                return Task.FromException<int>(ex);
+            }
+        }
+
+        public override long Seek(long offset, SeekOrigin origin) => throw new NotSupportedException();
+        public override void SetLength(long value) => throw new NotSupportedException();
+        public override void Write(byte[] buffer, int offset, int count) => throw new NotSupportedException();
     }
 }

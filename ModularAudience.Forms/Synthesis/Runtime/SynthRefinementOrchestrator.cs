@@ -137,14 +137,21 @@ public sealed class SynthRefinementOrchestrator : IDisposable
         set => this.includeSpectrogram = value;
     }
 
+    /// <summary>
+    /// When true, compile errors are sent back to the LLM for a retry in the same iteration.
+    /// </summary>
+    public bool AutoRetryCompileErrors { get; set; } = true;
+
     public void Start()
     {
         lock (this.stateGate)
         {
-            if (this.state != SynthRefinementState.Idle)
+            if (this.state is SynthRefinementState.Rendering or SynthRefinementState.AnalyzingWithLlm
+                or SynthRefinementState.Compiling or SynthRefinementState.HotSwapping)
             {
                 return;
             }
+            // Allow a fresh run after Completed, Cancelled, Faulted, or Idle.
             this.state = SynthRefinementState.Rendering;
             this.currentIteration = 0;
             this.loopCts = new CancellationTokenSource();
@@ -259,12 +266,24 @@ public sealed class SynthRefinementOrchestrator : IDisposable
                 try
                 {
                     var accumulated = new StringBuilder();
+                    int chunkCount = 0;
                     llmResponse = await this.llm.SendMultimodalSynthPromptStreamingAsync(
                         referenceWav, synthesizedWav, spectrogramPng,
                         BuildSynthPrompt(iterationNum), this.includeSpectrogram,
                         chunk =>
                         {
                             accumulated.Append(chunk);
+                            chunkCount++;
+                            if (chunkCount == 1)
+                            {
+                                Report(SynthRefinementState.AnalyzingWithLlm, iterationNum,
+                                    $"First LLM stream chunk received ({accumulated.Length} characters).", 0.45);
+                            }
+                            else if (chunkCount % 20 == 0)
+                            {
+                                Report(SynthRefinementState.AnalyzingWithLlm, iterationNum,
+                                    $"LLM stream chunk {chunkCount}: {accumulated.Length} characters accumulated.", 0.45);
+                            }
                             CodeStreaming?.Invoke(accumulated.ToString());
                         });
                     if (llmResponse == null && accumulated.Length > 0)
@@ -280,14 +299,35 @@ public sealed class SynthRefinementOrchestrator : IDisposable
                 }
                 llmSw.Stop();
 
+                if (string.IsNullOrEmpty(llmResponse))
+                {
+                    Report(SynthRefinementState.AnalyzingWithLlm, iterationNum,
+                        "LLM returned no text; keeping the previous code visible.", 0.5, isWarning: true);
+                }
+                else
+                {
+                    Report(SynthRefinementState.AnalyzingWithLlm, iterationNum,
+                        $"LLM response received: {llmResponse.Length} raw characters in {llmSw.Elapsed.TotalSeconds:0.##}s.", 0.5);
+                }
+
                 iterationRecord.LlmLatency = llmSw.Elapsed;
                 iterationRecord.LlmCritique = llmResponse;
 
                 // --- Phase 3: Extract code from LLM response and compile ---
-                string? newCode = ExtractCodeBlock(llmResponse);
-                if (string.IsNullOrWhiteSpace(newCode))
+                // Show the exact LLM output immediately, even when it is not compilable yet.
+                string newCode = NormalizeGeneratedCode(llmResponse);
+                Report(SynthRefinementState.Compiling, iterationNum,
+                    $"Extracted {newCode.Length} characters of C# code from the LLM response.", 0.6);
+                if (newCode.Length > 0)
                 {
-                    newCode = llmResponse; // fallback: use entire response
+                    PublishCode(newCode, iterationRecord);
+                    Report(SynthRefinementState.Compiling, iterationNum,
+                        "Showing latest LLM code in editor before compilation.", 0.65);
+                }
+                else
+                {
+                    Report(SynthRefinementState.Compiling, iterationNum,
+                        "No C# code extracted; leaving the previous editor content unchanged.", 0.6, isWarning: true);
                 }
 
                 Report(SynthRefinementState.Compiling, iterationNum,
@@ -297,7 +337,7 @@ public sealed class SynthRefinementOrchestrator : IDisposable
                 CompileResult compileResult;
                 try
                 {
-                    compileResult = this.compiler.Compile(newCode ?? "", token);
+                    compileResult = this.compiler.Compile(newCode, token);
                 }
                 catch (OperationCanceledException) { break; }
                 catch (Exception ex)
@@ -313,21 +353,78 @@ public sealed class SynthRefinementOrchestrator : IDisposable
                     iterationRecord.CompileError = string.Join(" | ", compileResult.Errors);
                     Report(SynthRefinementState.Compiling, iterationNum,
                         $"Compile failed: {iterationRecord.CompileError}", 0.7);
+                    Report(SynthRefinementState.Compiling, iterationNum,
+                        "Showing latest LLM code in editor even though compilation failed.", 0.7, isWarning: true);
                     IterationCompleted?.Invoke(iterationRecord);
 
-                    // Self-healing: feed compile errors back to LLM for retry within the same iteration
-                    string? retryCode = await RetryWithCompileErrorAsync(
-                        newCode ?? "", iterationRecord.CompileError, referenceWav, synthesizedWav, spectrogramPng, token);
-                    if (retryCode != null)
+                    if (this.AutoRetryCompileErrors)
                     {
-                        compileResult = this.compiler.Compile(retryCode, token);
-                        newCode = retryCode;
-                        iterationRecord.CompileError = compileResult.IsSuccess ? null : string.Join(" | ", compileResult.Errors);
+                        // Self-healing: stream the retry too, so the code box never stays empty.
+                        Report(SynthRefinementState.Compiling, iterationNum,
+                            "Compile error auto-retry enabled; sending errors back to LLM.", 0.72);
+                        int retryChunkCount = 0;
+                        string? retryCode = await RetryWithCompileErrorAsync(
+                            newCode, iterationRecord.CompileError, referenceWav, synthesizedWav, spectrogramPng,
+                            chunk =>
+                            {
+                                retryChunkCount++;
+                                if (retryChunkCount == 1)
+                                {
+                                    Report(SynthRefinementState.Compiling, iterationNum,
+                                        $"First retry stream chunk received ({chunk.Length} characters).", 0.75);
+                                }
+                                else if (retryChunkCount % 20 == 0)
+                                {
+                                    Report(SynthRefinementState.Compiling, iterationNum,
+                                        $"Retry stream chunk {retryChunkCount}: {chunk.Length} characters accumulated.", 0.75);
+                                }
+                                CodeStreaming?.Invoke(chunk);
+                            }, token);
+
+                        Report(SynthRefinementState.Compiling, iterationNum,
+                            $"Retry response received: {retryCode?.Length ?? 0} characters.", 0.78);
+                        string normalizedRetry = NormalizeGeneratedCode(retryCode);
+                        if (normalizedRetry.Length > 0)
+                        {
+                            newCode = normalizedRetry;
+                            PublishCode(newCode, iterationRecord);
+                            Report(SynthRefinementState.Compiling, iterationNum,
+                                $"Showing retry code in editor ({newCode.Length} characters).", 0.8);
+                            try
+                            {
+                                compileResult = this.compiler.Compile(newCode, token);
+                            }
+                            catch (OperationCanceledException) { break; }
+                            catch (Exception ex)
+                            {
+                                compileResult = CompileResult.Failed($"Compiler exception: {ex.Message}");
+                            }
+                            iterationRecord.CompileError = compileResult.IsSuccess
+                                ? null
+                                : string.Join(" | ", compileResult.Errors);
+                            if (!compileResult.IsSuccess)
+                            {
+                                Report(SynthRefinementState.Compiling, iterationNum,
+                                    $"Retry compile failed: {iterationRecord.CompileError}", 0.8, isWarning: true);
+                            }
+                        }
+                        else
+                        {
+                            Report(SynthRefinementState.Compiling, iterationNum,
+                                "Retry returned no code; keeping the previous LLM code visible.", 0.78, isWarning: true);
+                        }
+                    }
+                    else
+                    {
+                        Report(SynthRefinementState.Compiling, iterationNum,
+                            "Compile error auto-retry is disabled.", 0.7, isWarning: true);
                     }
 
                     if (!compileResult.IsSuccess)
                     {
-                        ReportFault($"Compilation failed after retry: {iterationRecord.CompileError}");
+                        // Keep the last LLM code visible even though the loop faults here.
+                        PublishCode(newCode, iterationRecord);
+                        ReportFault($"Compilation failed: {iterationRecord.CompileError}");
                         return;
                     }
                 }
@@ -338,7 +435,7 @@ public sealed class SynthRefinementOrchestrator : IDisposable
 
                 try
                 {
-                    await HotSwapAsync(compileResult.Assembly!, newCode ?? "", token);
+                    await HotSwapAsync(compileResult.Assembly!, newCode, token);
                 }
                 catch (OperationCanceledException) { break; }
                 catch (Exception ex)
@@ -347,12 +444,10 @@ public sealed class SynthRefinementOrchestrator : IDisposable
                     return;
                 }
 
-                this.descriptor.Code = newCode ?? this.descriptor.Code;
-                this.descriptor.UpdatedAt = DateTime.UtcNow;
+                PublishCode(newCode, iterationRecord);
                 this.store.Save(this.descriptor);
 
                 iterationRecord.State = SynthRefinementState.HotSwapping;
-                iterationRecord.Code = newCode;
                 IterationCompleted?.Invoke(iterationRecord);
 
                 // Check if we should continue refining or stop
@@ -497,6 +592,7 @@ public sealed class SynthRefinementOrchestrator : IDisposable
         byte[] referenceWav,
         byte[] synthesizedWav,
         byte[]? spectrogramPng,
+        Action<string>? onChunk,
         CancellationToken token)
     {
         string retryPrompt = $@"The following C# DSP code failed to compile with these errors:
@@ -508,16 +604,30 @@ Here is the code that failed:
 {failedCode}
 
 Keep this exact contract:
-{SynthContract.RequiredUsing}
+{SynthContract.RequiredUsings}
 {SynthContract.ExpectedSignature}
 DTO shape (compact reference only, do NOT redeclare it): {SynthContract.DtoShape}
 
 Please fix the compilation errors and return only the corrected C# code in a ```csharp block. Do not change the algorithm logic, only fix syntax/type errors so it compiles under the restricted sandbox (no System.IO, System.Net, System.Reflection, DllImport, unsafe).";
 
-        string? retryResponse = await this.llm.SendMultimodalSynthPromptAsync(
-            referenceWav, synthesizedWav, spectrogramPng, retryPrompt, this.includeSpectrogram);
+        var accumulated = new StringBuilder();
+        string? retryResponse;
+        try
+        {
+            retryResponse = await this.llm.SendMultimodalSynthPromptStreamingAsync(
+                referenceWav, synthesizedWav, spectrogramPng, retryPrompt, this.includeSpectrogram,
+                chunk =>
+                {
+                    accumulated.Append(chunk);
+                    onChunk?.Invoke(accumulated.ToString());
+                });
+        }
+        catch (OperationCanceledException) when (token.IsCancellationRequested)
+        {
+            return null;
+        }
 
-        return ExtractCodeBlock(retryResponse) ?? retryResponse;
+        return retryResponse ?? (accumulated.Length > 0 ? accumulated.ToString() : null);
     }
 
     private byte[] AudioObjToWavBytes(AudioObj audio)
@@ -622,20 +732,49 @@ Current C# code (empty on first iteration - generate from scratch):
 Listen to the reference audio (input_audio[0]) and{(string.IsNullOrWhiteSpace(this.descriptor.Code) ? " generate a matching instrument from scratch" : " the current synthesized output (input_audio[1])")}{(this.includeSpectrogram ? ", and review the spectrogram image (image_url)" : "")}.
 
 Return {(string.IsNullOrWhiteSpace(this.descriptor.Code) ? "new" : "improved")} C# code in a ```csharp code block. The code must:
-- Start with {SynthContract.RequiredUsing}
+- Start with both required usings: {SynthContract.RequiredUsings}
 - Define a public class named CustomSynth with exactly: {SynthContract.ExpectedSignature}
 - Use the host-provided SynthRenderContext; do NOT declare it yourself
 - DTO shape (compact reference only): {SynthContract.DtoShape}
 - Access parameters via ctx.SampleRate, ctx.Channels, ctx.FrameCount, ctx.NoteFrequencyHz, ctx.Bpm, ctx.NoteBeats, ctx.GateSeconds, ctx.MidiNote, ctx.GainPercent, ctx.PitchSemitones
 - Return interleaved float32 PCM in [-1, 1] (array length = ctx.FrameCount * ctx.Channels)
 - NOT use System.IO, System.Net, System.Reflection, DllImport, unsafe, or any process/file/network APIs
-- Only use System.Math, System.Numerics, and basic arithmetic
+- Only use Math, System.Numerics, and basic arithmetic; Math is available through the required using
 - Be a complete, compilable C# file with the class and method
 
 Exact method header: {SynthContract.ExpectedSignature}
-Use System.Math for trigonometry and envelopes.
+Use Math for trigonometry and envelopes.
 
 Focus on timbre, envelope, and spectral match to the reference. Return ONLY the code block, no explanation.";
+    }
+
+    private void PublishCode(string code, SynthRefinementIteration iteration)
+    {
+        if (string.IsNullOrWhiteSpace(code)) return;
+
+        iteration.Code = code;
+        this.descriptor.Code = code;
+        this.descriptor.UpdatedAt = DateTime.UtcNow;
+        CodeStreaming?.Invoke(code);
+    }
+
+    private static string NormalizeGeneratedCode(string? response)
+    {
+        string code = (ExtractCodeBlock(response) ?? response ?? string.Empty).Trim();
+        if (code.Length == 0) return string.Empty;
+
+        // The model sometimes omits usings. Add only what is missing so the code box shows
+        // exactly the source that is handed to the compiler.
+        if (!Regex.IsMatch(code, @"(?m)^\s*using\s+System\s*;"))
+        {
+            code = SynthContract.RequiredSystemUsing + Environment.NewLine + code;
+        }
+        if (!Regex.IsMatch(code, @"(?m)^\s*using\s+ModularAudience\.Audio\.Synthesis\.Runtime\s*;"))
+        {
+            code = SynthContract.RequiredUsing + Environment.NewLine + code;
+        }
+
+        return code;
     }
 
     private static string? ExtractCodeBlock(string? response)
@@ -683,7 +822,7 @@ Focus on timbre, envelope, and spectral match to the reference. Return ONLY the 
             State = state,
             Iteration = iteration,
             MaxIterations = this.maxIterations,
-            Message = message,
+            Message = isWarning ? $"Warning: {message}" : message,
             Progress01 = progress01
         });
     }

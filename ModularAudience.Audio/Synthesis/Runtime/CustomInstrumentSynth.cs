@@ -160,8 +160,10 @@ public sealed class CustomInstrumentSynth : IRuntimeProceduralSynth
 /// </summary>
 public static class SynthContract
 {
+    public const string RequiredSystemUsing = "using System;";
     public const string RequiredUsing = "using ModularAudience.Audio.Synthesis.Runtime;";
     public const string ExpectedSignature = "public static float[] Render(SynthRenderContext ctx)";
+    public static string RequiredUsings => RequiredSystemUsing + Environment.NewLine + RequiredUsing;
 
     // Compact record-style shape of the DTO. The host already supplies this type; generated
     // code must use it via the using directive and must not declare it again.
@@ -172,7 +174,7 @@ public static class SynthContract
 
     public static string LogDescription => string.Join(Environment.NewLine,
         "Expected custom instrument contract:",
-        RequiredUsing,
+        RequiredUsings,
         ExpectedSignature + ";",
         "DTO shape (for reference only - do NOT redeclare it): " + DtoShape,
         "Return float[] with ctx.FrameCount * ctx.Channels interleaved samples in [-1, 1].");

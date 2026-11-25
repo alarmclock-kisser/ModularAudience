@@ -776,9 +776,12 @@ public static partial class VocalSynthEngine
             }
             else if (ph.Symbol == "de-r")
             {
-                // Voiced uvular [ʁ]: steady low-frequency voicing with a gentle guttural
-                // flutter; the rumble comes from the low noise band rather than a 3 kHz hiss.
-                double flutter = 1 - 0.35 * (0.5 - 0.5 * Math.Cos(2 * Math.PI * 24 * time));
+                // Voiced uvular [ʁ]: steady low-frequency voicing with a lightly fluttering
+                // guttural quality; the rumble comes from the low noise band rather than a
+                // 3 kHz hiss. Taper the flutter at the edges so it does not click on note
+                // boundaries, and keep it gentler than the full de-r-trill roll.
+                double edge = Math.Min(1, Math.Min(progress, 1 - progress) / 0.12);
+                double flutter = 1 - 0.22 * edge * (0.5 - 0.5 * Math.Cos(2 * Math.PI * 24 * time));
                 voiceGate *= flutter;
                 noiseGate *= flutter;
             }
