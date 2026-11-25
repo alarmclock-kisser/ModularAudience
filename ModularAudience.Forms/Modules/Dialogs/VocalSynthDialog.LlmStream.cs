@@ -28,7 +28,8 @@ public sealed partial class VocalSynthDialog
             if (llmTurnDeltas == 0)
             {
                 LogManager.LogWarning("[Vocal LLM] No streamed assistant text has arrived yet. "
-                    + "Check that llama UI's server address points at the proxy URL, not directly at llama-server.");
+                    + "Open llama UI at the proxy URL (not directly at llama-server), send a message, and check "
+                    + "the model filter.");
             }
         };
         llmInitializing = false;
@@ -97,6 +98,7 @@ public sealed partial class VocalSynthDialog
         proxy.AssistantDelta += OnAssistantDelta;
         proxy.AssistantTurnCompleted += OnAssistantTurnCompleted;
         proxy.Error += OnLlmError;
+        proxy.Diagnostic += OnLlmDiagnostic;
 
         try
         {
@@ -109,6 +111,7 @@ public sealed partial class VocalSynthDialog
             proxy.AssistantDelta -= OnAssistantDelta;
             proxy.AssistantTurnCompleted -= OnAssistantTurnCompleted;
             proxy.Error -= OnLlmError;
+            proxy.Diagnostic -= OnLlmDiagnostic;
             proxy.Dispose();
             throw;
         }
@@ -129,9 +132,10 @@ public sealed partial class VocalSynthDialog
         llmSpeaker = speaker;
         config.Enabled = true;
         config.Save();
-        llmStatusLabel.Text = $"Listening on {proxy.ListenUrl} (upstream {config.UpstreamUrl})";
+        llmStatusLabel.Text = $"Open llama UI at {proxy.ListenUrl} - not at {config.UpstreamUrl}";
         LogManager.LogInfo($"[Vocal LLM] Live speech started. Proxy {proxy.ListenUrl} -> {config.UpstreamUrl}. "
-            + $"Set llama UI's server address to {proxy.ListenUrl}; otherwise the proxy never sees any chat stream. "
+            + $"IMPORTANT: open llama UI in the browser at {proxy.ListenUrl}, NOT at {config.UpstreamUrl}; "
+            + "otherwise the proxy never sees any chat stream. "
             + $"Engine: {(settings.UseWindowsSpeech ? "Natural speech (Windows)" : "VocalSynth formant engine")}, "
             + $"speed {settings.Speed:F2}.");
         llmIdleHint.Stop();
@@ -163,6 +167,7 @@ public sealed partial class VocalSynthDialog
             llmProxy.AssistantDelta -= OnAssistantDelta;
             llmProxy.AssistantTurnCompleted -= OnAssistantTurnCompleted;
             llmProxy.Error -= OnLlmError;
+            llmProxy.Diagnostic -= OnLlmDiagnostic;
             llmProxy.Stop();
             llmProxy.Dispose();
             llmProxy = null;
@@ -240,6 +245,12 @@ public sealed partial class VocalSynthDialog
     {
         LogManager.LogError($"[Vocal LLM] {message}");
         Ui(() => { llmStatusLabel.Text = $"LLM stream: {message}"; });
+    }
+
+    private void OnLlmDiagnostic(string message)
+    {
+        LogManager.LogInfo($"[Vocal LLM] {message}");
+        Ui(() => { llmStatusLabel.Text = message; });
     }
 
     private static string Truncate(string value, int length) =>

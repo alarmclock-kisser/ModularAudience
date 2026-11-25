@@ -1,5 +1,11 @@
+using System.IO.Compression;
 using System.Net;
+using System.Net.Http;
+using System.Net.Security;
 using System.Net.Sockets;
+using System.Security.Authentication;
+using System.Security.Cryptography;
+using System.Security.Cryptography.X509Certificates;
 using System.Text;
 using Microsoft.VisualStudio.TestTools.UnitTesting;
 using ModularAudience.Audio.Vocal;
@@ -178,7 +184,7 @@ public class VocalLlmStreamSettingsTests
 
         settings.Normalize();
 
-        Assert.AreEqual("http://127.0.0.1:8080", settings.UpstreamUrl);
+        Assert.AreEqual("http://127.0.0.1:9931", settings.UpstreamUrl);
         Assert.AreEqual(1, settings.ListenPort);
         Assert.AreEqual(1, settings.MinWords);
         Assert.AreEqual(2, settings.MaxWords);
@@ -234,6 +240,50 @@ public class LlamaStreamProxyTests
         Assert.IsTrue(LlamaStreamProxy.ModelMatches(streaming, "gemma"));
         Assert.IsFalse(LlamaStreamProxy.ModelMatches(streaming, "llama"));
         Assert.IsTrue(LlamaStreamProxy.ModelMatches(streaming, ""));
+    }
+
+    [TestMethod]
+    public void ModelNamesMatch_HandlesFullGgufPathsAndShortAliases()
+    {
+        const string fullPath = @"D:\Models\GGUF\Others\gemma-4-12b-it-qat-q4_0\gemma-4-12b-it-qat-q4_0.gguf";
+
+        Assert.IsTrue(LlamaStreamProxy.ModelNamesMatch(fullPath, "gemma-4-12b-it-qat-q4_0.gguf"));
+        Assert.IsTrue(LlamaStreamProxy.ModelNamesMatch("gemma-4-12b-it-qat-q4_0.gguf", fullPath));
+        Assert.IsTrue(LlamaStreamProxy.ModelNamesMatch("gemma-4", fullPath));
+        Assert.IsFalse(LlamaStreamProxy.ModelNamesMatch("llama-3", fullPath));
+    }
+}
+
+[TestClass]
+public class LlamaHttpTests
+{
+    [TestMethod]
+    public void LoopbackHttps_CertificateIsAccepted()
+    {
+        using var request = new HttpRequestMessage(HttpMethod.Get, "https://localhost:9931/v1/models");
+        Assert.IsTrue(LlamaHttp.AcceptCertificate(request,
+            System.Net.Security.SslPolicyErrors.RemoteCertificateChainErrors));
+    }
+
+    [TestMethod]
+    public void RemoteHttps_InvalidCertificateIsRejected()
+    {
+        using var request = new HttpRequestMessage(HttpMethod.Get, "https://llama.example.com/v1/models");
+        Assert.IsFalse(LlamaHttp.AcceptCertificate(request,
+            System.Net.Security.SslPolicyErrors.RemoteCertificateChainErrors));
+        Assert.IsTrue(LlamaHttp.AcceptCertificate(request, System.Net.Security.SslPolicyErrors.None));
+    }
+
+    [TestMethod]
+    public void DescribeError_IncludesInnerException()
+    {
+        var error = new HttpRequestException("An error occurred while sending the request.",
+            new AuthenticationException("The remote certificate is invalid."));
+
+        string text = LlamaHttp.DescribeError(error);
+
+        StringAssert.Contains(text, "An error occurred while sending the request.");
+        StringAssert.Contains(text, "The remote certificate is invalid.");
     }
 }
 
@@ -330,5 +380,199 @@ public class LlamaStreamProxyIntegrationTests
         upstream.Stop();
         Assert.AreEqual(0, errors.Count, string.Join("; ", errors));
         CollectionAssert.AreEqual(new[] { "Hello ", "world" }, deltas);
+    }
+
+    private static byte[] Gzip(byte[] data)
+    {
+        using var output = new MemoryStream();
+        using (var gzip = new GZipStream(output, CompressionLevel.Fastest, leaveOpen: true))
+        {
+            gzip.Write(data);
+        }
+
+        return output.ToArray();
+    }
+
+    [TestMethod]
+    [Timeout(15000)]
+    public async Task Proxy_DecompressesGzipWebUiResponse()
+    {
+        int upstreamPort = FreePort();
+        int proxyPort = FreePort();
+        var upstream = new TcpListener(IPAddress.Loopback, upstreamPort);
+        upstream.Start();
+
+        // llama.cpp rejects requests without Accept-Encoding: gzip with HTTP 415.
+        Task serverTask = Task.Run(async () =>
+        {
+            using TcpClient client = await upstream.AcceptTcpClientAsync();
+            using NetworkStream stream = client.GetStream();
+            var reader = new StreamReader(stream, Encoding.ASCII, false, 1, leaveOpen: true);
+            bool acceptsGzip = false;
+            string? line;
+            while (!string.IsNullOrEmpty(line = await reader.ReadLineAsync()))
+            {
+                if (line.StartsWith("Accept-Encoding:", StringComparison.OrdinalIgnoreCase)
+                    && line.Contains("gzip", StringComparison.OrdinalIgnoreCase))
+                {
+                    acceptsGzip = true;
+                }
+            }
+
+            if (!acceptsGzip)
+            {
+                byte[] error = Encoding.UTF8.GetBytes(
+                    "HTTP/1.1 415 Unsupported Media Type\r\nContent-Type: text/plain\r\nConnection: close\r\n\r\n"
+                    + "Error: gzip is not supported by this browser");
+                await stream.WriteAsync(error);
+                return;
+            }
+
+            byte[] compressed = Gzip(Encoding.UTF8.GetBytes("<html><body>llama ui</body></html>"));
+            byte[] header = Encoding.ASCII.GetBytes(
+                $"HTTP/1.1 200 OK\r\nContent-Type: text/html; charset=utf-8\r\n"
+                + $"Content-Encoding: gzip\r\nContent-Length: {compressed.Length}\r\nConnection: close\r\n\r\n");
+            await stream.WriteAsync(header);
+            await stream.WriteAsync(compressed);
+        });
+
+        using (var proxy = new LlamaStreamProxy())
+        {
+            proxy.Start($"http://127.0.0.1:{upstreamPort}", proxyPort);
+            using var client = new HttpClient { Timeout = TimeSpan.FromSeconds(10) };
+            string body = await client.GetStringAsync($"http://127.0.0.1:{proxyPort}/");
+            StringAssert.Contains(body, "llama ui");
+        }
+
+        await serverTask;
+        upstream.Stop();
+    }
+
+    private static X509Certificate2 CreateSelfSignedLoopbackCertificate()
+    {
+        using RSA rsa = RSA.Create(2048);
+        var request = new CertificateRequest(
+            "CN=localhost", rsa, HashAlgorithmName.SHA256, RSASignaturePadding.Pkcs1);
+        var names = new SubjectAlternativeNameBuilder();
+        names.AddDnsName("localhost");
+        names.AddIpAddress(IPAddress.Loopback);
+        request.CertificateExtensions.Add(names.Build());
+        request.CertificateExtensions.Add(new X509BasicConstraintsExtension(false, false, 0, false));
+        request.CertificateExtensions.Add(new X509KeyUsageExtension(
+            X509KeyUsageFlags.DigitalSignature | X509KeyUsageFlags.KeyEncipherment, false));
+        request.CertificateExtensions.Add(new X509EnhancedKeyUsageExtension(
+            new OidCollection { new Oid("1.3.6.1.5.5.7.3.1") }, false));
+        // Windows SChannel cannot use in-memory (ephemeral) private keys for a
+        // TLS server, so persist the generated key in the user key store.
+        using X509Certificate2 ephemeral = request.CreateSelfSigned(
+            DateTimeOffset.UtcNow.AddDays(-1), DateTimeOffset.UtcNow.AddDays(1));
+        return X509CertificateLoader.LoadPkcs12(
+            ephemeral.Export(X509ContentType.Pfx), null, X509KeyStorageFlags.PersistKeySet);
+    }
+
+    [TestMethod]
+    [Timeout(20000)]
+    public async Task Proxy_ForwardsHttpsUpstreamWithSelfSignedCertificate()
+    {
+        int upstreamPort = FreePort();
+        int proxyPort = FreePort();
+        using X509Certificate2 certificate = CreateSelfSignedLoopbackCertificate();
+
+        var upstream = new TcpListener(IPAddress.Loopback, upstreamPort);
+        upstream.Start();
+
+        var serverErrors = new List<string>();
+        Task serverTask = Task.Run(async () =>
+        {
+            try
+            {
+                using TcpClient client = await upstream.AcceptTcpClientAsync();
+                using var ssl = new SslStream(client.GetStream(), leaveInnerStreamOpen: false);
+                await ssl.AuthenticateAsServerAsync(certificate, false,
+                    SslProtocols.Tls12 | SslProtocols.Tls13, false);
+
+                // Buffer size 1 keeps the reader from swallowing body bytes.
+                var reader = new StreamReader(ssl, Encoding.ASCII, false, 1, leaveOpen: true);
+                int contentLength = 0;
+                string? line;
+                while (!string.IsNullOrEmpty(line = await reader.ReadLineAsync()))
+                {
+                    if (line.StartsWith("Content-Length:", StringComparison.OrdinalIgnoreCase))
+                    {
+                        int.TryParse(line["Content-Length:".Length..].Trim(), out contentLength);
+                    }
+                }
+
+                if (contentLength > 0)
+                {
+                    byte[] body = new byte[contentLength];
+                    int read = 0;
+                    while (read < contentLength)
+                    {
+                        int count = await ssl.ReadAsync(body.AsMemory(read, contentLength - read));
+                        if (count == 0)
+                        {
+                            break;
+                        }
+
+                        read += count;
+                    }
+                }
+
+                const string sse =
+                    "data: {\"choices\":[{\"delta\":{\"role\":\"assistant\"}}]}\r\n\r\n" +
+                    "data: {\"choices\":[{\"delta\":{\"content\":\"Hello over TLS\"}}]}\r\n\r\n" +
+                    "data: [DONE]\r\n\r\n";
+                byte[] sseBytes = Encoding.UTF8.GetBytes(sse);
+                byte[] response = Encoding.UTF8.GetBytes(
+                    $"HTTP/1.1 200 OK\r\nContent-Type: text/event-stream\r\nContent-Length: {sseBytes.Length}\r\n\r\n");
+                await ssl.WriteAsync(response);
+                await ssl.WriteAsync(sseBytes);
+                await ssl.FlushAsync();
+            }
+            catch (Exception error)
+            {
+                serverErrors.Add(error.ToString());
+            }
+        });
+
+        var deltas = new List<string>();
+        var errors = new List<string>();
+        using (var proxy = new LlamaStreamProxy())
+        {
+            proxy.Error += error => errors.Add(error);
+            proxy.AssistantDelta += delta => deltas.Add(delta);
+            proxy.Start($"https://127.0.0.1:{upstreamPort}", proxyPort);
+
+            using var client = new HttpClient { Timeout = TimeSpan.FromSeconds(10) };
+            using var content = new StringContent(
+                "{\"model\":\"test\",\"stream\":true,\"messages\":[]}", Encoding.UTF8, "application/json");
+            string body;
+            try
+            {
+                using HttpResponseMessage response = await client.PostAsync(
+                    $"http://127.0.0.1:{proxyPort}/v1/chat/completions", content);
+                body = await response.Content.ReadAsStringAsync();
+            }
+            catch (Exception error)
+            {
+                Assert.Fail($"{error}; proxy errors: {string.Join("; ", errors)}; "
+                    + $"server errors: {string.Join("; ", serverErrors)}");
+                return;
+            }
+
+            StringAssert.Contains(body, "Hello over TLS");
+        }
+
+        await serverTask;
+        upstream.Stop();
+        if (certificate.GetRSAPrivateKey() is RSACryptoServiceProvider csp)
+        {
+            csp.PersistKeyInCsp = false;
+        }
+
+        Assert.AreEqual(0, errors.Count, string.Join("; ", errors));
+        Assert.AreEqual(0, serverErrors.Count, string.Join("; ", serverErrors));
+        CollectionAssert.AreEqual(new[] { "Hello over TLS" }, deltas);
     }
 }

@@ -10,6 +10,7 @@ using System.Collections.Generic;
 using System.Drawing;
 using System.IO;
 using System.Linq;
+using System.Runtime.InteropServices;
 using System.Threading;
 using System.Threading.Tasks;
 using System.Windows.Forms;
@@ -25,6 +26,10 @@ public sealed partial class InstrumentCoderDialog : Form
 {
     private static readonly object ActiveDialogsGate = new();
     private static readonly HashSet<InstrumentCoderDialog> ActiveDialogs = [];
+    private const int WmSetRedraw = 0x000B;
+
+    [DllImport("user32.dll", CharSet = CharSet.Auto)]
+    private static extern IntPtr SendMessage(IntPtr hWnd, int msg, IntPtr wParam, IntPtr lParam);
 
     private readonly LlamaConnector llm;
     private readonly SynthCompiler compiler;
@@ -50,7 +55,15 @@ public sealed partial class InstrumentCoderDialog : Form
     private readonly Button loadButton = new() { Text = "Load into Active Synth Slot", AutoSize = true };
     private readonly Button revertButton = new() { Text = "Revert to Selected Iteration", AutoSize = true, Enabled = false };
     private readonly TextBox codeBox = new() { Multiline = true, Width = 700, Height = 300, Font = new Font("Consolas", 9f) };
-    private readonly ListBox logList = new() { Width = 700, Height = 200 };
+    private readonly TextBox feedbackText = new() { Multiline = true, Width = 500, Height = 80, AcceptsReturn = true };
+    private readonly Button sendFeedbackButton = new() { Text = "Send", AutoSize = true, Enabled = false };
+    private readonly CheckBox haltAfterPrehearCheckBox = new()
+    {
+        Text = "Halt after pre-hear for User feedback",
+        Checked = true,
+        AutoSize = true
+    };
+    // Kept because "Revert to Selected Iteration" depends on it. Logging goes to LogManager.
     private readonly ComboBox iterationList = new() { DropDownStyle = ComboBoxStyle.DropDownList, Width = 200 };
     private readonly Label statusLabel = new() { Dock = DockStyle.Fill, AutoEllipsis = true, Text = "Idle." };
     private readonly Button auditionButton = new() { Text = "Audition Synth", AutoSize = true };
@@ -59,6 +72,11 @@ public sealed partial class InstrumentCoderDialog : Form
     private WaveOut? referenceOutput;
     private readonly Dictionary<string, AudioObj> referenceAudioMap = new();
     private TextBox? instrumentNameBox;
+
+    // Snapshot of UI state for the background refinement thread. Reading WinForms
+    // controls directly from that thread is unsafe, so focus/check state is mirrored here.
+    private volatile bool haltAfterPrehearRequested = true;
+    private volatile bool feedbackHasFocus;
 
     // Settings persistence
     private static string SettingsPath => Path.Combine(
@@ -81,8 +99,11 @@ public sealed partial class InstrumentCoderDialog : Form
         this.orchestrator = new SynthRefinementOrchestrator(this.llm, this.compiler, this.store, this.host.Descriptor)
         {
             MaxIterations = (int)maxIterations.Value,
-            IncludeSpectrogram = includeSpectrogram.Checked
+            IncludeSpectrogram = includeSpectrogram.Checked,
+            PlayPrehearOnHotSwap = true
         };
+        this.orchestrator.ShouldAwaitUserFeedback = () =>
+            this.haltAfterPrehearRequested || this.feedbackHasFocus;
 
         WireOrchestratorEvents();
 
@@ -108,8 +129,24 @@ public sealed partial class InstrumentCoderDialog : Form
         referencePlayButton.Click += async (_, _) => await ToggleReferencePlaybackAsync();
         referenceAudioCombo.SelectedIndexChanged += (_, _) => { referencePlayButton.Enabled = referenceAudioCombo.SelectedItem is not null; };
         iterationList.SelectedIndexChanged += (_, _) => { revertButton.Enabled = iterationList.SelectedItem is not null; };
+        sendFeedbackButton.Click += (_, _) => SendFeedback();
+        feedbackText.KeyDown += (_, e) =>
+        {
+            if (e.KeyCode == Keys.Enter && e.Control)
+            {
+                e.SuppressKeyPress = true;
+                SendFeedback();
+            }
+        };
+        haltAfterPrehearCheckBox.CheckedChanged += (_, _) =>
+        {
+            this.haltAfterPrehearRequested = haltAfterPrehearCheckBox.Checked;
+            AddLogLine($"Halt after pre-hear for user feedback {(haltAfterPrehearCheckBox.Checked ? "enabled" : "disabled")}.");
+        };
+        feedbackText.Enter += (_, _) => this.feedbackHasFocus = true;
+        feedbackText.Leave += (_, _) => this.feedbackHasFocus = false;
 
-        codeBox.Text = this.host.Descriptor.Code;
+        SetCodeText(this.host.Descriptor.Code);
         codeBox.TextChanged += (_, _) => { this.host.Descriptor.Code = codeBox.Text; this.host.Descriptor.UpdatedAt = DateTime.UtcNow; };
 
         LoadReferenceAudioList();
@@ -237,19 +274,22 @@ public sealed partial class InstrumentCoderDialog : Form
         root.Controls.Add(codeGroup, 0, 4);
         root.SetColumnSpan(codeGroup, 2);
 
-        // Row 5: Iteration log
-        var logGroup = new GroupBox { Text = "Iteration Log", Dock = DockStyle.Fill };
-        var logLayout = new TableLayoutPanel { Dock = DockStyle.Fill, ColumnCount = 2, RowCount = 2 };
-        logLayout.ColumnStyles.Add(new(SizeType.Percent, 70));
-        logLayout.ColumnStyles.Add(new(SizeType.Percent, 30));
-        logLayout.RowStyles.Add(new(SizeType.Percent, 100));
-        logLayout.RowStyles.Add(new(SizeType.AutoSize));
-        logList.Font = new Font("Consolas", 9f);
-        logLayout.Controls.Add(logList, 0, 0);
-        iterationList.DropDownStyle = ComboBoxStyle.DropDownList;
-        logLayout.Controls.Add(iterationList, 1, 0);
-        root.Controls.Add(logGroup, 0, 5);
-        root.SetColumnSpan(logGroup, 2);
+        // Row 5: User feedback (sent with the rendered pre-hear on the next iteration)
+        var feedbackGroup = new GroupBox { Text = "User Feedback (sent with pre-hear audio)", Dock = DockStyle.Fill };
+        var feedbackLayout = new TableLayoutPanel { Dock = DockStyle.Fill, ColumnCount = 2, RowCount = 2, Padding = new Padding(5) };
+        feedbackLayout.ColumnStyles.Add(new(SizeType.Percent, 70));
+        feedbackLayout.ColumnStyles.Add(new(SizeType.Percent, 30));
+        feedbackLayout.RowStyles.Add(new(SizeType.Percent, 100));
+        feedbackLayout.RowStyles.Add(new(SizeType.AutoSize));
+        feedbackText.Dock = DockStyle.Fill;
+        feedbackLayout.Controls.Add(feedbackText, 0, 0);
+        iterationList.Dock = DockStyle.Top;
+        feedbackLayout.Controls.Add(iterationList, 1, 0);
+        feedbackLayout.Controls.Add(haltAfterPrehearCheckBox, 0, 1);
+        feedbackLayout.Controls.Add(sendFeedbackButton, 1, 1);
+        feedbackGroup.Controls.Add(feedbackLayout);
+        root.Controls.Add(feedbackGroup, 0, 5);
+        root.SetColumnSpan(feedbackGroup, 2);
 
         // Row 6: Status
         root.Controls.Add(statusLabel, 0, 6);
@@ -260,7 +300,8 @@ public sealed partial class InstrumentCoderDialog : Form
 
     private static bool IsActiveRefinementState(SynthRefinementState state) =>
         state is SynthRefinementState.Rendering or SynthRefinementState.AnalyzingWithLlm
-            or SynthRefinementState.Compiling or SynthRefinementState.HotSwapping;
+            or SynthRefinementState.Compiling or SynthRefinementState.HotSwapping
+            or SynthRefinementState.AwaitingFeedback;
 
     private void SetRefineRunning(bool running)
     {
@@ -277,6 +318,11 @@ public sealed partial class InstrumentCoderDialog : Form
                 LogMultiline($"{progress.State}: {progress.Message}");
                 statusLabel.Text = $"{progress.State} | {progress.Message}";
                 SetRefineRunning(IsActiveRefinementState(progress.State));
+                sendFeedbackButton.Enabled = progress.State == SynthRefinementState.AwaitingFeedback;
+                if (progress.State == SynthRefinementState.AwaitingFeedback && haltAfterPrehearCheckBox.Checked)
+                {
+                    feedbackText.Focus();
+                }
             }, null);
         };
 
@@ -300,21 +346,72 @@ public sealed partial class InstrumentCoderDialog : Form
         {
             uiContext.Post(_ =>
             {
-                codeBox.Text = this.host.Descriptor.Code;
+                SetCodeText(this.host.Descriptor.Code);
                 statusLabel.Text = "Synth hot-swapped into active slot.";
             }, null);
         };
 
-        orchestrator.CodeStreaming += partialCode =>
+        orchestrator.CodeStreaming += finalCode =>
         {
             uiContext.Post(_ =>
             {
-                if (string.IsNullOrEmpty(partialCode) || codeBox.Text == partialCode) return;
-                codeBox.Text = partialCode;
-                codeBox.SelectionStart = codeBox.TextLength;
-                codeBox.ScrollToCaret();
+                // One en-bloc replacement per iteration; no SSE chunk updates.
+                SetCodeText(finalCode);
+                AddLogLine($"Final LLM code shown in editor ({finalCode.Length} characters).");
             }, null);
         };
+    }
+
+    private void SendFeedback()
+    {
+        string feedback = feedbackText.Text;
+        feedbackText.Clear();
+        sendFeedbackButton.Enabled = false;
+        orchestrator.SubmitUserFeedback(feedback);
+        AddLogLine($"User feedback sent to LLM ({feedback.Length} characters).");
+        statusLabel.Text = "Feedback sent; continuing refinement.";
+    }
+
+    /// <summary>
+    /// Programmatic code replacement without per-chunk flicker. The model's own
+    /// indentation is preserved; WM_SETREDRAW suppresses intermediate repaints.
+    /// </summary>
+    private void SetCodeText(string code)
+    {
+        code ??= string.Empty;
+        if (codeBox.Text == code) return;
+
+        void Apply()
+        {
+            if (disposed || codeBox.IsDisposed || codeBox.Text == code) return;
+            if (codeBox.IsHandleCreated)
+            {
+                SendMessage(codeBox.Handle, WmSetRedraw, IntPtr.Zero, IntPtr.Zero);
+            }
+            try
+            {
+                codeBox.Text = code;
+                codeBox.SelectionStart = codeBox.TextLength;
+                codeBox.ScrollToCaret();
+            }
+            finally
+            {
+                if (codeBox.IsHandleCreated)
+                {
+                    SendMessage(codeBox.Handle, WmSetRedraw, new IntPtr(1), IntPtr.Zero);
+                    codeBox.Invalidate(true);
+                }
+            }
+        }
+
+        if (codeBox.InvokeRequired)
+        {
+            codeBox.BeginInvoke((Action)Apply);
+        }
+        else
+        {
+            Apply();
+        }
     }
 
     private void AddLogLine(string line)
@@ -322,23 +419,8 @@ public sealed partial class InstrumentCoderDialog : Form
         if (disposed || IsDisposed) return;
         string stamped = $"[{DateTime.Now:HH:mm:ss}] {line}";
 
-        void AppendToUi()
-        {
-            if (disposed || IsDisposed) return;
-            logList.Items.Add(stamped);
-            logList.TopIndex = logList.Items.Count - 1;
-        }
-
-        if (uiContext != SynchronizationContext.Current)
-        {
-            uiContext.Post(_ => AppendToUi(), null);
-        }
-        else
-        {
-            AppendToUi();
-        }
-
-        Console.WriteLine($"[InstrumentCoderDialog] {line}");
+        // No list box: WindowMain / LogManager already keep the rolling log.
+        Console.WriteLine($"[InstrumentCoderDialog] {stamped}");
         try
         {
             ModularAudience.Audio.LogManager.Log($"[InstrumentCoder] {line}");
@@ -633,6 +715,7 @@ public sealed partial class InstrumentCoderDialog : Form
     {
         orchestrator.Cancel();
         SetRefineRunning(false);
+        sendFeedbackButton.Enabled = false;
         AddLogLine("Refine cancelled by user.");
         statusLabel.Text = "Idle.";
     }
@@ -661,7 +744,7 @@ public sealed partial class InstrumentCoderDialog : Form
             var synth = new CustomInstrumentSynth(this.host.Descriptor, result.Assembly);
             var safeSynth = new SynthSandboxDecorator(synth);
             this.host.Swap(safeSynth);
-            codeBox.Text = code;
+            SetCodeText(code);
             await AuditionSynthAsync();
             statusLabel.Text = "Compiled and loaded into active slot.";
         }
@@ -680,13 +763,48 @@ public sealed partial class InstrumentCoderDialog : Form
             return;
         }
 
-        this.store.Save(this.host.Descriptor);
-        AddLogLine($"Saved '{this.host.Descriptor.Name}' to Custom Instruments store.");
-        statusLabel.Text = "Saved to custom instruments.";
+        string title = "New Custom Instrument Name";
+        string prompt = "Enter a new name for this custom instrument:";
+        string suggestedName = this.host.Descriptor.Name;
 
-        MessageBox.Show(this,
-            $"Instrument '{this.host.Descriptor.Name}' saved to %appdata%\\ModularAudience\\CustomInstruments\\",
-            "Instrument Coder", MessageBoxButtons.OK, MessageBoxIcon.Information);
+        while (true)
+        {
+            // Empty input (Cancel/OK without text) aborts the save.
+            string entered = Microsoft.VisualBasic.Interaction.InputBox(prompt, title, suggestedName, -1, -1);
+            if (string.IsNullOrWhiteSpace(entered)) return;
+            entered = entered.Trim();
+            suggestedName = entered;
+
+            if (entered.Length > 100 || entered.Any(char.IsControl) ||
+                entered.IndexOfAny(Path.GetInvalidFileNameChars()) >= 0)
+            {
+                title = "Invalid name - enter another custom instrument name";
+                prompt = $"'{entered}' cannot be used as a custom instrument name. Enter another name:";
+                MessageBox.Show(this,
+                    "Use 1-100 characters without control characters or invalid file-name characters.",
+                    title, MessageBoxButtons.OK, MessageBoxIcon.Warning);
+                continue;
+            }
+
+            if (this.store.Names().Any(n => string.Equals(n, entered, StringComparison.OrdinalIgnoreCase)))
+            {
+                // Re-open with an explicit title naming the conflicting entry.
+                title = $"'{entered}' already exists - enter another name";
+                prompt = $"The custom instrument '{entered}' already exists. Enter another name:";
+                continue;
+            }
+
+            this.host.Descriptor.Name = entered;
+            if (this.instrumentNameBox != null) this.instrumentNameBox.Text = entered;
+            this.store.Save(this.host.Descriptor);
+            AddLogLine($"Saved '{entered}' to Custom Instruments store.");
+            statusLabel.Text = $"Saved '{entered}' to custom instruments.";
+
+            MessageBox.Show(this,
+                $"Instrument '{entered}' saved to %appdata%\\ModularAudience\\CustomInstruments\\",
+                "Instrument Coder", MessageBoxButtons.OK, MessageBoxIcon.Information);
+            return;
+        }
     }
 
     private void RevertToSelectedIteration()
@@ -700,7 +818,7 @@ public sealed partial class InstrumentCoderDialog : Form
         var it = orchestrator.History.FirstOrDefault(i => i.Index == index);
         if (it == null || string.IsNullOrEmpty(it.Code)) return;
 
-        codeBox.Text = it.Code;
+        SetCodeText(it.Code);
         this.host.Descriptor.Code = it.Code;
         AddLogLine($"Reverted to iteration {index} code.");
         statusLabel.Text = $"Reverted to iteration {index}.";
@@ -859,6 +977,7 @@ public sealed partial class InstrumentCoderDialog : Form
         public int MaxIterations { get; set; } = 10;
         public bool IncludeSpectrogram { get; set; } = true;
         public bool AutoRetryCompileErrors { get; set; } = true;
+        public bool HaltAfterPrehearForFeedback { get; set; } = true;
         public string Prompt { get; set; } = "Improve this synth to better match the reference instrument's timbre and envelope.";
         public string Code { get; set; } = "";
         public string InstrumentName { get; set; } = "New Instrument";
@@ -887,8 +1006,10 @@ public sealed partial class InstrumentCoderDialog : Form
             includeSpectrogram.Checked = settings.IncludeSpectrogram;
             autoRetryCheckBox.Checked = settings.AutoRetryCompileErrors;
             orchestrator.AutoRetryCompileErrors = autoRetryCheckBox.Checked;
+            haltAfterPrehearCheckBox.Checked = settings.HaltAfterPrehearForFeedback;
+            this.haltAfterPrehearRequested = haltAfterPrehearCheckBox.Checked;
             promptText.Text = settings.Prompt;
-            codeBox.Text = settings.Code;
+            SetCodeText(settings.Code);
             this.host.Descriptor.Name = settings.InstrumentName;
             this.host.Descriptor.Code = settings.Code;
             if (!string.IsNullOrEmpty(settings.SelectedReferenceAudio))
@@ -921,6 +1042,7 @@ public sealed partial class InstrumentCoderDialog : Form
                 MaxIterations = (int)maxIterations.Value,
                 IncludeSpectrogram = includeSpectrogram.Checked,
                 AutoRetryCompileErrors = autoRetryCheckBox.Checked,
+                HaltAfterPrehearForFeedback = haltAfterPrehearCheckBox.Checked,
                 Prompt = promptText.Text,
                 Code = codeBox.Text,
                 InstrumentName = this.host.Descriptor.Name,

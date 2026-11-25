@@ -72,8 +72,9 @@ public sealed class VocalLlmStreamDialog : Form
         {
             AutoSize = true,
             MaximumSize = new Size(640, 0),
-            Text = "Set the server address in llama UI to the proxy URL shown below. "
-                 + "The proxy forwards everything to your llama-server and speaks the assistant's streamed answers.",
+            Text = "Open llama UI in the browser at the proxy URL shown below - NOT directly at "
+                 + "https://localhost:9931. The proxy forwards everything to your llama-server and speaks "
+                 + "the assistant's streamed answers. If the UI has a saved server address, set it to the proxy URL too.",
         };
 
         var grid = new TableLayoutPanel
@@ -224,7 +225,8 @@ public sealed class VocalLlmStreamDialog : Form
         try
         {
             string url = upstream.Text.Trim().TrimEnd('/') + "/v1/models";
-            using var client = new HttpClient { Timeout = TimeSpan.FromSeconds(5) };
+            // HTTPS llama-servers commonly use a self-signed localhost certificate.
+            using HttpClient client = LlamaHttp.CreateClient(TimeSpan.FromSeconds(5));
             using HttpResponseMessage response = await client.GetAsync(url);
             string body = await response.Content.ReadAsStringAsync();
             if (!response.IsSuccessStatusCode)
@@ -259,8 +261,9 @@ public sealed class VocalLlmStreamDialog : Form
         catch (Exception error)
         {
             ClearModels();
-            status.Text = $"Connection failed: {error.Message}";
-            LogManager.LogWarning($"[Vocal LLM] Test connection failed: {error.Message}");
+            string detail = LlamaHttp.DescribeError(error);
+            status.Text = $"Connection failed: {detail}";
+            LogManager.LogWarning($"[Vocal LLM] Test connection failed: {detail}");
         }
         finally
         {

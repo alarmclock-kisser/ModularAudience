@@ -117,8 +117,12 @@ public static class InstrumentSampleSynth
             instrumentName = InstrumentSynthCatalog.Voices(SynthFamily.Custom)[settings.VoiceIndex].Name;
         }
 
-        // Load and compile the custom instrument from the store.
+        // Load and compile the custom instrument from the store. The persisted descriptor
+        // only carries the DSP code plus defaults; the current Sample Synthesizer controls
+        // (key note, pitch, duration, tempo, envelope, filter, level, ...) must be applied
+        // before rendering, otherwise the generated code would never see them.
         var descriptor = CustomInstrumentStore.Shared.Load(instrumentName);
+        ApplySettingsToCustomDescriptor(settings, descriptor);
         var compiler = new SynthCompiler();
         var compileResult = compiler.Compile(descriptor.Code, token);
         if (!compileResult.IsSuccess)
@@ -150,6 +154,40 @@ public static class InstrumentSampleSynth
 
         compiler.Dispose();
         return result;
+    }
+
+    /// <summary>
+    /// Copies the live UI settings onto the loaded descriptor so CustomInstrumentSynth
+    /// can pass them to the generated DSP code via SynthRenderContext. The descriptor is
+    /// a fresh instance from the store and is never saved here.
+    /// </summary>
+    private static void ApplySettingsToCustomDescriptor(InstrumentSynthSettings s, CustomInstrumentDescriptor d)
+    {
+        d.SampleRate = s.SampleRate;
+        d.Channels = s.Channels;
+        d.MidiNote = s.MidiNote;
+        d.PitchSemitones = s.PitchSemitones;
+        d.Bpm = s.Bpm;
+        d.NoteBeats = s.NoteBeats;
+        d.DurationMultiplier = s.DurationMultiplier;
+        d.GainPercent = s.GainPercent;
+        d.AttackMs = s.AttackMs;
+        d.DecaySeconds = s.DecaySeconds;
+        d.SustainPercent = s.SustainPercent;
+        d.ReleaseSeconds = s.ReleaseSeconds;
+        d.Brightness = s.Brightness;
+        d.Body = s.Body;
+        d.Noise = s.Noise;
+        d.Drive = s.Drive;
+        d.DetuneCents = s.DetuneCents;
+        d.VibratoCents = s.VibratoCents;
+        d.VibratoHz = s.VibratoHz;
+        d.CutoffHz = s.CutoffHz;
+        d.Resonance = s.Resonance;
+        d.FilterEnvelope = s.FilterEnvelope;
+        d.RoomPercent = s.RoomPercent;
+        d.StereoWidth = s.StereoWidth;
+        d.Seed = s.Seed;
     }
 
     public static string NoteName(int midi)

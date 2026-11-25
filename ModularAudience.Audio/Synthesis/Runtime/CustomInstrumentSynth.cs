@@ -83,7 +83,9 @@ public sealed class CustomInstrumentSynth : IRuntimeProceduralSynth
             Array.Resize(ref this.renderBuffer, totalSamples);
         }
 
-        double noteFrequencyHz = 440.0 * Math.Pow(2.0, (this.descriptor.MidiNote - 69) / 12.0);
+        // Match the built-in synth: the key note and the pitch-offset knob both shift
+        // the base frequency. Generated DSP code can additionally use ctx.PitchSemitones.
+        double noteFrequencyHz = 440.0 * Math.Pow(2.0, (this.descriptor.MidiNote - 69 + this.descriptor.PitchSemitones) / 12.0);
 
         var ctx = new SynthRenderContext
         {
@@ -93,10 +95,31 @@ public sealed class CustomInstrumentSynth : IRuntimeProceduralSynth
             NoteFrequencyHz = noteFrequencyHz,
             Bpm = this.descriptor.Bpm,
             NoteBeats = this.descriptor.NoteBeats,
+            // DurationMultiplier is exposed separately to generated code; the sample
+            // synthesizer already applies it to the output buffer length, so do not
+            // multiply it into GateSeconds a second time.
             GateSeconds = 60.0 / Math.Max(1.0, this.descriptor.Bpm) * this.descriptor.NoteBeats,
             MidiNote = this.descriptor.MidiNote,
             GainPercent = this.descriptor.GainPercent,
-            PitchSemitones = this.descriptor.PitchSemitones
+            PitchSemitones = this.descriptor.PitchSemitones,
+            DurationMultiplier = this.descriptor.DurationMultiplier,
+            AttackMs = this.descriptor.AttackMs,
+            DecaySeconds = this.descriptor.DecaySeconds,
+            SustainPercent = this.descriptor.SustainPercent,
+            ReleaseSeconds = this.descriptor.ReleaseSeconds,
+            Brightness = this.descriptor.Brightness,
+            Body = this.descriptor.Body,
+            Noise = this.descriptor.Noise,
+            Drive = this.descriptor.Drive,
+            DetuneCents = this.descriptor.DetuneCents,
+            VibratoCents = this.descriptor.VibratoCents,
+            VibratoHz = this.descriptor.VibratoHz,
+            CutoffHz = this.descriptor.CutoffHz,
+            Resonance = this.descriptor.Resonance,
+            FilterEnvelope = this.descriptor.FilterEnvelope,
+            RoomPercent = this.descriptor.RoomPercent,
+            StereoWidth = this.descriptor.StereoWidth,
+            Seed = this.descriptor.Seed
         };
 
         object?[] args = [ctx];
@@ -168,9 +191,12 @@ public static class SynthContract
     // Compact record-style shape of the DTO. The host already supplies this type; generated
     // code must use it via the using directive and must not declare it again.
     public const string DtoShape =
-        "public readonly record struct SynthRenderContext(int SampleRate, int Channels, int FrameCount, " +
-        "double NoteFrequencyHz, double Bpm, double NoteBeats, double GateSeconds, " +
-        "int MidiNote, double GainPercent, double PitchSemitones);";
+        "host-supplied readonly SynthRenderContext with properties: int SampleRate, int Channels, int FrameCount, " +
+        "double NoteFrequencyHz, double Bpm, double NoteBeats, double GateSeconds, int MidiNote, double GainPercent, " +
+        "double PitchSemitones, double DurationMultiplier, double AttackMs, double DecaySeconds, double SustainPercent, " +
+        "double ReleaseSeconds, double Brightness, double Body, double Noise, double Drive, double DetuneCents, " +
+        "double VibratoCents, double VibratoHz, double CutoffHz, double Resonance, double FilterEnvelope, " +
+        "double RoomPercent, double StereoWidth, int Seed";
 
     public static string LogDescription => string.Join(Environment.NewLine,
         "Expected custom instrument contract:",

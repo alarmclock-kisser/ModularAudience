@@ -2,6 +2,7 @@ using ModularAudience.Audio;
 using ModularAudience.Audio.Synthesis;
 using ModularAudience.Audio.Synthesis.Runtime;
 using ModularAudience.Llama;
+using NAudio.Wave;
 using System;
 using System.Collections.Generic;
 using System.Collections.ObjectModel;
@@ -27,6 +28,7 @@ public enum SynthRefinementState
     AnalyzingWithLlm,
     Compiling,
     HotSwapping,
+    AwaitingFeedback,
     Completed,
     Cancelled,
     Faulted
@@ -84,10 +86,17 @@ public sealed class SynthRefinementOrchestrator : IDisposable
     private bool disposed;
     private Task? loopTask;
     private CancellationTokenSource? loopCts;
+    private TaskCompletionSource<string>? feedbackTcs;
+    private AudioObj? nextIterationAudio;
+    private string nextIterationFeedback = "";
 
     public event Action<SynthRefinementProgress>? ProgressChanged;
     public event Action<SynthRefinementIteration>? IterationCompleted;
     public event Action<IRuntimeProceduralSynth>? HotSwapped;
+    /// <summary>
+    /// Published once per iteration with the final, display-formatted LLM code.
+    /// Individual SSE chunks are never forwarded to the editor.
+    /// </summary>
     public event Action<string>? CodeStreaming;
 
     public SynthRefinementState State
@@ -142,12 +151,36 @@ public sealed class SynthRefinementOrchestrator : IDisposable
     /// </summary>
     public bool AutoRetryCompileErrors { get; set; } = true;
 
+    /// <summary>
+    /// When true, a successful hot-swap plays a 4-beat C4 pre-hear through the default
+    /// audio device. Headless callers (unit tests) leave this at false.
+    /// </summary>
+    public bool PlayPrehearOnHotSwap { get; set; }
+
+    /// <summary>
+    /// Evaluated after the pre-hear. When true, the loop waits for SubmitUserFeedback
+    /// before making the next LLM call. An empty feedback string is a valid submission.
+    /// </summary>
+    public Func<bool>? ShouldAwaitUserFeedback { get; set; }
+
+    /// <summary>Releases a pending feedback wait. Safe to call when no wait is active.</summary>
+    public void SubmitUserFeedback(string feedback)
+    {
+        TaskCompletionSource<string>? pending;
+        lock (this.stateGate)
+        {
+            pending = this.feedbackTcs;
+        }
+        pending?.TrySetResult(feedback ?? string.Empty);
+    }
+
     public void Start()
     {
         lock (this.stateGate)
         {
             if (this.state is SynthRefinementState.Rendering or SynthRefinementState.AnalyzingWithLlm
-                or SynthRefinementState.Compiling or SynthRefinementState.HotSwapping)
+                or SynthRefinementState.Compiling or SynthRefinementState.HotSwapping
+                or SynthRefinementState.AwaitingFeedback)
             {
                 return;
             }
@@ -172,6 +205,7 @@ public sealed class SynthRefinementOrchestrator : IDisposable
                 return;
             }
             this.state = SynthRefinementState.Cancelled;
+            this.feedbackTcs?.TrySetCanceled();
         }
         this.loopCts?.Cancel();
         this.externalCts.Cancel();
@@ -199,19 +233,33 @@ public sealed class SynthRefinementOrchestrator : IDisposable
                     $"Rendering iteration {iterationNum} of {this.maxIterations}...", 0.1);
 
                 // --- Phase 1: Render current code to audio ---
+                // After a feedback wait, the next LLM call receives the exact 4-beat C4
+                // pre-hear that the user just heard instead of re-rendering silently.
+                string userFeedback = this.nextIterationFeedback;
+                this.nextIterationFeedback = "";
                 var renderSw = System.Diagnostics.Stopwatch.StartNew();
-                AudioObj? rendered = null;
-                try
+                AudioObj? rendered = this.nextIterationAudio;
+                this.nextIterationAudio = null;
+                if (rendered != null)
                 {
-                    rendered = await RenderCurrentAsync(token);
+                    Report(SynthRefinementState.Rendering, iterationNum,
+                        "Using the pre-hear audio from the previous iteration for this LLM call.", 0.1);
+                    renderSw.Stop();
                 }
-                catch (OperationCanceledException) { break; }
-                catch (Exception ex)
+                else
                 {
-                    ReportFault($"Render failed: {ex.Message}");
-                    return;
+                    try
+                    {
+                        rendered = await RenderCurrentAsync(token);
+                    }
+                    catch (OperationCanceledException) { break; }
+                    catch (Exception ex)
+                    {
+                        ReportFault($"Render failed: {ex.Message}");
+                        return;
+                    }
+                    renderSw.Stop();
                 }
-                renderSw.Stop();
 
                 if (rendered == null || rendered.Data.Length == 0)
                 {
@@ -269,9 +317,12 @@ public sealed class SynthRefinementOrchestrator : IDisposable
                     int chunkCount = 0;
                     llmResponse = await this.llm.SendMultimodalSynthPromptStreamingAsync(
                         referenceWav, synthesizedWav, spectrogramPng,
-                        BuildSynthPrompt(iterationNum), this.includeSpectrogram,
+                        BuildSynthPrompt(iterationNum, userFeedback), this.includeSpectrogram,
                         chunk =>
                         {
+                            // Chunks are accumulated only. The editor receives one final,
+                            // already formatted code string via PublishCode, which avoids
+                            // hundreds of flickering TextBox replacements per iteration.
                             accumulated.Append(chunk);
                             chunkCount++;
                             if (chunkCount == 1)
@@ -284,7 +335,6 @@ public sealed class SynthRefinementOrchestrator : IDisposable
                                 Report(SynthRefinementState.AnalyzingWithLlm, iterationNum,
                                     $"LLM stream chunk {chunkCount}: {accumulated.Length} characters accumulated.", 0.45);
                             }
-                            CodeStreaming?.Invoke(accumulated.ToString());
                         });
                     if (llmResponse == null && accumulated.Length > 0)
                     {
@@ -314,17 +364,11 @@ public sealed class SynthRefinementOrchestrator : IDisposable
                 iterationRecord.LlmCritique = llmResponse;
 
                 // --- Phase 3: Extract code from LLM response and compile ---
-                // Show the exact LLM output immediately, even when it is not compilable yet.
+                // The editor is updated only after this phase has produced its final code.
                 string newCode = NormalizeGeneratedCode(llmResponse);
                 Report(SynthRefinementState.Compiling, iterationNum,
                     $"Extracted {newCode.Length} characters of C# code from the LLM response.", 0.6);
-                if (newCode.Length > 0)
-                {
-                    PublishCode(newCode, iterationRecord);
-                    Report(SynthRefinementState.Compiling, iterationNum,
-                        "Showing latest LLM code in editor before compilation.", 0.65);
-                }
-                else
+                if (newCode.Length == 0)
                 {
                     Report(SynthRefinementState.Compiling, iterationNum,
                         "No C# code extracted; leaving the previous editor content unchanged.", 0.6, isWarning: true);
@@ -353,13 +397,9 @@ public sealed class SynthRefinementOrchestrator : IDisposable
                     iterationRecord.CompileError = string.Join(" | ", compileResult.Errors);
                     Report(SynthRefinementState.Compiling, iterationNum,
                         $"Compile failed: {iterationRecord.CompileError}", 0.7);
-                    Report(SynthRefinementState.Compiling, iterationNum,
-                        "Showing latest LLM code in editor even though compilation failed.", 0.7, isWarning: true);
-                    IterationCompleted?.Invoke(iterationRecord);
 
                     if (this.AutoRetryCompileErrors)
                     {
-                        // Self-healing: stream the retry too, so the code box never stays empty.
                         Report(SynthRefinementState.Compiling, iterationNum,
                             "Compile error auto-retry enabled; sending errors back to LLM.", 0.72);
                         int retryChunkCount = 0;
@@ -367,6 +407,7 @@ public sealed class SynthRefinementOrchestrator : IDisposable
                             newCode, iterationRecord.CompileError, referenceWav, synthesizedWav, spectrogramPng,
                             chunk =>
                             {
+                                // Retry chunks are accumulated too; no intermediate editor update.
                                 retryChunkCount++;
                                 if (retryChunkCount == 1)
                                 {
@@ -378,7 +419,6 @@ public sealed class SynthRefinementOrchestrator : IDisposable
                                     Report(SynthRefinementState.Compiling, iterationNum,
                                         $"Retry stream chunk {retryChunkCount}: {chunk.Length} characters accumulated.", 0.75);
                                 }
-                                CodeStreaming?.Invoke(chunk);
                             }, token);
 
                         Report(SynthRefinementState.Compiling, iterationNum,
@@ -387,9 +427,6 @@ public sealed class SynthRefinementOrchestrator : IDisposable
                         if (normalizedRetry.Length > 0)
                         {
                             newCode = normalizedRetry;
-                            PublishCode(newCode, iterationRecord);
-                            Report(SynthRefinementState.Compiling, iterationNum,
-                                $"Showing retry code in editor ({newCode.Length} characters).", 0.8);
                             try
                             {
                                 compileResult = this.compiler.Compile(newCode, token);
@@ -420,13 +457,26 @@ public sealed class SynthRefinementOrchestrator : IDisposable
                             "Compile error auto-retry is disabled.", 0.7, isWarning: true);
                     }
 
+                    // Publish exactly once, after all retry attempts have settled.
+                    if (newCode.Length > 0)
+                    {
+                        PublishCode(newCode, iterationRecord);
+                        Report(SynthRefinementState.Compiling, iterationNum,
+                            "Showing latest LLM code in editor even though compilation failed.", 0.7, isWarning: true);
+                    }
+                    IterationCompleted?.Invoke(iterationRecord);
+
                     if (!compileResult.IsSuccess)
                     {
-                        // Keep the last LLM code visible even though the loop faults here.
-                        PublishCode(newCode, iterationRecord);
                         ReportFault($"Compilation failed: {iterationRecord.CompileError}");
                         return;
                     }
+                }
+                else if (newCode.Length > 0)
+                {
+                    PublishCode(newCode, iterationRecord);
+                    Report(SynthRefinementState.Compiling, iterationNum,
+                        $"Showing final LLM code in editor ({newCode.Length} characters, single update).", 0.65);
                 }
 
                 // --- Phase 4: Hot-swap into live playback ---
@@ -444,11 +494,46 @@ public sealed class SynthRefinementOrchestrator : IDisposable
                     return;
                 }
 
-                PublishCode(newCode, iterationRecord);
                 this.store.Save(this.descriptor);
 
                 iterationRecord.State = SynthRefinementState.HotSwapping;
                 IterationCompleted?.Invoke(iterationRecord);
+
+                // --- Phase 5: Pre-hear (4 beats of C4) and optional user feedback ---
+                AudioObj? prehear = null;
+                try
+                {
+                    prehear = await RenderPrehearAsync(compileResult.Assembly!, token);
+                }
+                catch (OperationCanceledException) { break; }
+                catch (Exception ex)
+                {
+                    Report(SynthRefinementState.HotSwapping, iterationNum,
+                        $"Pre-hear render failed: {ex.Message}", 0.92, isWarning: true);
+                }
+
+                if (prehear != null)
+                {
+                    this.nextIterationAudio = prehear;
+                    try
+                    {
+                        await PlayPrehearAsync(prehear, token);
+                    }
+                    catch (OperationCanceledException) { break; }
+                    catch (Exception ex)
+                    {
+                        Report(SynthRefinementState.HotSwapping, iterationNum,
+                            $"Pre-hear playback failed: {ex.Message}", 0.93, isWarning: true);
+                    }
+
+                    string feedback = await AwaitUserFeedbackAsync(token);
+                    if (!string.IsNullOrWhiteSpace(feedback))
+                    {
+                        this.nextIterationFeedback = feedback;
+                        Report(SynthRefinementState.Rendering, iterationNum,
+                            "User feedback received; it will be included in the next LLM prompt.", 0.96);
+                    }
+                }
 
                 // Check if we should continue refining or stop
                 if (iterationNum >= this.maxIterations)
@@ -586,6 +671,115 @@ public sealed class SynthRefinementOrchestrator : IDisposable
         HotSwapped?.Invoke(safeSynth);
     }
 
+    /// <summary>
+    /// Renders exactly four beats of C4 (MIDI 60) with the freshly hot-swapped DSP code.
+    /// The original descriptor is untouched; the returned audio is reused as the next
+    /// iteration's synthesized input so the LLM hears what the user heard.
+    /// </summary>
+    private Task<AudioObj> RenderPrehearAsync(Assembly assembly, CancellationToken token)
+    {
+        token.ThrowIfCancellationRequested();
+
+        var prehearDescriptor = this.descriptor.Clone();
+        prehearDescriptor.MidiNote = 60;          // C4
+        prehearDescriptor.PitchSemitones = 0;     // no transposition: exactly 261.63 Hz
+        prehearDescriptor.NoteBeats = 4;          // 4/4 bar
+        prehearDescriptor.DurationMultiplier = 1; // exactly four beats
+
+        var synth = new SynthSandboxDecorator(new CustomInstrumentSynth(prehearDescriptor, assembly));
+        int sampleRate = Math.Max(8000, prehearDescriptor.SampleRate);
+        int channels = Math.Max(1, prehearDescriptor.Channels);
+        double bpm = Math.Max(1.0, prehearDescriptor.Bpm);
+        double seconds = 4.0 * 60.0 / bpm;
+        int frames = checked((int)Math.Ceiling(seconds * sampleRate));
+        var buffer = new float[checked(frames * channels)];
+        int written = synth.Render(buffer, frames, token);
+
+        var audio = new AudioObj
+        {
+            Data = buffer[..written],
+            SampleRate = sampleRate,
+            Channels = channels,
+            BitDepth = 32,
+            Length = written,
+            Duration = TimeSpan.FromSeconds(frames / (double)sampleRate),
+            Volume = 100
+        };
+        audio.Rename($"{prehearDescriptor.Name} · C4 pre-hear (4 beats @ {bpm:0.##} BPM)");
+        return Task.FromResult(audio);
+    }
+
+    private async Task PlayPrehearAsync(AudioObj audio, CancellationToken token)
+    {
+        if (!this.PlayPrehearOnHotSwap || audio.Data.Length == 0)
+        {
+            return;
+        }
+
+        byte[] wav = AudioObjToWavBytes(audio);
+        using var stream = new MemoryStream(wav, writable: false);
+        using var reader = new AudioFileReader(stream);
+        using var output = new WaveOut { BufferMilliseconds = 100 };
+        var stopped = new TaskCompletionSource<bool>(TaskCreationOptions.RunContinuationsAsynchronously);
+        output.PlaybackStopped += (_, _) => stopped.TrySetResult(true);
+        output.Init(reader);
+
+        using var registration = token.Register(() =>
+        {
+            try { output.Stop(); } catch { /* device may already be stopped */ }
+            stopped.TrySetCanceled(token);
+        });
+
+        Report(SynthRefinementState.HotSwapping, this.currentIteration,
+            $"Playing 4-beat C4 pre-hear ({audio.Duration.TotalSeconds:0.##}s)...", 0.93);
+        output.Play();
+
+        // Wait for the buffer to finish so feedback is never collected before the tone ends.
+        var timeout = TimeSpan.FromSeconds(Math.Max(2.0, audio.Duration.TotalSeconds + 3.0));
+        try
+        {
+            await stopped.Task.WaitAsync(timeout, token);
+        }
+        catch (TimeoutException)
+        {
+            // A stalled audio device must not stall the refinement loop.
+        }
+    }
+
+    private async Task<string> AwaitUserFeedbackAsync(CancellationToken token)
+    {
+        token.ThrowIfCancellationRequested();
+        if (this.ShouldAwaitUserFeedback?.Invoke() != true)
+        {
+            return string.Empty;
+        }
+
+        var pending = new TaskCompletionSource<string>(TaskCreationOptions.RunContinuationsAsynchronously);
+        lock (this.stateGate)
+        {
+            this.feedbackTcs = pending;
+        }
+
+        Report(SynthRefinementState.AwaitingFeedback, this.currentIteration,
+            "Pre-hear complete. Waiting for user feedback (empty feedback is allowed)...", 0.95);
+
+        try
+        {
+            using var registration = token.Register(() => pending.TrySetCanceled(token));
+            return await pending.Task;
+        }
+        finally
+        {
+            lock (this.stateGate)
+            {
+                if (ReferenceEquals(this.feedbackTcs, pending))
+                {
+                    this.feedbackTcs = null;
+                }
+            }
+        }
+    }
+
     private async Task<string?> RetryWithCompileErrorAsync(
         string failedCode,
         string compileError,
@@ -607,6 +801,7 @@ Keep this exact contract:
 {SynthContract.RequiredUsings}
 {SynthContract.ExpectedSignature}
 DTO shape (compact reference only, do NOT redeclare it): {SynthContract.DtoShape}
+Keep every ctx.<numeric parameter> usage intact (pitch, timing, envelope, filter and level controls must remain host-driven).
 
 Please fix the compilation errors and return only the corrected C# code in a ```csharp block. Do not change the algorithm logic, only fix syntax/type errors so it compiles under the restricted sandbox (no System.IO, System.Net, System.Reflection, DllImport, unsafe).";
 
@@ -712,8 +907,15 @@ Please fix the compilation errors and return only the corrected C# code in a ```
         return ms.ToArray();
     }
 
-    private string BuildSynthPrompt(int iteration)
+    private string BuildSynthPrompt(int iteration, string userFeedback)
     {
+        string feedbackSection = string.IsNullOrWhiteSpace(userFeedback)
+            ? ""
+            : $@"
+User feedback after listening to the previous 4-beat C4 pre-hear (the audio in input_audio[1]):
+{userFeedback}
+";
+
         return $@"You are an expert C# DSP engineer. Improve the following procedural instrument synth code to better match the reference audio.
 
 Current iteration: {iteration} of {this.maxIterations}.
@@ -721,7 +923,7 @@ Instrument: {this.descriptor.Name}
 Description: {this.descriptor.Description}
 Sample rate: {this.descriptor.SampleRate} Hz, Channels: {this.descriptor.Channels}
 MIDI note: {this.descriptor.MidiNote}, BPM: {this.descriptor.Bpm}, Note beats: {this.descriptor.NoteBeats}
-
+{feedbackSection}
 User refinement request: {this.UserPrompt}
 
 Current C# code (empty on first iteration - generate from scratch):
@@ -729,14 +931,15 @@ Current C# code (empty on first iteration - generate from scratch):
 {this.descriptor.Code}
 ```
 
-Listen to the reference audio (input_audio[0]) and{(string.IsNullOrWhiteSpace(this.descriptor.Code) ? " generate a matching instrument from scratch" : " the current synthesized output (input_audio[1])")}{(this.includeSpectrogram ? ", and review the spectrogram image (image_url)" : "")}.
+Listen to the reference audio (input_audio[0]) and{(string.IsNullOrWhiteSpace(this.descriptor.Code) ? " generate a matching instrument from scratch" : " the current 4-beat C4 pre-hear (input_audio[1])")}{(this.includeSpectrogram ? ", and review the spectrogram image (image_url)" : "")}.
 
 Return {(string.IsNullOrWhiteSpace(this.descriptor.Code) ? "new" : "improved")} C# code in a ```csharp code block. The code must:
 - Start with both required usings: {SynthContract.RequiredUsings}
 - Define a public class named CustomSynth with exactly: {SynthContract.ExpectedSignature}
 - Use the host-provided SynthRenderContext; do NOT declare it yourself
 - DTO shape (compact reference only): {SynthContract.DtoShape}
-- Access parameters via ctx.SampleRate, ctx.Channels, ctx.FrameCount, ctx.NoteFrequencyHz, ctx.Bpm, ctx.NoteBeats, ctx.GateSeconds, ctx.MidiNote, ctx.GainPercent, ctx.PitchSemitones
+- Honor the host-controlled numeric parameters textually in the DSP algorithm: use ctx.MidiNote/ctx.PitchSemitones/ctx.NoteFrequencyHz for pitch, ctx.Bpm/ctx.NoteBeats/ctx.GateSeconds/ctx.DurationMultiplier for timing, ctx.GainPercent for level, ctx.AttackMs/ctx.DecaySeconds/ctx.SustainPercent/ctx.ReleaseSeconds for the envelope, and ctx.Brightness/ctx.Body/ctx.Noise/ctx.Drive/ctx.DetuneCents/ctx.VibratoCents/ctx.VibratoHz/ctx.CutoffHz/ctx.Resonance/ctx.FilterEnvelope/ctx.RoomPercent/ctx.StereoWidth/ctx.Seed for timbre. These controls must audibly matter when the user changes them.
+- Only access the properties listed in the DTO shape above. Do not invent additional context members; compilation must not depend on them.
 - Return interleaved float32 PCM in [-1, 1] (array length = ctx.FrameCount * ctx.Channels)
 - NOT use System.IO, System.Net, System.Reflection, DllImport, unsafe, or any process/file/network APIs
 - Only use Math, System.Numerics, and basic arithmetic; Math is available through the required using
@@ -774,7 +977,9 @@ Focus on timbre, envelope, and spectral match to the reference. Return ONLY the 
             code = SynthContract.RequiredUsing + Environment.NewLine + code;
         }
 
-        return code;
+        // Display-only repair: the model already supplies indentation, but sometimes
+        // collapses the line breaks after semicolons. No re-indentation is performed.
+        return CSharpCodeFormatter.SmartFormat(code);
     }
 
     private static string? ExtractCodeBlock(string? response)

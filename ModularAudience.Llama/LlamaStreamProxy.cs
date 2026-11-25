@@ -1,3 +1,4 @@
+using System.IO.Compression;
 using System.Net;
 using System.Net.Sockets;
 using System.Text;
@@ -16,10 +17,8 @@ public sealed record AssistantSseEvent(bool IsDone, bool Started, string? Conten
 /// </summary>
 public sealed class LlamaStreamProxy : IDisposable
 {
-    private readonly HttpClient http = new()
-    {
-        Timeout = TimeSpan.FromMinutes(10),
-    };
+    // The upstream may be an HTTPS llama-server with a self-signed loopback certificate.
+    private readonly HttpClient http = LlamaHttp.CreateClient(TimeSpan.FromMinutes(10));
 
     private TcpListener? listener;
     private TcpListener? listenerIPv6;
@@ -41,6 +40,9 @@ public sealed class LlamaStreamProxy : IDisposable
     public event Action? AssistantTurnCompleted;
 
     public event Action<string>? Error;
+
+    /// <summary>Informational messages about requests the proxy saw but could not tap.</summary>
+    public event Action<string>? Diagnostic;
 
     public void Start(string upstreamUrl, int port, string modelFilter = "")
     {
@@ -186,6 +188,12 @@ public sealed class LlamaStreamProxy : IDisposable
 
                 string method = parts[0];
                 string target = parts[1];
+                if (!IsValidMethod(method))
+                {
+                    Diagnostic?.Invoke($"Ignored malformed request line: {Escape(requestLine)}");
+                    return;
+                }
+
                 var headers = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase);
                 string? headerLine;
                 while (!string.IsNullOrEmpty(headerLine = await reader.ReadLineAsync(token).ConfigureAwait(false)))
@@ -205,6 +213,15 @@ public sealed class LlamaStreamProxy : IDisposable
                     await reader.ReadExactlyAsync(body, length, token).ConfigureAwait(false);
                 }
 
+                if (IsChatPath(method, target))
+                {
+                    Diagnostic?.Invoke(ModelMatches(body, modelFilter)
+                        ? $"Chat request {target} seen; tapping the assistant stream."
+                        : $"Chat request {target} was forwarded without speaking: model filter '{modelFilter}' "
+                            + "does not match the requested model. Disable the model filter or pick the model "
+                            + "reported by 'Test connection'.");
+                }
+
                 string? origin = headers.GetValueOrDefault("Origin");
                 string? requestedHeaders = headers.GetValueOrDefault("Access-Control-Request-Headers");
                 if (method.Equals("OPTIONS", StringComparison.OrdinalIgnoreCase))
@@ -215,6 +232,17 @@ public sealed class LlamaStreamProxy : IDisposable
 
                 Uri uri = new(new Uri(upstream + "/"), target.TrimStart('/'));
                 using var request = new HttpRequestMessage(new HttpMethod(method), uri);
+
+                // llama.cpp serves its static web UI only gzip-compressed and rejects
+                // requests without Accept-Encoding with HTTP 415. Ask for gzip on
+                // bodyless UI requests; the response is decompressed below.
+                if (body.Length == 0
+                    && (method.Equals("GET", StringComparison.OrdinalIgnoreCase)
+                        || method.Equals("HEAD", StringComparison.OrdinalIgnoreCase)))
+                {
+                    request.Headers.TryAddWithoutValidation("Accept-Encoding", "gzip");
+                }
+
                 foreach (KeyValuePair<string, string> header in headers)
                 {
                     if (!ShouldSkipRequestHeader(header.Key))
@@ -239,22 +267,23 @@ public sealed class LlamaStreamProxy : IDisposable
                     ?? "application/json; charset=utf-8";
                 string status = $"{(int)response.StatusCode} {response.ReasonPhrase}";
 
+                // llama.cpp compresses its static web UI. Decompress here so the
+                // browser receives plain bytes (we never forward Content-Encoding).
+                using Stream upstreamStream = await OpenUpstreamStreamAsync(response, token).ConfigureAwait(false);
                 if (IsChatRequest(method, target, body))
                 {
                     bool streaming = WantsStreaming(body) || responseContentType.Contains("event-stream", StringComparison.OrdinalIgnoreCase);
                     if (streaming)
                     {
-                        using Stream upstreamStream = await response.Content.ReadAsStreamAsync(token).ConfigureAwait(false);
                         await PumpSseAsync(upstreamStream, stream, status, responseContentType, origin, requestedHeaders, token).ConfigureAwait(false);
                     }
                     else
                     {
-                        await PumpJsonAsync(response, stream, status, responseContentType, origin, requestedHeaders, token).ConfigureAwait(false);
+                        await PumpJsonAsync(upstreamStream, stream, status, responseContentType, origin, requestedHeaders, token).ConfigureAwait(false);
                     }
                 }
                 else
                 {
-                    using Stream upstreamStream = await response.Content.ReadAsStreamAsync(token).ConfigureAwait(false);
                     await WriteHeadersAsync(stream, status, responseContentType, origin, null, token, requestedHeaders).ConfigureAwait(false);
                     await upstreamStream.CopyToAsync(stream, 81920, token).ConfigureAwait(false);
                 }
@@ -271,12 +300,35 @@ public sealed class LlamaStreamProxy : IDisposable
             }
             catch (Exception error)
             {
-                Error?.Invoke(error.Message);
+                Error?.Invoke(LlamaHttp.DescribeError(error));
             }
         }
     }
 
-    private bool IsChatRequest(string method, string target, byte[] body)
+    private static bool IsValidMethod(string method)
+    {
+        if (method.Length == 0)
+        {
+            return false;
+        }
+
+        foreach (char character in method)
+        {
+            if (!char.IsAsciiLetterOrDigit(character)
+                && character is not ('!' or '#' or '$' or '%' or '&' or '\'' or '*' or '+' or '.'
+                    or '^' or '_' or '`' or '|' or '~' or '-'))
+            {
+                return false;
+            }
+        }
+
+        return true;
+    }
+
+    private static string Escape(string value) =>
+        value.Replace("\r", "\\r", StringComparison.Ordinal).Replace("\n", "\\n", StringComparison.Ordinal);
+
+    private static bool IsChatPath(string method, string target)
     {
         if (!method.Equals("POST", StringComparison.OrdinalIgnoreCase))
         {
@@ -284,12 +336,14 @@ public sealed class LlamaStreamProxy : IDisposable
         }
 
         string path = target.Split('?', 2)[0];
-        bool knownPath = path.EndsWith("/v1/chat/completions", StringComparison.OrdinalIgnoreCase)
+        return path.EndsWith("/v1/chat/completions", StringComparison.OrdinalIgnoreCase)
             || path.EndsWith("/chat/completions", StringComparison.OrdinalIgnoreCase)
             || path.EndsWith("/v1/completions", StringComparison.OrdinalIgnoreCase)
             || path.EndsWith("/completion", StringComparison.OrdinalIgnoreCase);
-        return knownPath && ModelMatches(body, modelFilter);
     }
+
+    private bool IsChatRequest(string method, string target, byte[] body) =>
+        IsChatPath(method, target) && ModelMatches(body, modelFilter);
 
     /// <summary>True when the request body asks for a streamed completion (or no model filter excludes it).</summary>
     public static bool ModelMatches(byte[] body, string modelFilter)
@@ -305,7 +359,7 @@ public sealed class LlamaStreamProxy : IDisposable
             if (document.RootElement.TryGetProperty("model", out JsonElement model)
                 && model.ValueKind == JsonValueKind.String)
             {
-                return (model.GetString() ?? "").Contains(modelFilter, StringComparison.OrdinalIgnoreCase);
+                return ModelNamesMatch(model.GetString() ?? "", modelFilter);
             }
 
             return true;
@@ -314,6 +368,40 @@ public sealed class LlamaStreamProxy : IDisposable
         {
             return true;
         }
+    }
+
+    /// <summary>
+    /// llama-server often reports the model id as a full GGUF path while the web UI
+    /// sends only the file name (or a short alias), so compare both directions and
+    /// the file names as well.
+    /// </summary>
+    public static bool ModelNamesMatch(string requestedModel, string filter)
+    {
+        requestedModel = requestedModel.Trim();
+        filter = filter.Trim();
+        if (requestedModel.Length == 0 || filter.Length == 0)
+        {
+            return true;
+        }
+
+        if (requestedModel.Contains(filter, StringComparison.OrdinalIgnoreCase)
+            || filter.Contains(requestedModel, StringComparison.OrdinalIgnoreCase))
+        {
+            return true;
+        }
+
+        string requestedFile = FileName(requestedModel);
+        string filterFile = FileName(filter);
+        return requestedFile.Length > 0
+            && (requestedFile.Equals(filterFile, StringComparison.OrdinalIgnoreCase)
+                || requestedFile.Contains(filterFile, StringComparison.OrdinalIgnoreCase)
+                || filterFile.Contains(requestedFile, StringComparison.OrdinalIgnoreCase));
+    }
+
+    private static string FileName(string value)
+    {
+        int separator = value.LastIndexOfAny(['/', '\\']);
+        return separator < 0 ? value : value[(separator + 1)..];
     }
 
     public static bool WantsStreaming(byte[] body)
@@ -504,11 +592,28 @@ public sealed class LlamaStreamProxy : IDisposable
         }
     }
 
+    private static async Task<Stream> OpenUpstreamStreamAsync(HttpResponseMessage response, CancellationToken token)
+    {
+        Stream stream = await response.Content.ReadAsStreamAsync(token).ConfigureAwait(false);
+        if (response.Content.Headers.ContentEncoding.Any(value =>
+                value.Equals("gzip", StringComparison.OrdinalIgnoreCase)))
+        {
+            return new GZipStream(stream, CompressionMode.Decompress);
+        }
+
+        if (response.Content.Headers.ContentEncoding.Any(value =>
+                value.Equals("deflate", StringComparison.OrdinalIgnoreCase)))
+        {
+            return new DeflateStream(stream, CompressionMode.Decompress);
+        }
+
+        return stream;
+    }
+
     private async Task PumpJsonAsync(
-        HttpResponseMessage response, Stream downstream, string status, string contentType,
+        Stream upstream, Stream downstream, string status, string contentType,
         string? origin, string? requestedHeaders, CancellationToken token)
     {
-        using Stream upstream = await response.Content.ReadAsStreamAsync(token).ConfigureAwait(false);
         using var memory = new MemoryStream();
         await upstream.CopyToAsync(memory, 81920, token).ConfigureAwait(false);
         byte[] bytes = memory.ToArray();

@@ -1,5 +1,6 @@
 using Microsoft.VisualStudio.TestTools.UnitTesting;
 using ModularAudience.Audio;
+using ModularAudience.Audio.Synthesis;
 using ModularAudience.Audio.Synthesis.Runtime;
 using ModularAudience.Forms.Synthesis.Runtime;
 using ModularAudience.Llama;
@@ -38,6 +39,94 @@ public sealed class RuntimeProceduralSynthTests
         {
             Directory.Delete(storageDirectory, true);
         }
+    }
+
+    // ---- Conservative display formatter ----
+
+    [TestMethod]
+    public void Formatter_InsertsOnlyMissingSemicolonNewlines_AndKeepsModelIndentation()
+    {
+        string collapsed =
+            "using System;using ModularAudience.Audio.Synthesis.Runtime;public class CustomSynth" +
+            "{public static float[] Render(SynthRenderContext ctx)" +
+            "{var data = new float[ctx.FrameCount * ctx.Channels];        data[0] = 1f;" +
+            "        data[1] = 2f;    return data;}}";
+
+        string formatted = CSharpCodeFormatter.SmartFormat(collapsed);
+
+        Assert.IsTrue(formatted.Contains("using System;\nusing ModularAudience"), "Missing newline after using must be inserted.");
+        Assert.IsTrue(formatted.Contains(";\n        data[0] = 1f;"), "Model-provided indentation must be preserved verbatim.");
+        Assert.IsTrue(formatted.Contains(";\n    return data;"), "Existing horizontal whitespace before a statement must remain unchanged.");
+        Assert.IsTrue(formatted.Contains("data[0] = 1f;\n        data[1] = 2f;"), "Missing newline after a statement must be inserted.");
+    }
+
+    [TestMethod]
+    public void Formatter_LeavesProperlyFormattedCodeAndSemicolonsInStringsUntouched()
+    {
+        string formattedCode =
+            "using System;\nusing ModularAudience.Audio.Synthesis.Runtime;\n" +
+            "public class CustomSynth\n{\n    public static float[] Render(SynthRenderContext ctx)\n    {\n" +
+            "        var a = 1;\n        var b = 2;\n        var c = 3;\n        var d = 4;\n        var e = 5;\n" +
+            "        return new float[] { a, b, c, d, e };\n    }\n}";
+        Assert.AreEqual(formattedCode, CSharpCodeFormatter.SmartFormat(formattedCode));
+
+        string collapsedWithString =
+            "using System;using ModularAudience.Audio.Synthesis.Runtime;public class CustomSynth" +
+            "{public static float[] Render(SynthRenderContext ctx){string s=\";\";" +
+            "var a=1;var b=2;var c=3;var d=4;var e=5;return new float[]{a,b,c,d,e};}}";
+
+        string result = CSharpCodeFormatter.SmartFormat(collapsedWithString);
+        Assert.IsTrue(result.Contains("string s=\";\";\n"), "Semicolon inside a string literal must not be treated as a statement terminator.");
+        Assert.IsFalse(result.Contains("string s=\";\n"), "String literal must stay intact.");
+    }
+
+    // ---- Numeric control propagation ----
+
+    [TestMethod]
+    public void SampleSynthSettings_AreAppliedToCustomDescriptorWithoutSaving()
+    {
+        var settings = new InstrumentSynthSettings
+        {
+            SampleRate = 32000, Channels = 2, MidiNote = 64, PitchSemitones = 3.5,
+            Bpm = 90, NoteBeats = 2, DurationMultiplier = 1.25, GainPercent = 42,
+            AttackMs = 11, DecaySeconds = 1.75, SustainPercent = 65, ReleaseSeconds = 0.4,
+            Brightness = 77, Body = 33, Noise = 19, Drive = 8, DetuneCents = 6,
+            VibratoCents = 12, VibratoHz = 4, CutoffHz = 9500, Resonance = 1.4,
+            FilterEnvelope = 55, RoomPercent = 21, StereoWidth = 48, Seed = 99
+        };
+        var descriptor = new CustomInstrumentDescriptor("MappingProbe", "");
+
+        var map = typeof(InstrumentSampleSynth).GetMethod(
+            "ApplySettingsToCustomDescriptor",
+            System.Reflection.BindingFlags.NonPublic | System.Reflection.BindingFlags.Static);
+        Assert.IsNotNull(map);
+        map.Invoke(null, [settings, descriptor]);
+
+        Assert.AreEqual(settings.SampleRate, descriptor.SampleRate);
+        Assert.AreEqual(settings.Channels, descriptor.Channels);
+        Assert.AreEqual(settings.MidiNote, descriptor.MidiNote);
+        Assert.AreEqual(settings.PitchSemitones, descriptor.PitchSemitones);
+        Assert.AreEqual(settings.Bpm, descriptor.Bpm);
+        Assert.AreEqual(settings.NoteBeats, descriptor.NoteBeats);
+        Assert.AreEqual(settings.DurationMultiplier, descriptor.DurationMultiplier);
+        Assert.AreEqual(settings.GainPercent, descriptor.GainPercent);
+        Assert.AreEqual(settings.AttackMs, descriptor.AttackMs);
+        Assert.AreEqual(settings.DecaySeconds, descriptor.DecaySeconds);
+        Assert.AreEqual(settings.SustainPercent, descriptor.SustainPercent);
+        Assert.AreEqual(settings.ReleaseSeconds, descriptor.ReleaseSeconds);
+        Assert.AreEqual(settings.Brightness, descriptor.Brightness);
+        Assert.AreEqual(settings.Body, descriptor.Body);
+        Assert.AreEqual(settings.Noise, descriptor.Noise);
+        Assert.AreEqual(settings.Drive, descriptor.Drive);
+        Assert.AreEqual(settings.DetuneCents, descriptor.DetuneCents);
+        Assert.AreEqual(settings.VibratoCents, descriptor.VibratoCents);
+        Assert.AreEqual(settings.VibratoHz, descriptor.VibratoHz);
+        Assert.AreEqual(settings.CutoffHz, descriptor.CutoffHz);
+        Assert.AreEqual(settings.Resonance, descriptor.Resonance);
+        Assert.AreEqual(settings.FilterEnvelope, descriptor.FilterEnvelope);
+        Assert.AreEqual(settings.RoomPercent, descriptor.RoomPercent);
+        Assert.AreEqual(settings.StereoWidth, descriptor.StereoWidth);
+        Assert.AreEqual(settings.Seed, descriptor.Seed);
     }
 
     // ---- Roslyn compile success ----
@@ -375,6 +464,73 @@ public class CustomSynth
         compiler.Dispose();
     }
 
+    [TestMethod]
+    public async Task Orchestrator_WaitsForFeedback_AndSendsPrehearAudioOnNextIteration()
+    {
+        const string code = @"```csharp
+using System;
+using ModularAudience.Audio.Synthesis.Runtime;
+public class CustomSynth
+{
+    public static float[] Render(SynthRenderContext ctx)
+    {
+        var data = new float[ctx.FrameCount * ctx.Channels];
+        for (int i = 0; i < data.Length; i++) data[i] = 0.25f;
+        return data;
+    }
+}```";
+        var mockLlm = new MockLlamaConnector(_ => code);
+        var compiler = new SynthCompiler();
+        var descriptor = new CustomInstrumentDescriptor("FeedbackSynth", "")
+        {
+            SampleRate = 22050, Channels = 1, MidiNote = 60, Bpm = 120, NoteBeats = 1
+        };
+
+        var orch = new SynthRefinementOrchestrator(mockLlm, compiler, store, descriptor)
+        {
+            MaxIterations = 2,
+            IncludeSpectrogram = false,
+            PlayPrehearOnHotSwap = false,
+            // Gate only after the first iteration so the test can finish on iteration 2.
+            ShouldAwaitUserFeedback = () => mockLlm.Prompts.Count < 2
+        };
+
+        int feedbackSubmissions = 0;
+        var tcs = new TaskCompletionSource<bool>();
+        orch.ProgressChanged += p =>
+        {
+            if (p.State == SynthRefinementState.AwaitingFeedback)
+            {
+                _ = Task.Run(async () =>
+                {
+                    await Task.Delay(25);
+                    orch.SubmitUserFeedback("make it brighter");
+                    Interlocked.Increment(ref feedbackSubmissions);
+                });
+            }
+            if (p.State is SynthRefinementState.Completed or SynthRefinementState.Faulted)
+            {
+                tcs.TrySetResult(p.State == SynthRefinementState.Completed);
+            }
+        };
+
+        orch.Start();
+        bool completed = await Task.WhenAny(tcs.Task, Task.Delay(30000)) == tcs.Task;
+        if (completed) completed = await tcs.Task;
+        Assert.IsTrue(completed, $"Orchestrator should complete after feedback. State={orch.State}");
+
+        Assert.AreEqual(1, feedbackSubmissions, "Exactly one feedback submission should release the gate.");
+        Assert.AreEqual(2, mockLlm.Prompts.Count, "Two LLM calls should have been made.");
+        Assert.IsTrue(mockLlm.Prompts[1].Contains("make it brighter"), "User feedback must be in the next prompt.");
+        Assert.IsTrue(mockLlm.Prompts[1].Contains("current 4-beat C4 pre-hear"), "Prompt must identify the carried audio.");
+        Assert.AreEqual(2, mockLlm.SynthesizedAudio.Count);
+        Assert.IsTrue(mockLlm.SynthesizedAudio[1].Length > mockLlm.SynthesizedAudio[0].Length,
+            "The second LLM call must receive the 4-beat pre-hear rather than a short initial render.");
+
+        orch.Dispose();
+        compiler.Dispose();
+    }
+
     // ---- Self-healing compile-error path ----
 
     [TestMethod]
@@ -568,11 +724,16 @@ public class CustomSynth
             this.responder = responder;
         }
 
+        public List<string> Prompts { get; } = [];
+        public List<byte[]> SynthesizedAudio { get; } = [];
+
         public override Task<string?> SendMultimodalSynthPromptStreamingAsync(
             byte[] referenceAudio, byte[] synthesizedAudio, byte[]? spectrogramPng,
             string prompt, bool includeSpectrogram = false,
             Action<string>? onChunk = null)
         {
+            this.Prompts.Add(prompt);
+            this.SynthesizedAudio.Add((byte[])synthesizedAudio.Clone());
             string response = this.responder(prompt);
             if (onChunk != null && response != null)
             {
