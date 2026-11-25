@@ -479,11 +479,9 @@ public sealed class LlamaStreamProxy : IDisposable
                         AssistantDelta?.Invoke(parsed.Content!);
                     }
 
-                    if (parsed.Finished || parsed.IsDone)
-                    {
-                        CompleteTurn();
-                    }
-
+                    // Do not complete the turn here: llama.cpp can send content and
+                    // finish_reason in the same event, and more events may follow.
+                    // The single completion below runs after the last delta.
                     if (parsed.IsDone)
                     {
                         break;
@@ -518,12 +516,9 @@ public sealed class LlamaStreamProxy : IDisposable
                 AssistantDelta?.Invoke(remaining.Content!);
             }
 
-            if (remaining.Finished || remaining.IsDone)
-            {
-                CompleteTurn();
-            }
         }
 
+        // Exactly one completion per SSE stream, after every delta was published.
         CompleteTurn();
         await downstream.FlushAsync(token).ConfigureAwait(false);
     }

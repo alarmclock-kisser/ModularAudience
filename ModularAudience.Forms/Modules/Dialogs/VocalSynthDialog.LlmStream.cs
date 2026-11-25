@@ -126,6 +126,7 @@ public sealed partial class VocalSynthDialog
             settings.Speed);
         speaker.Error += OnLlmError;
         speaker.ChunkRendered += OnStreamChunkRendered;
+        speaker.TurnAudioCompleted += OnTurnAudioCompleted;
         speaker.Start();
 
         llmProxy = proxy;
@@ -177,6 +178,7 @@ public sealed partial class VocalSynthDialog
         {
             llmSpeaker.Error -= OnLlmError;
             llmSpeaker.ChunkRendered -= OnStreamChunkRendered;
+            llmSpeaker.TurnAudioCompleted -= OnTurnAudioCompleted;
             llmSpeaker.Stop();
             llmSpeaker.Dispose();
             llmSpeaker = null;
@@ -230,7 +232,13 @@ public sealed partial class VocalSynthDialog
     {
         llmSpeaker?.EndTurn();
         LogManager.LogInfo($"[Vocal LLM] Assistant answer finished: {llmTurnCharacters} characters in "
-            + $"{llmTurnDeltas} SSE deltas; remaining text flushed to the speaker.");
+            + $"{llmTurnDeltas} SSE deltas; remaining text flushed to the speaker. "
+            + "Waiting for the audio buffer to drain.");
+    }
+
+    private void OnTurnAudioCompleted()
+    {
+        LogManager.LogInfo("[Vocal LLM] All streamed text has been spoken; listening for the next answer.");
         Ui(() => { if (llmSpeaker != null) { llmStatusLabel.Text = "Waiting for LLM..."; } });
     }
 

@@ -382,6 +382,82 @@ public class LlamaStreamProxyIntegrationTests
         CollectionAssert.AreEqual(new[] { "Hello ", "world" }, deltas);
     }
 
+    [TestMethod]
+    [Timeout(20000)]
+    public async Task Proxy_HandlesConsecutiveTurnsAndCompletesEachOnce()
+    {
+        int upstreamPort = FreePort();
+        int proxyPort = FreePort();
+        var upstream = new TcpListener(IPAddress.Loopback, upstreamPort);
+        upstream.Start();
+
+        // content and finish_reason in the same event, then [DONE] - twice.
+        Task serverTask = Task.Run(async () =>
+        {
+            for (int turn = 0; turn < 2; turn++)
+            {
+                using TcpClient client = await upstream.AcceptTcpClientAsync();
+                using NetworkStream stream = client.GetStream();
+                var reader = new StreamReader(stream, Encoding.ASCII, false, 1, leaveOpen: true);
+                int contentLength = 0;
+                string? line;
+                while (!string.IsNullOrEmpty(line = await reader.ReadLineAsync()))
+                {
+                    if (line.StartsWith("Content-Length:", StringComparison.OrdinalIgnoreCase))
+                    {
+                        int.TryParse(line["Content-Length:".Length..].Trim(), out contentLength);
+                    }
+                }
+
+                if (contentLength > 0)
+                {
+                    byte[] body = new byte[contentLength];
+                    int read = 0;
+                    while (read < contentLength)
+                    {
+                        read += await stream.ReadAsync(body.AsMemory(read, contentLength - read));
+                    }
+                }
+
+                string sse =
+                    "data: {\"choices\":[{\"delta\":{\"role\":\"assistant\"}}]}\r\n\r\n" +
+                    $"data: {{\"choices\":[{{\"delta\":{{\"content\":\"Answer {turn + 1}\"}},\"finish_reason\":\"stop\"}}]}}\r\n\r\n" +
+                    "data: [DONE]\r\n\r\n";
+                byte[] response = Encoding.UTF8.GetBytes(
+                    "HTTP/1.1 200 OK\r\nContent-Type: text/event-stream\r\nConnection: close\r\n\r\n" + sse);
+                await stream.WriteAsync(response);
+                await stream.FlushAsync();
+            }
+        });
+
+        var deltas = new List<string>();
+        var errors = new List<string>();
+        int completions = 0;
+        using (var proxy = new LlamaStreamProxy())
+        {
+            proxy.Error += error => errors.Add(error);
+            proxy.AssistantDelta += delta => deltas.Add(delta);
+            proxy.AssistantTurnCompleted += () => completions++;
+            proxy.Start($"http://127.0.0.1:{upstreamPort}", proxyPort);
+
+            for (int turn = 0; turn < 2; turn++)
+            {
+                using var client = new HttpClient { Timeout = TimeSpan.FromSeconds(10) };
+                using var content = new StringContent(
+                    "{\"model\":\"test\",\"stream\":true,\"messages\":[]}", Encoding.UTF8, "application/json");
+                using HttpResponseMessage response = await client.PostAsync(
+                    $"http://127.0.0.1:{proxyPort}/v1/chat/completions", content);
+                Assert.IsTrue((await response.Content.ReadAsStringAsync()).Contains("[DONE]", StringComparison.Ordinal));
+            }
+        }
+
+        await serverTask;
+        upstream.Stop();
+        Assert.AreEqual(0, errors.Count, string.Join("; ", errors));
+        Assert.AreEqual(2, completions, "one completion per SSE stream");
+        CollectionAssert.AreEqual(new[] { "Answer 1", "Answer 2" }, deltas);
+    }
+
     private static byte[] Gzip(byte[] data)
     {
         using var output = new MemoryStream();

@@ -69,6 +69,12 @@ public sealed class VocalStreamSpeaker : IDisposable
     /// <summary>Raised after a rendered chunk has been handed to the playback buffer.</summary>
     public event Action<string, double>? ChunkRendered;
 
+    /// <summary>
+    /// Raised when all text of a turn has been rendered and the audio buffer has
+    /// drained. Until this fires, the turn is still speaking.
+    /// </summary>
+    public event Action? TurnAudioCompleted;
+
     public void Start()
     {
         ObjectDisposedException.ThrowIf(disposed, this);
@@ -179,6 +185,10 @@ public sealed class VocalStreamSpeaker : IDisposable
                             }
 
                             hasPending = false;
+                            // The SSE stream has ended, but the sentence is not done
+                            // until the rendered audio has actually been played.
+                            await WaitForAudioDrainAsync(token).ConfigureAwait(false);
+                            TurnAudioCompleted?.Invoke();
                             continue;
                         }
 
@@ -218,6 +228,24 @@ public sealed class VocalStreamSpeaker : IDisposable
         catch (Exception error)
         {
             Error?.Invoke(error.Message);
+        }
+    }
+
+    /// <summary>
+    /// Waits until the playback buffer is effectively empty. WaveOut keeps
+    /// playing from its own buffers while we wait, so no audio is discarded.
+    /// </summary>
+    private async Task WaitForAudioDrainAsync(CancellationToken token)
+    {
+        const int drainedMilliseconds = 80;
+        const int maxWaitMilliseconds = 30000;
+        int waited = 0;
+        while (!token.IsCancellationRequested
+            && BufferedMilliseconds > drainedMilliseconds
+            && waited < maxWaitMilliseconds)
+        {
+            await Task.Delay(20, token).ConfigureAwait(false);
+            waited += 20;
         }
     }
 
