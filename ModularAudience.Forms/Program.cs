@@ -5,6 +5,7 @@ using System.Windows.Forms;
 using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;
 using ModularAudience.Audio;
+using ModularAudience.Forms.Modules.Dialogs;
 using ModularAudience.Forms.Updates;
 using ModularAudience.Shared;
 using ModularAudience.Quantum.Extensions;
@@ -80,7 +81,12 @@ namespace ModularAudience.Forms
 
             var window = new WindowMain(logger, serviceProvider);
             WindowIconManager.Apply(window);
-            window.Shown += async (_, _) => await ApplicationUpdater.CheckAtStartupAsync(window);
+            window.Shown += async (_, _) =>
+            {
+                // Capture the real WinForms context so remote certificate prompts run on the UI thread.
+                LlmCertificateTrust.Initialize(SynchronizationContext.Current);
+                await ApplicationUpdater.CheckAtStartupAsync(window);
+            };
             Application.Run(window);
         }
 

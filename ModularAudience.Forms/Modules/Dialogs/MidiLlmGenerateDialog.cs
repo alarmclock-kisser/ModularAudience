@@ -1,5 +1,6 @@
 ﻿using ModularAudience.Audio;
 using ModularAudience.Audio.Midi;
+using ModularAudience.Llama;
 using ModularAudience.Llama.Dtos;
 using ModularAudience.Forms.Helpers;
 using System;
@@ -376,7 +377,7 @@ namespace ModularAudience.Forms.Modules.Dialogs
         {
             var handler = new HttpClientHandler();
             handler.ServerCertificateCustomValidationCallback = static (message, cert, chain, errors) =>
-                errors == SslPolicyErrors.None || message?.RequestUri?.IsLoopback == true;
+                LlamaHttp.AcceptCertificate(message, cert, chain, errors);
 
             return new HttpClient(handler);
         }

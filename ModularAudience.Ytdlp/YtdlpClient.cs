@@ -128,11 +128,6 @@ public sealed partial class YtdlpClient
         var format = ValidateOptions(options);
         var url = ValidateVideo(video);
         var outputDirectory = options.SaveToDisk ? Path.GetFullPath(options.OutputDirectory) : null;
-        if (outputDirectory is not null)
-        {
-            EnsureOutputAvailable(GetSavedPath(outputDirectory, video, format));
-        }
-
         var output = CreateDownloadProgress(progress, downloadProgress);
         await EnsureAvailableAsync(output, cancellationToken);
         var job = CreateJobDirectory();
@@ -145,7 +140,7 @@ public sealed partial class YtdlpClient
             cancellationToken.ThrowIfCancellationRequested();
             if (outputDirectory is not null)
             {
-                path = await SaveAsync(path, outputDirectory, video, format, cancellationToken);
+                path = await SaveAsync(path, outputDirectory, video, format, cancellationToken, output);
             }
 
             var result = new YtdlpDownloadResult(path, outputDirectory is null ? job : null);
@@ -312,46 +307,77 @@ public sealed partial class YtdlpClient
     }
 
     private static async Task<string> SaveAsync(string source, string outputDirectory, YtdlpVideo video,
-        string format, CancellationToken token)
+        string format, CancellationToken token, IProgress<string>? progress = null)
     {
-        string destination = GetSavedPath(outputDirectory, video, format);
-        EnsureOutputAvailable(destination);
         Directory.CreateDirectory(outputDirectory);
-        var name = Path.GetFileName(destination);
-        var stagingDirectory = Path.Combine(outputDirectory, ".ytdlp-" + Guid.NewGuid().ToString("N"));
-        Directory.CreateDirectory(stagingDirectory);
-        var staging = Path.Combine(stagingDirectory, name);
-        try
+        string preferred = GetSavedPath(outputDirectory, video, format);
+        // A previous import may have left the title-named file behind. Never overwrite it:
+        // publish the new audio under the first free name instead.
+        for (int attempt = 0; attempt < 1000; attempt++)
         {
-            await CopyFileAsync(source, staging, token);
-            token.ThrowIfCancellationRequested();
-            // Publish a fully closed file from another directory. Destination-folder watchers receive
-            // a Created event, rather than only a .partial -> audio extension rename.
+            string destination = ResolveSavedPath(outputDirectory, video, format);
+            var name = Path.GetFileName(destination);
+            var stagingDirectory = Path.Combine(outputDirectory, ".ytdlp-" + Guid.NewGuid().ToString("N"));
+            Directory.CreateDirectory(stagingDirectory);
+            var staging = Path.Combine(stagingDirectory, name);
             try
             {
-                File.Move(staging, destination, overwrite: false);
+                await CopyFileAsync(source, staging, token);
+                token.ThrowIfCancellationRequested();
+                // Publish a fully closed file from another directory. Destination-folder watchers receive
+                // a Created event, rather than only a .partial -> audio extension rename.
+                try
+                {
+                    File.Move(staging, destination, overwrite: false);
+                }
+                catch (IOException) when (File.Exists(destination) || Directory.Exists(destination))
+                {
+                    // Another process claimed the name after the availability check; try the next one.
+                    continue;
+                }
+
+                if (!string.Equals(destination, preferred, StringComparison.OrdinalIgnoreCase))
+                {
+                    progress?.Report($"Default output '{Path.GetFileName(preferred)}' was in use; saved as '{name}'.");
+                }
+
+                return destination;
             }
-            catch (IOException error) when (File.Exists(destination) || Directory.Exists(destination))
+            finally
             {
-                throw new YtdlpOutputFileExistsException(destination, error);
+                YtdlpBinaryManager.DeleteStaging(stagingDirectory);
             }
-            return destination;
         }
-        finally
-        {
-            YtdlpBinaryManager.DeleteStaging(stagingDirectory);
-        }
+
+        throw new IOException($"Could not find a free output file name in '{outputDirectory}'.");
     }
 
     private static string GetSavedPath(string outputDirectory, YtdlpVideo video, string format) =>
         Path.Combine(outputDirectory, $"{SafeTitle(video.Title)}.{format}");
 
-    private static void EnsureOutputAvailable(string path)
+    private static string ResolveSavedPath(string outputDirectory, YtdlpVideo video, string format)
     {
-        if (File.Exists(path) || Directory.Exists(path))
+        string directory = Path.GetFullPath(outputDirectory);
+        string safeTitle = SafeTitle(video.Title);
+        string extension = "." + format;
+        for (int index = 0; index < int.MaxValue; index++)
         {
-            throw new YtdlpOutputFileExistsException(path);
+            string suffix = index == 0 ? string.Empty : " (" + (index + 1).ToString(CultureInfo.InvariantCulture) + ")";
+            int maxStemLength = 255 - extension.Length - suffix.Length;
+            string stem = safeTitle.Length <= maxStemLength ? safeTitle : safeTitle[..maxStemLength].TrimEnd(' ', '.');
+            if (stem.Length == 0)
+            {
+                stem = "audio";
+            }
+
+            string candidate = Path.Combine(directory, stem + suffix + extension);
+            if (!File.Exists(candidate) && !Directory.Exists(candidate))
+            {
+                return candidate;
+            }
         }
+
+        throw new IOException($"Could not find a free output file name in '{directory}'.");
     }
 
     private static async Task CopyFileAsync(string source, string destination, CancellationToken token)

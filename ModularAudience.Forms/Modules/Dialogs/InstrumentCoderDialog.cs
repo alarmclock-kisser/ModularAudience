@@ -44,6 +44,7 @@ public sealed partial class InstrumentCoderDialog : Form
     private readonly Button referencePlayButton = new() { Text = "Play", AutoSize = true, Enabled = false };
     private readonly TextBox promptText = new() { Multiline = true, Height = 90, Width = 500 };
     private readonly TextBox serverUrlText = new() { Text = "http://localhost:9931", Width = 200 };
+    private readonly TextBox apiKeyText = new() { Width = 200, UseSystemPasswordChar = true };
     private readonly ComboBox modelCombo = new() { DropDownStyle = ComboBoxStyle.DropDownList, Width = 200 };
     private readonly NumericUpDown maxIterations = new() { Minimum = 1, Maximum = 50, Value = 10, Width = 80 };
     private readonly CheckBox includeSpectrogram = new() { Text = "Include Spectrogram Image", Checked = true, AutoSize = true };
@@ -234,6 +235,8 @@ public sealed partial class InstrumentCoderDialog : Form
         var llmLayout = new FlowLayoutPanel { AutoSize = true, WrapContents = true, FlowDirection = FlowDirection.LeftToRight };
         llmLayout.Controls.Add(new Label { Text = "Server URL:", AutoSize = true, Margin = new Padding(5, 5, 5, 0) });
         llmLayout.Controls.Add(serverUrlText);
+        llmLayout.Controls.Add(new Label { Text = "API key:", AutoSize = true, Margin = new Padding(15, 5, 5, 0) });
+        llmLayout.Controls.Add(apiKeyText);
         llmLayout.Controls.Add(new Label { Text = "Model:", AutoSize = true, Margin = new Padding(15, 5, 5, 0) });
         llmLayout.Controls.Add(modelCombo);
         llmLayout.Controls.Add(maxIterations);
@@ -589,7 +592,8 @@ public sealed partial class InstrumentCoderDialog : Form
             // Audio content types may not be supported by all server versions.
             var testConnector = new LlamaConnector(url)
             {
-                Model = modelCombo.SelectedItem as string ?? this.llm.Model
+                Model = modelCombo.SelectedItem as string ?? this.llm.Model,
+                ApiKey = apiKeyText.Text.Trim(),
             };
             testConnector.Logger = line => AddLogLine($"[Llama] {line}");
             string? result = await TestTextCompletionAsync(testConnector);
@@ -608,9 +612,10 @@ public sealed partial class InstrumentCoderDialog : Form
         catch (Exception ex)
         {
             string fullError = ex.ToString();
+            string detail = LlamaHttp.DescribeError(ex);
             Console.WriteLine($"[InstrumentCoderDialog] Connection test failed: {fullError}");
-            AddLogLine($"LLM connection test failed: {ex.Message}");
-            statusLabel.Text = "Connection failed.";
+            AddLogLine($"LLM connection test failed: {detail}");
+            statusLabel.Text = $"Connection failed: {detail}";
             try
             {
                 ModularAudience.Audio.LogManager.Log($"[InstrumentCoder] Connection test failed: {fullError}");
@@ -619,7 +624,7 @@ public sealed partial class InstrumentCoderDialog : Form
             {
                 Console.WriteLine($"[InstrumentCoderDialog] LogManager.Log failed: {logEx}");
             }
-            ShowCopyableError("LLM Connection Error", fullError);
+            ShowCopyableError("LLM Connection Error", fullError + Environment.NewLine + Environment.NewLine + "Summary: " + detail);
         }
     }
 
@@ -670,13 +675,7 @@ public sealed partial class InstrumentCoderDialog : Form
         }
     }
 
-    private static HttpClient CreateLlmHttpClient()
-    {
-        var handler = new HttpClientHandler();
-        handler.ServerCertificateCustomValidationCallback = static (message, cert, chain, errors) =>
-            errors == System.Net.Security.SslPolicyErrors.None || message?.RequestUri?.IsLoopback == true;
-        return new HttpClient(handler);
-    }
+    private static HttpClient CreateLlmHttpClient() => LlamaHttp.CreateClient(Timeout.InfiniteTimeSpan);
 
     private async Task<byte[]> CreateTestToneWavAsync()
     {
@@ -701,6 +700,7 @@ public sealed partial class InstrumentCoderDialog : Form
         orchestrator.AutoRetryCompileErrors = autoRetryCheckBox.Checked;
         orchestrator.UserPrompt = promptText.Text;
         this.llm.SetApiUrl(serverUrlText.Text);
+        this.llm.ApiKey = apiKeyText.Text.Trim();
         if (modelCombo.SelectedItem is string selectedModel && !string.IsNullOrWhiteSpace(selectedModel))
         {
             this.llm.Model = selectedModel;
@@ -973,6 +973,9 @@ public sealed partial class InstrumentCoderDialog : Form
     private sealed class CoderSettings
     {
         public string ServerUrl { get; set; } = "http://localhost:9931";
+        [System.Text.Json.Serialization.JsonIgnore]
+        public string ApiKey { get; set; } = "";
+        public string ProtectedApiKey { get; set; } = "";
         public string Model { get; set; } = "";
         public int MaxIterations { get; set; } = 10;
         public bool IncludeSpectrogram { get; set; } = true;
@@ -994,6 +997,14 @@ public sealed partial class InstrumentCoderDialog : Form
             if (settings == null) return;
 
             serverUrlText.Text = settings.ServerUrl;
+            try
+            {
+                apiKeyText.Text = new WindowsLlmSecretProtector().Unprotect(settings.ProtectedApiKey);
+            }
+            catch (System.Security.Cryptography.CryptographicException)
+            {
+                apiKeyText.Text = "";
+            }
             if (!string.IsNullOrEmpty(settings.Model) && modelCombo.Items.Contains(settings.Model))
             {
                 modelCombo.SelectedItem = settings.Model;
@@ -1019,6 +1030,7 @@ public sealed partial class InstrumentCoderDialog : Form
             }
 
             this.llm.SetApiUrl(serverUrlText.Text);
+            this.llm.ApiKey = apiKeyText.Text.Trim();
             if (modelCombo.SelectedItem is string savedModel && !string.IsNullOrWhiteSpace(savedModel))
             {
                 this.llm.Model = savedModel;
@@ -1038,6 +1050,7 @@ public sealed partial class InstrumentCoderDialog : Form
             var settings = new CoderSettings
             {
                 ServerUrl = serverUrlText.Text,
+                ProtectedApiKey = new WindowsLlmSecretProtector().Protect(apiKeyText.Text.Trim()),
                 Model = modelCombo.SelectedItem as string ?? "",
                 MaxIterations = (int)maxIterations.Value,
                 IncludeSpectrogram = includeSpectrogram.Checked,

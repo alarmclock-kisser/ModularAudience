@@ -103,7 +103,7 @@ public sealed partial class VocalSynthDialog
         try
         {
             proxy.Start(config.UpstreamUrl, config.ListenPort,
-                config.UseModelFilter ? config.ModelFilter : "");
+                config.UseModelFilter ? config.ModelFilter : "", config.ApiKey);
         }
         catch
         {

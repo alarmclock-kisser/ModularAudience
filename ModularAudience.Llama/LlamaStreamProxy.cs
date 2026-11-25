@@ -1,5 +1,6 @@
 using System.IO.Compression;
 using System.Net;
+using System.Net.Http.Headers;
 using System.Net.Sockets;
 using System.Text;
 using System.Text.Json;
@@ -25,6 +26,7 @@ public sealed class LlamaStreamProxy : IDisposable
     private CancellationTokenSource? shutdown;
     private Task[] acceptLoops = [];
     private string upstream = "http://127.0.0.1:8080";
+    private string apiKey = "";
     private string modelFilter = "";
     private bool disposed;
 
@@ -44,7 +46,7 @@ public sealed class LlamaStreamProxy : IDisposable
     /// <summary>Informational messages about requests the proxy saw but could not tap.</summary>
     public event Action<string>? Diagnostic;
 
-    public void Start(string upstreamUrl, int port, string modelFilter = "")
+    public void Start(string upstreamUrl, int port, string modelFilter = "", string apiKey = "")
     {
         ObjectDisposedException.ThrowIf(disposed, this);
         if (IsRunning)
@@ -65,6 +67,7 @@ public sealed class LlamaStreamProxy : IDisposable
         }
 
         upstream = upstreamUrl.TrimEnd('/');
+        this.apiKey = apiKey?.Trim() ?? "";
         this.modelFilter = modelFilter?.Trim() ?? "";
 
         listener = new TcpListener(IPAddress.Loopback, port);
@@ -249,6 +252,12 @@ public sealed class LlamaStreamProxy : IDisposable
                     {
                         request.Headers.TryAddWithoutValidation(header.Key, header.Value);
                     }
+                }
+
+                if (!string.IsNullOrWhiteSpace(this.apiKey) &&
+                    !request.Headers.Contains("Authorization"))
+                {
+                    request.Headers.Authorization = new AuthenticationHeaderValue("Bearer", this.apiKey.Trim());
                 }
 
                 if (body.Length > 0)

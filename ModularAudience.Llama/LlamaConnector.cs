@@ -3,6 +3,7 @@ using System;
 using System.Collections.Generic;
 using System.IO;
 using System.Net.Http;
+using System.Net.Http.Headers;
 using System.Text;
 using System.Text.Json;
 using System.Threading.Tasks;
@@ -13,6 +14,7 @@ namespace ModularAudience.Llama
     {
         public string ApiUrl { get; private set; }
         public string Model { get; set; } = "gemma-4";
+        public string ApiKey { get; set; } = "";
 
         /// <summary>
         /// Optional log sink. The Instrument Coder connects this to its own log list and to LogManager.
@@ -27,10 +29,7 @@ namespace ModularAudience.Llama
             this.Model = model;
 
             // Audio inference plus a long code answer can take several minutes on a local model.
-            var handler = new HttpClientHandler();
-            handler.ServerCertificateCustomValidationCallback = static (message, cert, chain, errors) =>
-                errors == System.Net.Security.SslPolicyErrors.None || message?.RequestUri?.IsLoopback == true;
-            this._httpClient = new HttpClient(handler) { Timeout = TimeSpan.FromMinutes(10) };
+            this._httpClient = LlamaHttp.CreateClient(TimeSpan.FromMinutes(10));
         }
 
         /// <summary>
@@ -303,8 +302,16 @@ namespace ModularAudience.Llama
         protected virtual async Task<HttpResponseMessage> PostChatAsync(object payload)
         {
             string json = JsonSerializer.Serialize(payload);
-            using var httpContent = new StringContent(json, Encoding.UTF8, "application/json");
-            return await this._httpClient.PostAsync($"{this.ApiUrl}/v1/chat/completions", httpContent);
+            using var request = new HttpRequestMessage(HttpMethod.Post, $"{this.ApiUrl}/v1/chat/completions")
+            {
+                Content = new StringContent(json, Encoding.UTF8, "application/json"),
+            };
+            if (!string.IsNullOrWhiteSpace(this.ApiKey))
+            {
+                request.Headers.Authorization = new AuthenticationHeaderValue("Bearer", this.ApiKey.Trim());
+            }
+
+            return await this._httpClient.SendAsync(request);
         }
 
         private async Task<string?> ReadSseAsync(

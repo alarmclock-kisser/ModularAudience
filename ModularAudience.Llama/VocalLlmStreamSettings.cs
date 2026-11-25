@@ -1,4 +1,6 @@
+using System.Security.Cryptography;
 using System.Text.Json;
+using System.Text.Json.Serialization;
 using ModularAudience.Audio.Vocal;
 
 namespace ModularAudience.Llama;
@@ -8,6 +10,17 @@ namespace ModularAudience.Llama;
 /// </summary>
 public sealed class VocalLlmStreamSettings
 {
+    /// <summary>Protector used when persisting the API key. Replaceable in tests.</summary>
+    [JsonIgnore]
+    public static ILlmSecretProtector Protector { get; set; } = new WindowsLlmSecretProtector();
+
+    /// <summary>Bearer token for the llama-server. Never persisted in plaintext.</summary>
+    [JsonIgnore]
+    public string ApiKey { get; set; } = "";
+
+    /// <summary>DPAPI-protected form of <see cref="ApiKey"/> that is written to disk.</summary>
+    public string ProtectedApiKey { get; set; } = "";
+
     /// <summary>The real llama-server address. The web UI is pointed at <see cref="ListenPort"/> instead.</summary>
     public string UpstreamUrl { get; set; } = "http://127.0.0.1:9931";
 
@@ -76,8 +89,12 @@ public sealed class VocalLlmStreamSettings
         BreakOnSentenceEnd = BreakOnSentenceEnd,
     };
 
-    public VocalLlmStreamSettings Clone() =>
-        JsonSerializer.Deserialize<VocalLlmStreamSettings>(JsonSerializer.Serialize(this))!;
+    public VocalLlmStreamSettings Clone()
+    {
+        var copy = JsonSerializer.Deserialize<VocalLlmStreamSettings>(JsonSerializer.Serialize(this))!;
+        copy.ApiKey = this.ApiKey;
+        return copy;
+    }
 
     public static VocalLlmStreamSettings Load(string? path = null)
     {
@@ -86,6 +103,16 @@ public sealed class VocalLlmStreamSettings
             ? JsonSerializer.Deserialize<VocalLlmStreamSettings>(File.ReadAllText(path)) ?? new()
             : new();
         result.Normalize();
+        try
+        {
+            result.ApiKey = Protector.Unprotect(result.ProtectedApiKey);
+        }
+        catch (CryptographicException)
+        {
+            // A key bound to another user/machine is unusable; keep the rest of the settings.
+            result.ApiKey = "";
+        }
+
         return result;
     }
 
@@ -93,6 +120,7 @@ public sealed class VocalLlmStreamSettings
     {
         path ??= SettingsPath;
         Normalize();
+        ProtectedApiKey = Protector.Protect(ApiKey);
         string? directory = Path.GetDirectoryName(Path.GetFullPath(path));
         if (!string.IsNullOrEmpty(directory))
         {

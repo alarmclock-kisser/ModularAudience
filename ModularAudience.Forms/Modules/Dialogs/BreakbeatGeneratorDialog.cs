@@ -1,6 +1,7 @@
 ﻿using ModularAudience.Audio;
 using ModularAudience.Forms.Helpers;
 using ModularAudience.Generators;
+using ModularAudience.Llama;
 using NAudio.SoundFont;
 using System;
 using System.Collections.Generic;
@@ -1279,7 +1280,7 @@ namespace ModularAudience.Forms.Modules.Dialogs
         {
             var handler = new HttpClientHandler();
             handler.ServerCertificateCustomValidationCallback = static (message, cert, chain, errors) =>
-                errors == SslPolicyErrors.None || message?.RequestUri?.IsLoopback == true;
+                LlamaHttp.AcceptCertificate(message, cert, chain, errors);
 
             return new HttpClient(handler);
         }

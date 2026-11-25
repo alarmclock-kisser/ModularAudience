@@ -10,6 +10,7 @@ namespace ModularAudience.Forms.Modules.Dialogs;
 public sealed class VocalLlmStreamDialog : Form
 {
     private readonly TextBox upstream = new() { Width = 320, Text = "http://127.0.0.1:9931" };
+    private readonly TextBox apiKey = new() { Width = 320, UseSystemPasswordChar = true };
     private readonly NumericUpDown port = new()
     {
         Minimum = 1, Maximum = 65535, Value = 8081, Width = 90,
@@ -95,6 +96,7 @@ public sealed class VocalLlmStreamDialog : Form
         }
 
         Row("llama-server address", upstream);
+        Row("API key (optional)", apiKey);
         Row("Proxy listen port", port);
         Row("Model filter", new FlowLayoutPanel
         {
@@ -170,6 +172,7 @@ public sealed class VocalLlmStreamDialog : Form
     private void ApplyToControls(VocalLlmStreamSettings value)
     {
         upstream.Text = value.UpstreamUrl;
+        apiKey.Text = value.ApiKey;
         port.Value = Math.Clamp(value.ListenPort, port.Minimum, port.Maximum);
         useModelFilter.Checked = value.UseModelFilter && !string.IsNullOrWhiteSpace(value.ModelFilter);
         modelFilter.Items.Clear();
@@ -196,6 +199,7 @@ public sealed class VocalLlmStreamDialog : Form
         var result = new VocalLlmStreamSettings
         {
             UpstreamUrl = upstream.Text.Trim(),
+            ApiKey = apiKey.Text.Trim(),
             ListenPort = (int)port.Value,
             UseModelFilter = useModelFilter.Checked,
             ModelFilter = useModelFilter.Checked ? modelFilter.Text.Trim() : "",
@@ -227,7 +231,13 @@ public sealed class VocalLlmStreamDialog : Form
             string url = upstream.Text.Trim().TrimEnd('/') + "/v1/models";
             // HTTPS llama-servers commonly use a self-signed localhost certificate.
             using HttpClient client = LlamaHttp.CreateClient(TimeSpan.FromSeconds(5));
-            using HttpResponseMessage response = await client.GetAsync(url);
+            using var request = new HttpRequestMessage(HttpMethod.Get, url);
+            if (!string.IsNullOrWhiteSpace(apiKey.Text))
+            {
+                request.Headers.Authorization = new System.Net.Http.Headers.AuthenticationHeaderValue("Bearer", apiKey.Text.Trim());
+            }
+
+            using HttpResponseMessage response = await client.SendAsync(request);
             string body = await response.Content.ReadAsStringAsync();
             if (!response.IsSuccessStatusCode)
             {
