@@ -99,8 +99,7 @@ internal static class HintContent
         ["button_save"] = "Click to render the arrangement into a matching CustomMidi collection. The collection is reused for the same BPM and instrument; melody sample names are made unique. Right-click for MIDI file export.",
         ["button_remix"] = "Remix the selected range (or whole arrangement) and create a ghost preview to place without replacing existing notes.",
         ["button_generate"] = "Generate notes for the selected range (or a new arrangement) and create a ghost preview to place.",
-        ["button_record"] = "Record your voice from the microphone: the pitch is tracked with pYIN, quantized to MIDI notes (using the current BPM, grid and A4 tuning) and shown as a ghost preview to place. The recording is additionally stored as a sample in the matching CustomMidi collection. Stop the recording, then click in the piano roll to place.",
-        ["button_stopRecording"] = "Stop the active microphone recording and convert the captured pitch to MIDI notes.",
+        ["button_record"] = "Toggle microphone recording: picks up your voice, the pitch is tracked with pYIN, quantized to MIDI notes (using the current BPM, grid and A4 tuning) and shown as a ghost preview to place. The recording is additionally stored as a sample in the matching CustomMidi collection. While recording the button reads Stop; click it to finish and place the notes.",
         ["comboBox_inputDevice"] = "Microphone input device used for the recording. Changing the device restarts the recording.",
         ["label_recordStatus"] = "Live recording status: elapsed time and microphone level.",
         ["progressBar_inputLevel"] = "Live microphone input level."

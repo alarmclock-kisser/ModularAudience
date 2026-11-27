@@ -105,6 +105,7 @@ namespace ModularAudience.Forms.Modules.Dialogs
         private string? recordingPath;
         private readonly Stopwatch recordingClock = new();
         private bool recordingActive;
+        private bool recordingStarting;
         private bool recordingFinalizing;
         private CancellationTokenSource? recordingCts;
 
@@ -2943,21 +2944,21 @@ namespace ModularAudience.Forms.Modules.Dialogs
 
         private async void button_record_Click(object? sender, EventArgs e)
         {
-            if (this.recordingActive || this.recordingFinalizing)
+            if (this.recordingFinalizing || this.closing || this.IsDisposed)
             {
+                return;
+            }
+
+            if (this.recordingActive || this.recordingStarting)
+            {
+                await this.FinishRecordingAsync(accept: true, null);
                 return;
             }
 
             try
             {
-                this.comboBox_inputDevice.Items.Clear();
                 IReadOnlyList<AudioInputDevice> devices = MicrophoneAudioCapture.GetInputDevices();
-                foreach (AudioInputDevice device in devices)
-                {
-                    this.comboBox_inputDevice.Items.Add(device);
-                }
-
-                if (this.comboBox_inputDevice.Items.Count == 0)
+                if (devices.Count == 0)
                 {
                     WindowMainStaticHelpers.ShowErrorWithCopyButton(
                         this,
@@ -2966,18 +2967,23 @@ namespace ModularAudience.Forms.Modules.Dialogs
                     return;
                 }
 
+                this.comboBox_inputDevice.Items.Clear();
+                foreach (AudioInputDevice device in devices)
+                {
+                    this.comboBox_inputDevice.Items.Add(device);
+                }
+
                 this.comboBox_inputDevice.SelectedIndex = Math.Clamp(this.comboBox_inputDevice.Items.Count - 1, 0, this.comboBox_inputDevice.Items.Count - 1);
                 this.comboBox_inputDevice.Visible = true;
                 this.label_recordStatus.Visible = true;
                 this.progressBar_inputLevel.Visible = true;
-                this.button_stopRecording.Visible = true;
-                this.comboBox_inputDevice.Enabled = true;
                 this.label_recordStatus.Text = "Starting microphone...";
                 this.progressBar_inputLevel.Value = 0;
-                await this.StartRecordingCoreAsync();
+                await this.BeginRecordingCoreAsync();
             }
             catch (Exception ex)
             {
+                this.RecordingUiIdle();
                 if (!this.IsDisposed)
                 {
                     this.label_recordStatus.Text = "Microphone could not be started.";
@@ -2988,7 +2994,7 @@ namespace ModularAudience.Forms.Modules.Dialogs
 
         private void comboBox_inputDevice_SelectedIndexChanged(object? sender, EventArgs e)
         {
-            if (this.recordingActive || this.recordingFinalizing
+            if (this.recordingStarting || this.recordingFinalizing
                 || this.comboBox_inputDevice.SelectedItem is not AudioInputDevice device)
             {
                 return;
@@ -2997,50 +3003,98 @@ namespace ModularAudience.Forms.Modules.Dialogs
             _ = this.RestartRecordingCoreAsync(device);
         }
 
-        private async Task StartRecordingCoreAsync()
+        private async Task BeginRecordingCoreAsync()
         {
-            await this.StopRecordingCaptureCoreAsync();
-            if (this.closing || this.IsDisposed)
+            this.recordingStarting = true;
+            this.button_record.Text = "Starting...";
+            this.comboBox_inputDevice.Enabled = false;
+            this.label_recordStatus.Text = "Starting microphone...";
+            try
             {
-                return;
-            }
+                await this.StopRecordingCaptureCoreAsync();
+                if (this.closing || this.IsDisposed)
+                {
+                    return;
+                }
 
-            if (this.comboBox_inputDevice.SelectedItem is not AudioInputDevice device)
+                if (this.comboBox_inputDevice.SelectedItem is not AudioInputDevice device)
+                {
+                    throw new InvalidOperationException("No microphone input device is selected.");
+                }
+
+                this.recordingPath = Path.Combine(Path.GetTempPath(), $"MA_MidiRecord_{Guid.NewGuid():N}.wav");
+                if (File.Exists(this.recordingPath))
+                {
+                    File.Delete(this.recordingPath);
+                }
+
+                this.recordingCts = new();
+                this.recordingCapture = MicrophoneAudioCapture.Start(device.Id, this.recordingPath!);
+                this.recordingActive = true;
+                this.recordingClock.Reset();
+                this.recordingClock.Start();
+                this.timer_recording.Start();
+                this.button_record.Text = "Stop";
+                this.label_recordStatus.Text = "Recording. Sing or play your melody.";
+            }
+            catch
             {
-                throw new InvalidOperationException("No microphone input device is selected.");
+                this.recordingActive = false;
+                this.recordingClock.Stop();
+                this.timer_recording.Stop();
+                this.RecordingUiIdle();
+                throw;
             }
-
-            this.BeginRecordingCore(device.Id);
+            finally
+            {
+                this.recordingStarting = false;
+            }
         }
 
         private async Task RestartRecordingCoreAsync(AudioInputDevice device)
         {
-            await this.StopRecordingCaptureCoreAsync();
-            if (this.closing || this.IsDisposed)
+            if (this.recordingStarting || this.recordingFinalizing)
             {
                 return;
             }
 
-            this.BeginRecordingCore(device.Id);
-        }
-
-        private void BeginRecordingCore(string deviceId)
-        {
-            this.recordingPath = Path.Combine(Path.GetTempPath(), $"MA_MidiRecord_{Guid.NewGuid():N}.wav");
-            if (File.Exists(this.recordingPath))
+            this.recordingStarting = true;
+            this.comboBox_inputDevice.Enabled = false;
+            this.label_recordStatus.Text = "Restarting microphone...";
+            try
             {
-                File.Delete(this.recordingPath);
-            }
+                await this.StopRecordingCaptureCoreAsync();
+                if (this.closing || this.IsDisposed)
+                {
+                    return;
+                }
 
-            this.recordingCts = new();
-            this.recordingCapture = MicrophoneAudioCapture.Start(deviceId, this.recordingPath!);
-            this.recordingActive = true;
-            this.recordingClock.Reset();
-            this.recordingClock.Start();
-            this.timer_recording.Start();
-            this.button_record.Enabled = false;
-            this.button_stopRecording.Enabled = true;
-            this.label_recordStatus.Text = "Recording. Sing or play your melody.";
+                this.recordingPath = Path.Combine(Path.GetTempPath(), $"MA_MidiRecord_{Guid.NewGuid():N}.wav");
+                if (File.Exists(this.recordingPath))
+                {
+                    File.Delete(this.recordingPath);
+                }
+
+                this.recordingCts = new();
+                this.recordingCapture = MicrophoneAudioCapture.Start(device.Id, this.recordingPath!);
+                this.recordingActive = true;
+                this.recordingClock.Reset();
+                this.recordingClock.Start();
+                this.timer_recording.Start();
+                this.label_recordStatus.Text = "Recording. Sing or play your melody.";
+            }
+            catch
+            {
+                this.recordingActive = false;
+                this.recordingClock.Stop();
+                this.timer_recording.Stop();
+                this.RecordingUiIdle();
+                throw;
+            }
+            finally
+            {
+                this.recordingStarting = false;
+            }
         }
 
         private void timer_recording_Tick(object? sender, EventArgs e)
@@ -3065,16 +3119,6 @@ namespace ModularAudience.Forms.Modules.Dialogs
             this.label_recordStatus.Text = $"Recording {this.recordingClock.Elapsed:mm\\:ss\\.fff} · Mic {peak:P0}";
         }
 
-        private async void button_stopRecording_Click(object? sender, EventArgs e)
-        {
-            if (!this.recordingActive || this.recordingFinalizing)
-            {
-                return;
-            }
-
-            await this.FinishRecordingAsync(accept: true, null);
-        }
-
         private async Task FinishRecordingAsync(bool accept, Exception? captureFailure)
         {
             if (this.recordingFinalizing)
@@ -3084,7 +3128,8 @@ namespace ModularAudience.Forms.Modules.Dialogs
 
             this.recordingFinalizing = true;
             this.timer_recording.Stop();
-            this.button_stopRecording.Enabled = false;
+            this.button_record.Enabled = false;
+            this.button_record.Text = "Analyzing...";
             this.comboBox_inputDevice.Enabled = false;
             this.label_recordStatus.Text = captureFailure is null
                 ? "Stopping microphone and analyzing pitch..."
@@ -3117,7 +3162,7 @@ namespace ModularAudience.Forms.Modules.Dialogs
                     }
 
                     this.DeleteRecordingFile();
-                    this.ResetRecordingUi();
+                    this.RecordingUiIdle();
                     return;
                 }
 
@@ -3126,7 +3171,7 @@ namespace ModularAudience.Forms.Modules.Dialogs
                 if (notes.Count == 0)
                 {
                     this.DeleteRecordingFile();
-                    this.ResetRecordingUi();
+                    this.RecordingUiIdle();
                     if (!this.IsDisposed && !this.closing)
                     {
                         WindowMainStaticHelpers.ShowErrorWithCopyButton(
@@ -3140,12 +3185,15 @@ namespace ModularAudience.Forms.Modules.Dialogs
 
                 this.StoreRecordingAsCollectionSample();
                 this.StartGhostPreview(notes, addToHistory: true);
-                this.label_recordStatus.Text = $"{notes.Count} note(s) added to clipboard. Click in the piano roll to place.";
+                this.button_record.Enabled = true;
+                this.button_record.Text = "Record";
+                this.label_recordStatus.Visible = true;
+                this.label_recordStatus.Text = $"{notes.Count} note(s) in clipboard. Click in the piano roll to place.";
             }
             catch (Exception ex)
             {
                 this.DeleteRecordingFile();
-                this.ResetRecordingUi();
+                this.RecordingUiIdle();
                 if (!this.IsDisposed && !this.closing)
                 {
                     WindowMainStaticHelpers.ShowErrorWithCopyButton(this, "Microphone pitch analysis", ex);
@@ -3232,7 +3280,7 @@ namespace ModularAudience.Forms.Modules.Dialogs
             }
         }
 
-        private void ResetRecordingUi()
+        private void RecordingUiIdle()
         {
             if (this.IsDisposed)
             {
@@ -3240,12 +3288,11 @@ namespace ModularAudience.Forms.Modules.Dialogs
             }
 
             this.button_record.Enabled = true;
-            this.button_stopRecording.Enabled = false;
+            this.button_record.Text = "Record";
             this.comboBox_inputDevice.Enabled = false;
             this.comboBox_inputDevice.Visible = false;
             this.label_recordStatus.Visible = false;
             this.progressBar_inputLevel.Visible = false;
-            this.button_stopRecording.Visible = false;
         }
 
         private void DeleteRecordingFile()
@@ -3585,7 +3632,6 @@ namespace ModularAudience.Forms.Modules.Dialogs
                 this.recordingCts?.Cancel();
                 this.timer_recording.Stop();
                 this.button_record.Enabled = false;
-                this.button_stopRecording.Enabled = false;
                 await this.StopRecordingCaptureCoreAsync();
                 await this.StopPlaybackAsync();
                 Task[] renders = this.activeRenders.ToArray();

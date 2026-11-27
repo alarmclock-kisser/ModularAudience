@@ -67,7 +67,6 @@ namespace ModularAudience.Forms.Modules.Dialogs
             this.comboBox_inputDevice = new ComboBox();
             this.label_recordStatus = new Label();
             this.progressBar_inputLevel = new ProgressBar();
-            this.button_stopRecording = new Button();
             this.contextMenuStrip_playFromHere = new ContextMenuStrip(this.components);
             this.toolStripMenuItem_playFromHere = new ToolStripMenuItem();
             this.contextMenuStrip_save = new ContextMenuStrip(this.components);
@@ -362,7 +361,6 @@ namespace ModularAudience.Forms.Modules.Dialogs
             this.flowLayoutPanel_left.Controls.Add(this.comboBox_inputDevice);
             this.flowLayoutPanel_left.Controls.Add(this.label_recordStatus);
             this.flowLayoutPanel_left.Controls.Add(this.progressBar_inputLevel);
-            this.flowLayoutPanel_left.Controls.Add(this.button_stopRecording);
             this.flowLayoutPanel_left.Dock = DockStyle.Left;
             this.flowLayoutPanel_left.Location = new Point(0, 0);
             this.flowLayoutPanel_left.Margin = new Padding(0);
@@ -402,18 +400,7 @@ namespace ModularAudience.Forms.Modules.Dialogs
             this.progressBar_inputLevel.Size = new Size(80, 23);
             this.progressBar_inputLevel.TabIndex = 6;
             this.progressBar_inputLevel.Visible = false;
-            //
-            // button_stopRecording
-            //
-            this.button_stopRecording.Enabled = false;
-            this.button_stopRecording.Location = new Point(699, 11);
-            this.button_stopRecording.Name = "button_stopRecording";
-            this.button_stopRecording.Size = new Size(60, 23);
-            this.button_stopRecording.TabIndex = 7;
-            this.button_stopRecording.Text = "Stop";
-            this.button_stopRecording.UseVisualStyleBackColor = true;
-            this.button_stopRecording.Visible = false;
-            this.button_stopRecording.Click += this.button_stopRecording_Click;
+
             // 
             // button_play
             // 
@@ -521,7 +508,7 @@ namespace ModularAudience.Forms.Modules.Dialogs
             // toolTip_editor
             //
             this.toolTip_editor.SetToolTip(this.pictureBox_editor, "Left mouse button: Add notes; right-click a note: Delete it; right-click empty space: Play from Here\r\nShift + left-drag: Select a note/time range for Remix and Generate\r\nCtrl + drag: Pan; Ctrl + mouse wheel: Zoom\r\nCtrl+C/X: Copy/Cut selection; Ctrl+V: Paste ghost (hold for clipboard history)\r\nClick to place a ghost; Esc or right-click cancels");
-            this.toolTip_editor.SetToolTip(this.button_record, "Record from microphone: picks up your voice, converts the pitch to MIDI notes via pYIN, stores the recording as a sample in the CustomMidi collection and creates a ghost preview to place.");
+            this.toolTip_editor.SetToolTip(this.button_record, "Toggle microphone recording: picks up your voice, converts the pitch to MIDI notes via pYIN, stores the recording as a sample in the CustomMidi collection and creates a ghost preview to place. Click again (Stop) to finish.");
             //
             // timer_previewCaret
             //
@@ -633,7 +620,6 @@ namespace ModularAudience.Forms.Modules.Dialogs
         private ComboBox comboBox_inputDevice;
         private Label label_recordStatus;
         private ProgressBar progressBar_inputLevel;
-        private Button button_stopRecording;
         private ContextMenuStrip contextMenuStrip_playFromHere;
         private ToolStripMenuItem toolStripMenuItem_playFromHere;
         private ContextMenuStrip contextMenuStrip_save;
