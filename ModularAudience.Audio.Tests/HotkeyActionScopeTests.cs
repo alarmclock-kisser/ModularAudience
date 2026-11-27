@@ -18,6 +18,27 @@ namespace ModularAudience.Audio.Tests
         public void Initialize()
         {
             this.uiContext = new WinFormsTestContext();
+            // Reset any global state left by a previous test class.
+            foreach (TrackView view in WindowMain.TrackViews.ToArray())
+            {
+                CloseTrack(view);
+            }
+            foreach (AudioCollectionView collection in WindowMain.CollectionViews.ToArray())
+            {
+                try { if (!collection.IsDisposed) { collection.Close(); } } catch { }
+                try { collection.Dispose(); } catch { }
+            }
+            // Best-effort: if the async close didn't remove them, remove directly.
+            foreach (AudioCollectionView collection in WindowMain.CollectionViews.ToArray())
+            {
+                try { WindowMain.CollectionViews.Remove(collection); } catch { }
+            }
+            foreach (TrackView view in WindowMain.TrackViews.ToArray())
+            {
+                try { WindowMain.TrackViews.Remove(view); } catch { }
+            }
+            WindowMain.LastSelectedTrackView = null;
+            WindowMain.LastSelectedCollectionView = null;
             Assert.IsNull(WindowMain.Instance);
             Assert.AreEqual(0, WindowMain.TrackViews.Count);
             Assert.AreEqual(0, WindowMain.CollectionViews.Count);

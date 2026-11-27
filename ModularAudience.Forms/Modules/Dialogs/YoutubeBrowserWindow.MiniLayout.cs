@@ -79,8 +79,10 @@ public partial class YoutubeBrowserWindow
             queryPanel.ColumnStyles[3].Width = 0;
             if (!compact)
             {
+                // The details pane keeps a recognisable thumbnail (>= 80 px tall);
+                // the results list takes the remaining width.
                 mainSplit.SplitterDistance = Math.Clamp(normalSplitterDistance, mainSplit.Panel1MinSize,
-                    Math.Max(mainSplit.Panel1MinSize, mainSplit.Width - mainSplit.Panel2MinSize - mainSplit.SplitterWidth));
+                    Math.Max(mainSplit.Panel1MinSize, mainSplit.Width - mainSplit.SplitterWidth - 360));
             }
 
             rootLayout.Padding = new Padding(compact ? 3 : 8);
@@ -92,7 +94,9 @@ public partial class YoutubeBrowserWindow
 
     private void UpdateCondensedLayout()
     {
-        bool condensed = Width < 1000 || Height < 780;
+        // Inclusive: at exactly 1000×780 the options/actions panels move into a
+        // tab so the details pane keeps a recognisable thumbnail (>= 80 px tall).
+        bool condensed = Width <= 1000 || Height <= 780;
         if (condensed == condensedLayout)
         {
             return;

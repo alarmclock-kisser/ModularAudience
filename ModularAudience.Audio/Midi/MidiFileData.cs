@@ -541,7 +541,7 @@ public sealed class MidiFileData : IVocalMidiFile
             throw new InvalidDataException("The audio object does not contain complete audio frames.");
         }
         bpm = float.IsFinite(audioObj.Bpm) && audioObj.Bpm > 0 ? audioObj.Bpm : audioObj.ScannedBpm;
-        bpm = Math.Clamp(double.IsFinite(bpm) && bpm > 0 ? bpm : 100.0, 20.0, 400.0);
+        bpm = Math.Clamp(double.IsFinite(bpm) && bpm > 0 ? bpm : 120.0, 20.0, 400.0);
     }
 
     private readonly record struct PitchFrame(double CenterSample, double Frequency, float Rms, double Confidence);

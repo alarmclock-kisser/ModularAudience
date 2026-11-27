@@ -39,10 +39,58 @@ public static class VocalPhonemizer
     {
         "problem", "system", "bequem", "extrem", "poem", "theorem", "diadem", "athen", "ph\u00e4nomen",
     };
+    private static readonly string[] GermanDigits =
+    [
+        "null", "eins", "zwei", "drei", "vier", "f\u00fcnf", "sechs", "sieben", "acht", "neun",
+    ];
+    private static readonly string[] EnglishDigits =
+    [
+        "zero", "one", "two", "three", "four", "five", "six", "seven", "eight", "nine",
+    ];
 
     public static IReadOnlyList<string> Phonemize(
         VocalLanguage language, string text, CancellationToken cancellationToken = default)
         => PhonemizeCore(language, text, null, cancellationToken);
+
+    /// <summary>
+    /// Expands ASCII digits in <paramref name="text"/> to their per-digit
+    /// pronunciation words, for example "1234" becomes "eins zwei drei vier"
+    /// (German) or "one two three four" (English). Digits are never read as
+    /// whole numbers; all other text is left untouched.
+    /// </summary>
+    public static string ExpandDigits(VocalLanguage language, string text)
+    {
+        if (string.IsNullOrEmpty(text)
+            || language is not (VocalLanguage.English or VocalLanguage.German))
+        {
+            return text;
+        }
+
+        string[] names = language == VocalLanguage.German ? GermanDigits : EnglishDigits;
+        int first = text.IndexOfAny(DigitChars);
+        if (first < 0)
+        {
+            return text;
+        }
+
+        var result = new StringBuilder(text.Length * 2);
+        for (int i = 0; i < text.Length; i++)
+        {
+            if (char.IsAsciiDigit(text[i]))
+            {
+                result.Append(i > first ? ' ' : string.Empty);
+                result.Append(names[text[i] - '0']);
+            }
+            else
+            {
+                result.Append(text[i]);
+            }
+        }
+
+        return result.ToString();
+    }
+
+    private static readonly char[] DigitChars = ['0', '1', '2', '3', '4', '5', '6', '7', '8', '9'];
 
     internal static (IReadOnlyList<string> Phonemes, IReadOnlyList<int> Repetitions) PhonemizeWithRepetitions(
         VocalLanguage language, string text, CancellationToken cancellationToken)
@@ -117,6 +165,26 @@ public static class VocalPhonemizer
             {
                 result.Add("sil");
                 repetitions?.Add(0);
+                i++;
+                continue;
+            }
+            if (char.IsAsciiDigit(normalized[i]))
+            {
+                // Digits are read digit by digit ("1234" -> "eins zwei drei vier"),
+                // not as whole numbers, for English and German.
+                string digit = language == VocalLanguage.German
+                    ? GermanDigits[normalized[i] - '0']
+                    : EnglishDigits[normalized[i] - '0'];
+                if (effective == VocalLanguage.English && EnglishExceptions.TryGetValue(digit, out var digitException))
+                {
+                    result.AddRange(digitException);
+                    AddRepetitions(repetitions, digitException.Length, 0, cancellationToken);
+                }
+                else
+                {
+                    PhonemizeWord(effective, digit, result, repetitions, cancellationToken);
+                }
+
                 i++;
                 continue;
             }

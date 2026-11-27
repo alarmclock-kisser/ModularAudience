@@ -267,7 +267,11 @@ public sealed partial class InstrumentSampleSynthDialog : Form
         tips.SetToolTip(voice, "Choose the instrument voice within this family. Changing it loads voice-specific sound defaults; subsequent parameter changes customize the new voice.");
         tips.SetToolTip(kit, "Choose the drum-set character. Drum type selects the actual kick, snare, cymbal or other percussion voice within that set.");
         tips.SetToolTip(drum, "Percussion instrument to synthesize. Its characteristic base pitch and excitation remain type-specific; Pitch adds a relative tuning offset.");
-        tips.SetToolTip(note, "Fundamental MIDI key for this single synthesized note. Duration and envelope control its gate and tail; this is not a repeating MIDI phrase.");
+        tips.SetToolTip(note,
+            family == SynthFamily.DrumSet
+                ? "Base MIDI key for this synthesized drum. Pitch adds a relative tuning offset to the drum's characteristic base pitch."
+                : "Relative key-note offset against C4 (the neutral base note): C3 shifts everything one octave down, C5 one octave up. "
+                + "In the MIDI editor this offset is applied to every rendered MIDI note. Duration and envelope control its gate and tail; this is not a repeating MIDI phrase.");
         tips.SetToolTip(articulation, "Straight uses the selected note length. Dotted multiplies it by 1.5; Triplet multiplies it by 2/3. BPM converts the resulting musical length to seconds.");
         tips.SetToolTip(format, "Sample rate and mono/stereo channel layout of the generated audio object. Filtering is limited below the selected rate's Nyquist frequency.");
         tips.SetToolTip(loop, "Repeat the single-note sample during prehear. This is an audition option; Create still produces one note plus its release tail.");
@@ -1003,7 +1007,13 @@ public sealed partial class InstrumentSampleSynthDialog : Form
         {
             if (this.onInstrumentConfirmed is not null)
             {
-                this.onInstrumentConfirmed(CaptureSettings());
+                InstrumentSynthSettings confirmed = CaptureSettings();
+                if (this.octaveOffsetSemitones != 0)
+                {
+                    confirmed = CreatePitchedSettings(confirmed, this.octaveOffsetSemitones);
+                }
+
+                this.onInstrumentConfirmed(confirmed);
             }
 
             Close();

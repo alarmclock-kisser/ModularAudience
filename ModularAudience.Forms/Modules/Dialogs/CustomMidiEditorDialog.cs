@@ -314,9 +314,16 @@ namespace ModularAudience.Forms.Modules.Dialogs
         private void UpdateInstrumentLabel()
         {
             string text;
+            string? keyNoteHint = null;
             if (this.customSynthSettings is InstrumentSynthSettings synth)
             {
                 text = $"{InstrumentSynthCatalog.FamilyName(synth.Family)} / {synth.VoiceName}";
+                if (synth.Family != SynthFamily.DrumSet && Math.Abs(synth.KeyNoteSemitones) > 1e-12)
+                {
+                    int keyNote = (int)Math.Round(synth.KeyNoteSemitones) + InstrumentSynthSettings.BaseMidiNote;
+                    string sign = synth.KeyNoteSemitones > 0 ? "+" : string.Empty;
+                    keyNoteHint = $"Key Note {MidiNoteName(keyNote)} ({sign}{synth.KeyNoteSemitones:0.##} st against C4): rendered MIDI notes are shifted by this offset.";
+                }
             }
             else if (this.instrument == MidiInstrument.CustomSample && this.customSample != null)
             {
@@ -332,7 +339,9 @@ namespace ModularAudience.Forms.Modules.Dialogs
             }
 
             this.label_instrument.Text = text;
-            this.toolTip_editor.SetToolTip(this.label_instrument, $"Selected MIDI instrument: {text}");
+            this.toolTip_editor.SetToolTip(this.label_instrument, keyNoteHint is null
+                ? $"Selected MIDI instrument: {text}"
+                : $"{text}\r\n{keyNoteHint}");
         }
 
         private void SetInstrument(MidiInstrument value)
@@ -475,6 +484,7 @@ namespace ModularAudience.Forms.Modules.Dialogs
             this.customSample = null;
             this.customCollection = null;
             this.UpdateInstrumentLabel();
+            this.pictureBox_editor.Invalidate();
         }
 
         private void numericUpDown_resolution_ValueChanged(object? sender, EventArgs e)

@@ -4,6 +4,7 @@ using ModularAudience.Audio.Midi;
 namespace ModularAudience.Audio.Tests
 {
     [TestClass]
+    [DoNotParallelize]
     public sealed class MidiConversionTests
     {
         public TestContext TestContext { get; set; } = null!;

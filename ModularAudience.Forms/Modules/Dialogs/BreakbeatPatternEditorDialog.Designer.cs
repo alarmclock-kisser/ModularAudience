@@ -266,8 +266,8 @@ namespace ModularAudience.Forms.Modules.Dialogs
             //
             // button_deduplicate
             //
-            button_deduplicate.Anchor = AnchorStyles.Top | AnchorStyles.Right;
-            button_deduplicate.Location = new Point(414, 8);
+            button_deduplicate.Anchor = AnchorStyles.Bottom | AnchorStyles.Right;
+            button_deduplicate.Location = new Point(380, 42);
             button_deduplicate.Name = "button_deduplicate";
             button_deduplicate.Size = new Size(80, 25);
             button_deduplicate.TabIndex = 16;
@@ -414,7 +414,7 @@ namespace ModularAudience.Forms.Modules.Dialogs
             //
             // button_nameTemplateHelp
             //
-            button_nameTemplateHelp.Location = new Point(356, 15);
+            button_nameTemplateHelp.Location = new Point(356, 42);
             button_nameTemplateHelp.Name = "button_nameTemplateHelp";
             button_nameTemplateHelp.Size = new Size(52, 25);
             button_nameTemplateHelp.TabIndex = 9;

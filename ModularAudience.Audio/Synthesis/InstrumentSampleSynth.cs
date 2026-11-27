@@ -139,6 +139,38 @@ public static class InstrumentSampleSynth
         var data = new float[checked(frames * channels)];
         int written = safeSynth.Render(data, frames, token);
 
+        // DC removal and peak normalization, matching the built-in Render path so
+        // generated DSP code with unclipped output does not produce hard clipping.
+        for (int c = 0; c < channels; c++)
+        {
+            double sum = 0;
+            int count = written / channels;
+            for (int i = c; i < written; i += channels)
+            {
+                sum += data[i];
+            }
+            if (count == 0)
+            {
+                continue;
+            }
+
+            float mean = (float)(sum / count);
+            for (int i = c; i < written; i += channels)
+            {
+                data[i] -= mean;
+            }
+        }
+        double peak = 0;
+        for (int i = 0; i < written; i++)
+        {
+            peak = Math.Max(peak, Math.Abs(data[i]));
+        }
+        double level = settings.GainPercent / 100 * (peak > 0.95 ? 0.95 / peak : 1);
+        for (int i = 0; i < written; i++)
+        {
+            data[i] *= (float)level;
+        }
+
         var result = new AudioObj
         {
             Data = data[..written],

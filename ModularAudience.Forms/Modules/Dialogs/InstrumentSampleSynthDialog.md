@@ -16,7 +16,9 @@ height or width enables parameter scrolling again, without automatically resizin
 - Durations run from 1/64 through 4 Bars (4/4); Straight, Dotted and Triplet timing are supported.
 - Other Sound FX opens with a 1/2-note gate (one second at 120 BPM) so timed signals such as Morse SOS are audible; choose a shorter duration for quick hits.
 - Attack/Decay/Sustain control the held sound; Release adds a separate tail to the output sample.
-- Key Note defaults to C4 and is a DomainUpDown with items ordered C8 through C0. Pitch is -16…+16 semitones in 0.25 steps.
+- Key Note defaults to C4 and is a DomainUpDown with items ordered C8 through C0. It is a relative
+  offset against C4 (the neutral base note): C3 shifts everything one octave down, C5 one octave up;
+  in the MIDI editor this offset is applied to every rendered MIDI note. Pitch is -16…+16 semitones in 0.25 steps.
   Up/wheel-up lowers the key; Down/wheel-down raises it. Key Duration items are ordered longest to shortest:
   Up/wheel-up lengthens the duration; Down/wheel-down shortens it.
 - Prehear plays the generated sample; Loop repeats it. Sound-parameter changes start a cancellable
@@ -38,6 +40,9 @@ height or width enables parameter scrolling again, without automatically resizin
   their requested pitch; each note uses the editor's BPM and note length as its synthesis tempo
   and key duration. The instrument's release remains an additional tail. Drum notes retain their
   configured drum and add the note pitch offset to that drum's tuning.
+  When opened from the MIDI editor's **Instrument Synth** menu, the selected Key Note is a relative
+  offset against C4: OK confirms it and every rendered MIDI note is shifted by that offset
+  (C3 = one octave down, C5 = one octave up).
 - Create Octave renders individual AudioObj notes into a new AudioCollectionView. Right-click
   the button to choose Offset (0/base, +8, +4, -4 or -8 semitones) and Step (2, 1, 0.5, 0.33
   [exactly 1/3], 0.25 or 0.125 semitones). The range includes both the selected starting

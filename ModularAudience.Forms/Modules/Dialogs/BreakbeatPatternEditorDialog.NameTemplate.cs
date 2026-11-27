@@ -101,6 +101,7 @@ public partial class BreakbeatPatternEditorDialog
             this.comboBox_nameTemplate.Width = Math.Min(maximumComboWidth, widthWithHelp);
             this.button_nameTemplateHelp.Visible = true;
             this.button_nameTemplateHelp.Left = this.comboBox_nameTemplate.Right + gap;
+            this.button_nameTemplateHelp.Top = this.button_save.Top;
             return;
         }
 

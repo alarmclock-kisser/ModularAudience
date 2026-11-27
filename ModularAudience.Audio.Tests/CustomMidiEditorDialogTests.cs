@@ -572,6 +572,19 @@ public sealed class CustomMidiEditorDialogTests
         Assert.AreEqual(0.5, pitched.NoteBeats, 1e-12);
         Assert.AreEqual(1d / 3, pitched.GateSeconds, 1e-12);
         Assert.AreEqual(0.2, pitched.ReleaseSeconds, 1e-12);
+
+        // A C3 key note (source.MidiNote=48, KeyNoteSemitones=-12) shifts every rendered
+        // MIDI note one octave down. The editor note (midiNote=72, C5) becomes midiNote-12=60 (C4).
+        // The MIDI export keeps the original note.
+        source.MidiNote = InstrumentSynthSettings.BaseMidiNote - 12;
+        InstrumentSynthSettings shifted = BreakbeatPatternInstrumentRenderer.CreateSettingsForMidiNote(
+            source,
+            midiNote: 72,
+            durationTicks: 480,
+            ticksPerQuarterNote: 960,
+            bpm: 90);
+        Assert.AreEqual(60, shifted.MidiNote);
+        Assert.AreEqual(0, shifted.PitchSemitones, 1e-12);
     }
 
     [TestMethod]

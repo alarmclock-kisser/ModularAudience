@@ -114,6 +114,21 @@ public class VocalStreamChunkerTests
         chunker.Reset();
         Assert.AreEqual(0, chunker.Flush().Count);
     }
+
+    [TestMethod]
+    public void SymbolOnlyDeltas_DoNotStopTheStream()
+    {
+        // LLM output that is only symbols (no pronounceable text) must not
+        // break the speaker: the chunker delivers it, the speaker skips it.
+        var chunker = new VocalStreamChunker();
+        Assert.AreEqual(0, chunker.Append("—").Count);
+        Assert.AreEqual(0, chunker.Append("\"").Count);
+        List<string> chunks = chunker.Flush().ToList();
+        // The symbols are delivered as a single tail chunk; the speaker
+        // skips it without stopping the stream.
+        Assert.AreEqual(1, chunks.Count);
+        Assert.IsFalse(chunker.HasBufferedText);
+    }
 }
 
 [TestClass]

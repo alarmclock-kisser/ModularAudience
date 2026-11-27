@@ -14,6 +14,7 @@ Open the modeless piano roll from **+ Track → Midi Editor**. It owns its MIDI 
 - **Ctrl + click** toggles an individual note in or out of the current selection.
 - When **Prehear set note** is enabled, selecting or placing one note prehears that note. Placing a multi-note paste selects the pasted notes but does not prehear them.
 - The instrument button chooses a built-in sound, a sample from an open collection, or an open sample collection. Its **Instrument Synth** submenu opens the same family-based Sample Synthesizer used elsewhere in the app. A configured synth is rendered individually for each MIDI note using that note's MIDI pitch, gate length and the editor BPM; it is not rendered once and then pitch/time-stretched as a static sample.
+- The synth dialog's **Key Note** is a relative offset against C4 (the neutral base note): C3 shifts every rendered MIDI note one octave down, C5 one octave up; non-octave values (for example D3) shift by the exact semitone difference. The offset is applied to previews, prehears and saved audio renders; exported MIDI files keep their original notes.
 
 ## Clipboard and history
 

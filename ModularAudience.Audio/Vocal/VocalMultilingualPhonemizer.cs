@@ -245,7 +245,7 @@ internal static class VocalMultilingualPhonemizer
         }
 
         if (value <= char.MaxValue
-            && (IsLatin((char)value) || char.IsAsciiLetter((char)value)))
+            && (IsLatin((char)value) || char.IsAsciiLetterOrDigit((char)value)))
         {
             return ScriptGroup.Latin;
         }

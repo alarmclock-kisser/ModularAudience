@@ -134,6 +134,16 @@ so expressive repetitions remain separate in the shared renderer.
   Windows speech receives an equivalent local SAPI pronunciation.
   Its output is still synthetic and its pronunciation rules are not a complete
   dictionary.
+- **Digit pronunciation (DE and EN)**: ASCII digits are read **digit by digit**
+  in the independent formant engine and in Windows speech, for German and
+  English only. `1234` is spoken as "eins zwei drei vier" (DE) or
+  "one two three four" (EN) — not as a whole number ("ein-tausend-…" /
+  "one-thousand-…"). The expansion happens before parsing, so it applies to the
+  TextBox input and the LLM live stream alike. Other languages leave digits
+  untouched.
+- **Non-pronounceable symbols** (for example `—`, `//`, `"`): symbols without a
+  pronounceable value no longer stop the LLM live stream. The speaker skips a
+  chunk that renders to silence instead of halting the whole turn.
 - The other languages use the same local formant renderer and voice profiles:
   - **French**: local rule-based French-to-IPA conversion, including accents,
     nasal vowels and a uvular R. Liaison across separate words is limited.

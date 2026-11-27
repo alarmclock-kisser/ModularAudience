@@ -154,17 +154,17 @@ public sealed class HintPolicyTests
     }
 
     [STATestMethod]
-    public void WaveformAndThumbnailPopupWindowsCloseImmediatelyAndCannotReappearWhileOff()
+    public void WaveformPreviewStaysAvailableRegardlessOfTheGlobalHintSwitch()
     {
+        // The waveform preview is a user feature, not a hint popup: the global
+        // hint switch must not gate it.
         using var preview = new WaveformPreview();
         preview.ShowWaveform(new Bitmap(32, 24), new Point(50, 50));
         Assert.IsTrue(preview.Visible);
         HintPolicy.SetEnabled(false);
-        Assert.IsFalse(preview.Visible);
-        preview.ShowWaveform(new Bitmap(32, 24), new Point(50, 50));
-        Assert.IsFalse(preview.Visible);
+        Assert.IsTrue(preview.Visible, "The waveform preview must not be disabled by the hint policy.");
         preview.ShowConcatenatedWaveforms([new Bitmap(32, 24), new Bitmap(32, 24)], new Point(50, 50));
-        Assert.IsFalse(preview.Visible);
+        Assert.IsTrue(preview.Visible);
         HintPolicy.SetEnabled(true);
         preview.ShowWaveform(new Bitmap(32, 24), new Point(50, 50));
         Assert.IsTrue(preview.Visible);
@@ -195,7 +195,7 @@ public sealed class HintPolicyTests
     }
 
     [STATestMethod]
-    public void CollectionWaveformHintsAndPreviewsFollowTheSwitchWithoutChangingLocalPreviewChoice()
+    public void CollectionWaveformHintsFollowTheSwitchWhilePreviewIsIndependent()
     {
         HintPolicy.SetEnabled(false);
         using var collection = new AudioCollectionView([], "Hint regression");
@@ -205,12 +205,15 @@ public sealed class HintPolicyTests
             var preview = Field<CheckBox>(collection, "checkBox_preview");
             preview.Checked = true;
             Assert.IsFalse(tips.Active);
+            // The waveform preview is a user feature, not a hint: it must stay
+            // available even when the global hint switch is off.
             bool EffectivePreview() => (bool)typeof(AudioCollectionView).GetProperty("ShowPreview", BindingFlags.Instance | BindingFlags.NonPublic)!.GetValue(collection)!;
-            Assert.IsFalse(EffectivePreview());
+            Assert.IsTrue(EffectivePreview(), "The local preview choice must not be gated by the hint policy.");
             HintPolicy.SetEnabled(true);
             Assert.IsTrue(EffectivePreview());
             Assert.IsTrue(tips.Active);
             HintPolicy.SetEnabled(false);
+            Assert.IsTrue(EffectivePreview(), "Hints off must not disable the waveform preview.");
             Assert.IsTrue(preview.Checked, "The global switch must not overwrite the collection's own preference.");
             StringAssert.Contains(tips.GetToolTip(Field<ListBox>(collection, "listBox_audios")), "Double-click");
         }

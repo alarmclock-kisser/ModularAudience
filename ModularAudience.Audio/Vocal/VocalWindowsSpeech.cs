@@ -27,14 +27,15 @@ internal static class VocalWindowsSpeech
         }
 
         var culture = CultureInfo.GetCultureInfo(settings.Language == VocalLanguage.German ? "de-DE" : "en-US");
+        string speechText = VocalPhonemizer.ExpandDigits(settings.Language, settings.Text);
         IReadOnlyList<VocalToken> phoneticTokens = VocalTextParser.Parse(
-            settings.Language, settings.Text, settings.EmphasisSyntax, cancellationToken);
+            settings.Language, speechText, settings.EmphasisSyntax, cancellationToken);
         IReadOnlyList<VocalToken> mappedTokens = VocalCustomSampleMapper.Apply(
-            settings.Language, settings.Text, settings.EmphasisSyntax,
+            settings.Language, speechText, settings.EmphasisSyntax,
             phoneticTokens, settings.CustomSampleMappings, settings.Singing, cancellationToken);
         List<VocalCustomSampleToken> customSamples = mappedTokens.OfType<VocalCustomSampleToken>().ToList();
         IReadOnlyList<VocalToken> tokens = VocalTextParser.ParseWindowsSpeech(
-            settings.Language, settings.Text, settings.EmphasisSyntax, cancellationToken);
+            settings.Language, speechText, settings.EmphasisSyntax, cancellationToken);
         if (customSamples.Count > 0)
         {
             IReadOnlyList<VocalToken> mixedTokens = VocalCustomSampleMapper.AddSamplesToSpeechTokens(
@@ -112,17 +113,20 @@ internal static class VocalWindowsSpeech
 
     private static AudioObj RenderMidi(VocalSynthSettings settings, CancellationToken cancellationToken)
     {
+        // Digits are expanded to per-digit words before parsing so the spoken
+        // text matches the formant engine ("1234" -> "eins zwei drei vier").
+        string speechText = VocalPhonemizer.ExpandDigits(settings.Language, settings.Text);
         IReadOnlyList<VocalToken> phoneticTokens = VocalTextParser.Parse(
-            settings.Language, settings.Text, settings.EmphasisSyntax, cancellationToken);
+            settings.Language, speechText, settings.EmphasisSyntax, cancellationToken);
         IReadOnlyList<VocalToken> mappedTokens = VocalCustomSampleMapper.Apply(
-            settings.Language, settings.Text, settings.EmphasisSyntax,
+            settings.Language, speechText, settings.EmphasisSyntax,
             phoneticTokens, settings.CustomSampleMappings, splitForSinging: true, cancellationToken);
         bool hasCustomSamples = mappedTokens.Any(token => token is VocalCustomSampleToken);
         VocalMidiSingingPlan plan = VocalMidiSinging.CreatePlan(settings, mappedTokens, cancellationToken);
         IReadOnlyList<VocalToken> speechTokens = VocalTextParser.ParseWindowsSpeech(
-            settings.Language, settings.Text, settings.EmphasisSyntax, cancellationToken);
+            settings.Language, speechText, settings.EmphasisSyntax, cancellationToken);
         Dictionary<int, VocalSyllableTextRange> ranges = VocalTextParser.GetSyllableTextRangesForTokens(
-                settings.Language, settings.Text, settings.EmphasisSyntax, mappedTokens, cancellationToken)
+                settings.Language, speechText, settings.EmphasisSyntax, mappedTokens, cancellationToken)
             .GroupBy(range => range.Index)
             .ToDictionary(group => group.Key, group => group.First());
 

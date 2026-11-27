@@ -253,6 +253,9 @@ public sealed class InstrumentSynthSettings
     public int SampleRate { get; set; } = 44100;
     public int Channels { get; set; } = 2;
     public double GateSeconds => 60 / Bpm * NoteBeats * DurationMultiplier;
+    public const int BaseMidiNote = 60; // C4: the reference key note the relative offset is measured against.
+    /// <summary>Relative key-note offset in semitones measured against the C4 base note; C3 is -12, C5 is +12.</summary>
+    public double KeyNoteSemitones => MidiNote - BaseMidiNote;
     public string VoiceName => Family == SynthFamily.DrumSet ? $"{InstrumentSynthCatalog.DrumKits[KitIndex].Name} {InstrumentSynthCatalog.DrumName(Drum)}" : Family == SynthFamily.Custom ? (string.IsNullOrWhiteSpace(CustomInstrumentName) ? InstrumentSynthCatalog.Voices(Family)[VoiceIndex].Name : CustomInstrumentName) : InstrumentSynthCatalog.Voices(Family)[VoiceIndex].Name;
     public string KeyDurationName
     {

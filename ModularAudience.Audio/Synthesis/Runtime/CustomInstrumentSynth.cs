@@ -19,7 +19,6 @@ public sealed class CustomInstrumentSynth : IRuntimeProceduralSynth
     private readonly MethodInfo? renderMethod;
     private readonly object? instance;
     private readonly bool isStatic;
-    private float[] renderBuffer;
 
     public string Name => this.descriptor.Name;
     public int SampleRate => this.descriptor.SampleRate;
@@ -65,9 +64,6 @@ public sealed class CustomInstrumentSynth : IRuntimeProceduralSynth
             this.instance = ctor?.Invoke(null)
                 ?? throw new InvalidOperationException($"Type '{this.synthType.FullName}' has no parameterless constructor.");
         }
-
-        // Pre-allocate a render buffer for the maximum reasonable frame count.
-        this.renderBuffer = new float[this.SampleRate * this.Channels * 4]; // 4 seconds max block
     }
 
     /// <summary>
@@ -77,11 +73,12 @@ public sealed class CustomInstrumentSynth : IRuntimeProceduralSynth
     {
         token.ThrowIfCancellationRequested();
 
+        // LLM-generated DSP code is written for stereo (it writes to i * Channels + 1).
+        // When the output is mono, render in stereo and downmix to avoid an
+        // IndexOutOfRangeException on the generated buffer.
+        bool downmix = this.Channels == 1;
+        int renderChannels = downmix ? 2 : this.Channels;
         int totalSamples = frameCount * this.Channels;
-        if (totalSamples > this.renderBuffer.Length)
-        {
-            Array.Resize(ref this.renderBuffer, totalSamples);
-        }
 
         // Match the built-in synth: the key note and the pitch-offset knob both shift
         // the base frequency. Generated DSP code can additionally use ctx.PitchSemitones.
@@ -90,7 +87,7 @@ public sealed class CustomInstrumentSynth : IRuntimeProceduralSynth
         var ctx = new SynthRenderContext
         {
             SampleRate = this.SampleRate,
-            Channels = this.Channels,
+            Channels = renderChannels,
             FrameCount = frameCount,
             NoteFrequencyHz = noteFrequencyHz,
             Bpm = this.descriptor.Bpm,
@@ -146,14 +143,25 @@ public sealed class CustomInstrumentSynth : IRuntimeProceduralSynth
             return 0;
         }
 
-        int copyCount = Math.Min(totalSamples, result.Length);
-        for (int i = 0; i < copyCount; i++)
+        int framesProduced = Math.Min(frameCount, result.Length / renderChannels);
+        for (int i = 0; i < framesProduced; i++)
         {
-            buffer[i] = result[i];
+            if (downmix)
+            {
+                buffer[i] = (result[i * 2] + result[i * 2 + 1]) * 0.5f;
+            }
+            else
+            {
+                for (int c = 0; c < this.Channels; c++)
+                {
+                    buffer[i * this.Channels + c] = result[i * renderChannels + c];
+                }
+            }
         }
 
         // Zero-fill remaining samples if the synth produced fewer than requested.
-        for (int i = copyCount; i < totalSamples; i++)
+        int filled = framesProduced * this.Channels;
+        for (int i = filled; i < totalSamples; i++)
         {
             buffer[i] = 0f;
         }

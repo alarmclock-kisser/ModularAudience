@@ -614,12 +614,41 @@ public sealed class InstrumentSampleSynthTests
         Assert.AreEqual(0d, semitones[0]);
         Assert.AreEqual(12d, semitones[^1]);
 
+        // A C3 key note (MidiNote=48) renders one octave below a C4 key note
+        // (MidiNote=60) for the same note. The frequency is 440 * 2^((MidiNote - 69) / 12):
+        //   C4: 440 * 2^((60-69)/12) = 261.63 Hz
+        //   C3: 440 * 2^((48-69)/12) = 130.81 Hz  (exactly half, one octave down)
+        var baseNote = Short(SynthFamily.SynthBassAndLead);
+        baseNote.VoiceIndex = 0;
+        baseNote.ApplyVoiceDefaults();
+        baseNote.MidiNote = InstrumentSynthSettings.BaseMidiNote;
+        baseNote.PitchSemitones = 0;
+        baseNote.ReleaseSeconds = 0.08;
+        using var c4 = InstrumentSampleSynth.Render(baseNote);
+        baseNote.MidiNote = InstrumentSynthSettings.BaseMidiNote - 12;
+        using var c3 = InstrumentSampleSynth.Render(baseNote);
+        Assert.AreNotEqual(c4.Data, c3.Data);
+        Assert.IsTrue(c4.Data.Max(Math.Abs) > 0.001, "C4 render should be audible");
+        Assert.IsTrue(c3.Data.Max(Math.Abs) > 0.001, "C3 render should be audible");
+        double c4Freq = 440 * Math.Pow(2, (60 - 69) / 12);
+        double c3Freq = 440 * Math.Pow(2, (48 - 69) / 12);
+        Assert.AreEqual(2.0, c4Freq / c3Freq, 0.01, "C4/C3 frequency ratio should be exactly 2 (one octave)");
+
         double[] thirds = InstrumentSampleSynthDialog.GetOctaveTranspositions(1d / 3);
         Assert.HasCount(37, thirds);
         Assert.AreEqual(1d / 3, thirds[1], 1e-12);
         Assert.AreEqual(12d, thirds[^1]);
 
         Assert.HasCount(97, InstrumentSampleSynthDialog.GetOctaveTranspositions(0.125));
+
+        // Confirming from the MIDI editor applies the octave offset to the confirmed settings.
+        InstrumentSynthSettings? confirmed = null;
+        using var dialog = new InstrumentSampleSynthDialog(SynthFamily.SynthPadsAndPoly, store, onInstrumentConfirmed: s => confirmed = s);
+        typeof(InstrumentSampleSynthDialog).GetField("octaveOffsetSemitones", BindingFlags.Instance | BindingFlags.NonPublic)!.SetValue(dialog, -4d);
+        typeof(InstrumentSampleSynthDialog).GetMethod("Confirm", BindingFlags.Instance | BindingFlags.NonPublic)!.Invoke(dialog, null);
+        Assert.IsNotNull(confirmed);
+        Assert.AreEqual(InstrumentSynthSettings.BaseMidiNote - 4, confirmed!.MidiNote);
+        Assert.AreEqual(0, confirmed.PitchSemitones, 1e-12);
     }
 
     [STATestMethod]

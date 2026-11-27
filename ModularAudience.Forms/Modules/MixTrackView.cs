@@ -482,7 +482,7 @@ public sealed partial class MixTrackView : Form
         }
 
         Arrangement.Sources.TryAdd(source.Id, source);
-        var lane = new MixLane { Name = NextLaneName(), Mute = view.Muted, Solo = view.Soloed };
+        var lane = new MixLane { Name = source.Name, Mute = view.Muted, Solo = view.Soloed };
         Arrangement.Lanes.Add(lane); Arrangement.AddClip(lane, source, 0); joined[lane.Id] = view;
         this.RememberJoinedOrigin(lane.Id, view);
         view.SetJoinedMix(this); view.Hide(); view.Settings.Hide();

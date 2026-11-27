@@ -72,6 +72,126 @@ public class VocalSynthTests
     }
 
     [TestMethod]
+    public void Digits_German_AreReadDigitByDigit()
+    {
+        Assert.AreEqual("null eins zwei drei vier fünf sechs sieben acht neun",
+            VocalPhonemizer.ExpandDigits(VocalLanguage.German, "0123456789"));
+        Assert.AreEqual("eins zwei drei vier",
+            VocalPhonemizer.ExpandDigits(VocalLanguage.German, "1234"));
+        // Digits are not read as whole numbers ("1234" is not "ein-tausend-zweihundert-...").
+        Assert.IsFalse(VocalPhonemizer.ExpandDigits(VocalLanguage.German, "1234").Contains("tausend"));
+        // Embedded in words or code: every digit gets a spoken word.
+        Assert.AreEqual("Version zwei eins vier ist verfügbar",
+            VocalPhonemizer.ExpandDigits(VocalLanguage.German, "Version 214 ist verfügbar"));
+    }
+
+    [TestMethod]
+    public void Digits_English_AreReadDigitByDigit()
+    {
+        Assert.AreEqual("zero one two three four five six seven eight nine",
+            VocalPhonemizer.ExpandDigits(VocalLanguage.English, "0123456789"));
+        Assert.AreEqual("one two three four",
+            VocalPhonemizer.ExpandDigits(VocalLanguage.English, "1234"));
+        Assert.IsFalse(VocalPhonemizer.ExpandDigits(VocalLanguage.English, "1234").Contains("thousand"));
+        Assert.AreEqual("port eight zero eight one is open",
+            VocalPhonemizer.ExpandDigits(VocalLanguage.English, "port 8081 is open"));
+    }
+
+    [TestMethod]
+    public void Digits_OtherLanguages_AreLeftUntouched()
+    {
+        foreach (var language in new[]
+        {
+            VocalLanguage.French, VocalLanguage.Spanish, VocalLanguage.Italian,
+            VocalLanguage.Chinese, VocalLanguage.Japanese, VocalLanguage.Turkish,
+            VocalLanguage.Arabic, VocalLanguage.Russian,
+            VocalLanguage.AnimalCrossing, VocalLanguage.Beatboxing,
+        })
+        {
+            Assert.AreEqual("1234", VocalPhonemizer.ExpandDigits(language, "1234"), language.ToString());
+        }
+    }
+
+    [TestMethod]
+    public void Digits_FormantEngine_PronouncesDigitWords()
+    {
+        foreach (var (language, expected) in new[]
+        {
+            (VocalLanguage.German, "eins zwei drei vier"),
+            (VocalLanguage.English, "one two three four"),
+        })
+        {
+            // The formant engine reads digits per-digit via the expanded words.
+            Assert.AreEqual(expected, VocalPhonemizer.ExpandDigits(language, "1234"));
+
+            var settings = VocalSynthSettings.FromPreset(
+                VocalVoicePreset.BuiltIn[0], language, "1234");
+            settings.SampleRate = 8000;
+
+            // Digits must produce pronounceable phonemes, not "unsupported".
+            IReadOnlyList<string> phonemes = VocalPhonemizer.Phonemize(language, "1234");
+            Assert.IsTrue(phonemes.Count > 0, $"{language} produced no phonemes for '1234'.");
+            Assert.IsFalse(phonemes.Any(phoneme => phoneme == "unsupported"),
+                $"{language} classified '1234' as unsupported.");
+
+            using var audio = VocalSynth.Render(settings);
+            Assert.IsTrue(audio.Data.Any(sample => Math.Abs(sample) > 0.001),
+                $"{language} rendered silence for '1234'.");
+            Assert.IsTrue(audio.Data.All(float.IsFinite));
+        }
+    }
+
+    [TestMethod]
+    public void Digits_Render_DifferFromWordForm()
+    {
+        // "4" spoken digit-by-digit must sound like the word "vier",
+        // not like a compressed "four".
+        var settings = VocalSynthSettings.FromPreset(
+            VocalVoicePreset.BuiltIn[0], VocalLanguage.English, "4");
+        settings.SampleRate = 8000;
+        using var audio = VocalSynth.Render(settings);
+        Assert.IsTrue(audio.Data.Any(sample => Math.Abs(sample) > 0.001));
+
+        var wordSettings = VocalSynthSettings.FromPreset(
+            VocalVoicePreset.BuiltIn[0], VocalLanguage.English, "four");
+        wordSettings.SampleRate = 8000;
+        using var wordAudio = VocalSynth.Render(wordSettings);
+        Assert.IsFalse(audio.Data.SequenceEqual(wordAudio.Data),
+            "'4' should be pronounced like the word 'four'.");
+    }
+
+    [TestMethod]
+    [DataRow("...")]
+    [DataRow("—")]
+    [DataRow("///")]
+    [DataRow("\"")]
+    public void NonPronounceableSymbols_DoesNotStopRender(string text)
+    {
+        // Symbols without a pronounceable value used to throw
+        // "Text contains no pronounceable characters or speech markers" and
+        // stopped the whole LLM stream. They must simply be skipped now.
+        foreach (var language in new[] { VocalLanguage.German, VocalLanguage.English })
+        {
+            var settings = VocalSynthSettings.FromPreset(
+                VocalVoicePreset.BuiltIn[0], language, text);
+            settings.SampleRate = 8000;
+            using var audio = VocalSynth.Render(settings);
+            Assert.IsTrue(audio.Data.Length > 0, $"{language} produced no audio for '{text}'.");
+        }
+    }
+
+    [TestMethod]
+    public void MixedSymbolsAndText_StillRendersPronounceablePart()
+    {
+        var settings = VocalSynthSettings.FromPreset(
+            VocalVoicePreset.BuiltIn[0], VocalLanguage.German, "— Hallo — 42");
+        settings.SampleRate = 8000;
+        using var audio = VocalSynth.Render(settings);
+        Assert.IsTrue(audio.Data.Any(sample => Math.Abs(sample) > 0.001),
+            "The pronounceable part must still be spoken.");
+    }
+
+    [TestMethod]
     public void Render_SpeedAffectsDuration()
     {
         var s1 = VocalSynthSettings.FromPreset(VocalVoicePreset.BuiltIn[0], VocalLanguage.English, "Hi");

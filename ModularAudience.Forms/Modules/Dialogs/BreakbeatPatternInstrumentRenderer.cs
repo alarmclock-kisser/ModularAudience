@@ -349,7 +349,7 @@ internal static class BreakbeatPatternInstrumentRenderer
             ? Math.Clamp(track.DefaultPitchSemitones, -24f, 24f)
             : 0;
         double noteBeats = note.DurationTicks * 4d / BreakbeatGenerator_V2.PatternTicksPerBar;
-        return ApplyPitch(source, trackPitch + note.PitchSemitones, bpm, noteBeats);
+        return ApplyPitchSemitones(source, trackPitch + note.PitchSemitones, bpm, noteBeats);
     }
 
     internal static InstrumentSynthSettings CreateSettingsForMidiNote(
@@ -382,16 +382,42 @@ internal static class BreakbeatPatternInstrumentRenderer
         }
 
         double tuningSemitones = 12 * Math.Log2(pitchFrequency / 440.0);
-        double semitones = midiNote - source.MidiNote + tuningSemitones;
         double noteBeats = durationTicks / (double)ticksPerQuarterNote;
-        return ApplyPitch(source, semitones, (float)bpm, noteBeats);
+        return ApplyMidiNotePitch(source, midiNote, tuningSemitones, (float)bpm, noteBeats);
     }
 
-    private static InstrumentSynthSettings ApplyPitch(
+    /// <summary>
+    /// Maps an editor MIDI note onto the instrument's MidiNote/PitchSemitones, applying
+    /// the key-note offset (KeyNoteSemitones) relative to C4. The note pitch is measured
+    /// relative to C4, shifted by the key-note offset, and split into a whole-note
+    /// component (MidiNote, kept in the supported 0–127 range) and a fractional component
+    /// (PitchSemitones). The MIDI export keeps the original note.
+    /// </summary>
+    private static InstrumentSynthSettings ApplyMidiNotePitch(
+        InstrumentSynthSettings source,
+        int midiNote,
+        double tuningSemitones,
+        float bpm,
+        double noteBeats)
+    {
+        double keyOffset = source.KeyNoteSemitones;
+        double midiPitch = midiNote + keyOffset + tuningSemitones;
+        if (!double.IsFinite(midiPitch) || midiPitch is < 0 or > 127)
+        {
+            throw new InvalidOperationException("The pitched note is outside the supported MIDI range (0–127).");
+        }
+
+        int wholeNote = (int)Math.Round(midiPitch);
+        double fractional = midiPitch - wholeNote;
+        return ApplyPitchSemitones(source, fractional, bpm, noteBeats, wholeNote);
+    }
+
+    private static InstrumentSynthSettings ApplyPitchSemitones(
         InstrumentSynthSettings source,
         double semitones,
         float bpm,
-        double noteBeats)
+        double noteBeats,
+        int? wholeNote = null)
     {
         InstrumentSynthSettings pitched = source.Clone();
         pitched.Bpm = bpm;
@@ -400,6 +426,11 @@ internal static class BreakbeatPatternInstrumentRenderer
         if (pitched.Family == SynthFamily.DrumSet)
         {
             pitched.PitchSemitones += semitones;
+        }
+        else if (wholeNote is { } note)
+        {
+            pitched.MidiNote = note;
+            pitched.PitchSemitones = semitones;
         }
         else
         {

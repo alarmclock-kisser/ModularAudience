@@ -547,6 +547,26 @@ public sealed class AudioCollectionPlaylistTests
         return path;
     }
 
+    [TestCleanup]
+    public void Cleanup()
+    {
+        // Remove any collections left in the global list by this or a previous test.
+        foreach (AudioCollectionView collection in WindowMain.CollectionViews.ToArray())
+        {
+            try
+            {
+                if (!collection.IsDisposed)
+                {
+                    collection.Close();
+                }
+                collection.Dispose();
+            }
+            catch { /* best-effort cleanup */ }
+        }
+        Application.DoEvents();
+        WindowMain.LastSelectedCollectionView = null;
+    }
+
     private static T Field<T>(object target, string name) =>
         (T)target.GetType().GetField(name, BindingFlags.Instance | BindingFlags.NonPublic)!.GetValue(target)!;
 

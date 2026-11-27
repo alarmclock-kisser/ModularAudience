@@ -67,11 +67,16 @@ public sealed partial class MixTrackView
     {
         UpdateVerticalScrollbar();
         int maximumValue = Math.Max(0, vertical.Maximum - vertical.LargeChange + 1);
-        vertical.Value = Arrangement.Visual.AutoTrackHeight ? 0 : Math.Clamp(Arrangement.Visual.FirstVisibleTrack, 0, maximumValue);
-        this.UpdateTimelineScrollBounds();
-        int value = (int)Math.Clamp(Arrangement.Visual.HorizontalScrollSeconds * 100, scroll.Minimum, int.MaxValue - 200);
-        scroll.Maximum = Math.Max(scroll.Maximum, value + scroll.LargeChange);
-        scroll.Value = value;
+        restoring = true;
+        try
+        {
+            vertical.Value = Arrangement.Visual.AutoTrackHeight ? 0 : Math.Clamp(Arrangement.Visual.FirstVisibleTrack, 0, maximumValue);
+            this.UpdateTimelineScrollBounds();
+            int value = (int)Math.Clamp(Arrangement.Visual.HorizontalScrollSeconds * 100, scroll.Minimum, int.MaxValue - 200);
+            scroll.Maximum = Math.Max(scroll.Maximum, value + scroll.LargeChange);
+            scroll.Value = value;
+        }
+        finally { restoring = false; }
     }
     private void JumpToManualCaret(bool reset)
     {
@@ -85,7 +90,12 @@ public sealed partial class MixTrackView
         double width = Math.Max(1, canvas.Width - Header) / pixelsPerSecond;
         if (caret < ViewStart || caret >= ViewStart + width)
         {
-            scroll.Value = Math.Clamp((int)(caret * 100), scroll.Minimum, scroll.Maximum - scroll.LargeChange + 1);
+            // Navigation only: recenter the viewport without persisting the
+            // transient scroll position into the arrangement (see MixRevisionUiTests).
+            int target = Math.Clamp((int)(caret * 100), scroll.Minimum, scroll.Maximum - scroll.LargeChange + 1);
+            restoring = true;
+            try { scroll.Value = target; }
+            finally { restoring = false; }
         }
 
         canvas.Invalidate();

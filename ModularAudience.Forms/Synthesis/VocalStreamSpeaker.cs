@@ -292,7 +292,19 @@ public sealed class VocalStreamSpeaker : IDisposable
             settings.Speed = Math.Clamp(configuredSpeed * speedFactor, 0.5, 4.0);
         }
 
-        AudioObj rendered = await Task.Run(() => VocalSynth.Render(settings, token), token).ConfigureAwait(false);
+        AudioObj rendered;
+        try
+        {
+            rendered = await Task.Run(() => VocalSynth.Render(settings, token), token).ConfigureAwait(false);
+        }
+        catch (ArgumentException)
+        {
+            // A chunk may contain only symbols without a pronounceable value
+            // (for example "..." or "—"). Skip that chunk instead of stopping
+            // the whole stream.
+            return;
+        }
+
         float[] data = rendered.Data;
         if (data.Length == 0)
         {

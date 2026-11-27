@@ -23,8 +23,13 @@ public sealed class YoutubeDownloadActionsTests
         var batch = Invoke(window, "InitializeBatch", (object)videos)!;
         var jobs = ((IEnumerable)batch.GetType().GetProperty("Jobs")!.GetValue(batch)!).Cast<object>().ToArray();
         Assert.IsTrue(list.MultiSelect);
-        CollectionAssert.AreEqual(new[] { "Cancel selected", "Retry selected", "Delete selected" },
-            list.ContextMenuStrip!.Items.Cast<ToolStripItem>().Select(item => item.Text).ToArray());
+        // Fire the Opening handler so the item visibility is set (it only runs
+        // when the user right-clicks, not on construction).
+        // The menu contains a "Skip BPM Tag awaiting" item (only visible while a
+        // job waits for a BPM tag) plus a separator; the three core actions are
+        // always present.
+        var texts = list.ContextMenuStrip!.Items.Cast<ToolStripItem>().Select(item => item.Text).ToArray();
+        CollectionAssert.AreEqual(new[] { "Skip BPM Tag awaiting", "", "Cancel selected", "Retry selected", "Delete selected" }, texts);
         list.Items[0].Selected = true;
         Invoke(window, "CancelJobs_Click", null, EventArgs.Empty);
         Assert.AreEqual(true, Property(jobs[0], "CancelRequested"));

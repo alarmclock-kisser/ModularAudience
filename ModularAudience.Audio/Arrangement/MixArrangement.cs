@@ -187,8 +187,13 @@ public sealed class MixArrangement : IDisposable
         var resolver = new DefaultJsonTypeInfoResolver();
         resolver.Modifiers.Add(type =>
         {
-            string[] omitted = type.Type == typeof(MixArrangement) ? [nameof(LoopStart), nameof(LoopEnd)] :
-                type.Type == typeof(MixVisualOptions) ? [nameof(MixVisualOptions.HorizontalScrollSeconds), nameof(MixVisualOptions.FirstVisibleTrack)] : [];
+            // Scroll position, visible track, follow mode, and the transport
+            // loop toggle are transient navigation state: they must never dirty
+            // the project or trigger autosave. The explicitly saved View
+            // Settings (zoom, colors, snap) remain in the project.
+            string[] omitted = type.Type == typeof(MixArrangement) ? [nameof(LoopStart), nameof(LoopEnd), nameof(Loop)] :
+                type.Type == typeof(MixVisualOptions) ? [nameof(MixVisualOptions.HorizontalScrollSeconds),
+                    nameof(MixVisualOptions.FirstVisibleTrack), nameof(MixVisualOptions.ScrollMode)] : [];
             foreach (var property in type.Properties.Where(property => omitted.Contains(property.Name)).ToArray())
             {
                 type.Properties.Remove(property);
