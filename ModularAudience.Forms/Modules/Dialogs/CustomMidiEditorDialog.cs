@@ -1,8 +1,10 @@
 using ModularAudience.Audio;
 using ModularAudience.Audio.Midi;
 using ModularAudience.Audio.Synthesis;
+using ModularAudience.Audio.Vocal;
 using ModularAudience.Generators;
 using ModularAudience.Forms.Helpers;
+using System.Diagnostics;
 using System.Drawing.Drawing2D;
 
 namespace ModularAudience.Forms.Modules.Dialogs
@@ -98,6 +100,13 @@ namespace ModularAudience.Forms.Modules.Dialogs
         private bool previewCaretVisible;
         private long previewStartTick;
         private long playFromHereStartTick;
+
+        private MicrophoneAudioCapture? recordingCapture;
+        private string? recordingPath;
+        private readonly Stopwatch recordingClock = new();
+        private bool recordingActive;
+        private bool recordingFinalizing;
+        private CancellationTokenSource? recordingCts;
 
         private sealed class CollectionSnapshot : IDisposable
         {
@@ -2932,6 +2941,460 @@ namespace ModularAudience.Forms.Modules.Dialogs
             }
         }
 
+        private async void button_record_Click(object? sender, EventArgs e)
+        {
+            if (this.recordingActive || this.recordingFinalizing)
+            {
+                return;
+            }
+
+            try
+            {
+                this.comboBox_inputDevice.Items.Clear();
+                IReadOnlyList<AudioInputDevice> devices = MicrophoneAudioCapture.GetInputDevices();
+                foreach (AudioInputDevice device in devices)
+                {
+                    this.comboBox_inputDevice.Items.Add(device);
+                }
+
+                if (this.comboBox_inputDevice.Items.Count == 0)
+                {
+                    WindowMainStaticHelpers.ShowErrorWithCopyButton(
+                        this,
+                        "Microphone recording",
+                        new InvalidOperationException("No microphone input device was found. Connect a microphone and try again."));
+                    return;
+                }
+
+                this.comboBox_inputDevice.SelectedIndex = Math.Clamp(this.comboBox_inputDevice.Items.Count - 1, 0, this.comboBox_inputDevice.Items.Count - 1);
+                this.comboBox_inputDevice.Visible = true;
+                this.label_recordStatus.Visible = true;
+                this.progressBar_inputLevel.Visible = true;
+                this.button_stopRecording.Visible = true;
+                this.comboBox_inputDevice.Enabled = true;
+                this.label_recordStatus.Text = "Starting microphone...";
+                this.progressBar_inputLevel.Value = 0;
+                await this.StartRecordingCoreAsync();
+            }
+            catch (Exception ex)
+            {
+                if (!this.IsDisposed)
+                {
+                    this.label_recordStatus.Text = "Microphone could not be started.";
+                    WindowMainStaticHelpers.ShowErrorWithCopyButton(this, "Microphone recording", ex);
+                }
+            }
+        }
+
+        private void comboBox_inputDevice_SelectedIndexChanged(object? sender, EventArgs e)
+        {
+            if (this.recordingActive || this.recordingFinalizing
+                || this.comboBox_inputDevice.SelectedItem is not AudioInputDevice device)
+            {
+                return;
+            }
+
+            _ = this.RestartRecordingCoreAsync(device);
+        }
+
+        private async Task StartRecordingCoreAsync()
+        {
+            await this.StopRecordingCaptureCoreAsync();
+            if (this.closing || this.IsDisposed)
+            {
+                return;
+            }
+
+            if (this.comboBox_inputDevice.SelectedItem is not AudioInputDevice device)
+            {
+                throw new InvalidOperationException("No microphone input device is selected.");
+            }
+
+            this.BeginRecordingCore(device.Id);
+        }
+
+        private async Task RestartRecordingCoreAsync(AudioInputDevice device)
+        {
+            await this.StopRecordingCaptureCoreAsync();
+            if (this.closing || this.IsDisposed)
+            {
+                return;
+            }
+
+            this.BeginRecordingCore(device.Id);
+        }
+
+        private void BeginRecordingCore(string deviceId)
+        {
+            this.recordingPath = Path.Combine(Path.GetTempPath(), $"MA_MidiRecord_{Guid.NewGuid():N}.wav");
+            if (File.Exists(this.recordingPath))
+            {
+                File.Delete(this.recordingPath);
+            }
+
+            this.recordingCts = new();
+            this.recordingCapture = MicrophoneAudioCapture.Start(deviceId, this.recordingPath!);
+            this.recordingActive = true;
+            this.recordingClock.Reset();
+            this.recordingClock.Start();
+            this.timer_recording.Start();
+            this.button_record.Enabled = false;
+            this.button_stopRecording.Enabled = true;
+            this.label_recordStatus.Text = "Recording. Sing or play your melody.";
+        }
+
+        private void timer_recording_Tick(object? sender, EventArgs e)
+        {
+            MicrophoneAudioCapture? activeCapture = this.recordingCapture;
+            if (activeCapture is null || !this.recordingActive)
+            {
+                return;
+            }
+
+            if (activeCapture.Failure is Exception failure)
+            {
+                _ = this.FinishRecordingAsync(accept: false, failure);
+                return;
+            }
+
+            float peak = activeCapture.PeakLevel;
+            this.progressBar_inputLevel.Value = Math.Clamp(
+                (int)Math.Round(peak * this.progressBar_inputLevel.Maximum),
+                this.progressBar_inputLevel.Minimum,
+                this.progressBar_inputLevel.Maximum);
+            this.label_recordStatus.Text = $"Recording {this.recordingClock.Elapsed:mm\\:ss\\.fff} · Mic {peak:P0}";
+        }
+
+        private async void button_stopRecording_Click(object? sender, EventArgs e)
+        {
+            if (!this.recordingActive || this.recordingFinalizing)
+            {
+                return;
+            }
+
+            await this.FinishRecordingAsync(accept: true, null);
+        }
+
+        private async Task FinishRecordingAsync(bool accept, Exception? captureFailure)
+        {
+            if (this.recordingFinalizing)
+            {
+                return;
+            }
+
+            this.recordingFinalizing = true;
+            this.timer_recording.Stop();
+            this.button_stopRecording.Enabled = false;
+            this.comboBox_inputDevice.Enabled = false;
+            this.label_recordStatus.Text = captureFailure is null
+                ? "Stopping microphone and analyzing pitch..."
+                : "Microphone recording failed.";
+            try
+            {
+                string? currentRecordingPath = this.recordingPath;
+                MicrophoneAudioCapture? activeCapture = this.recordingCapture;
+                this.recordingCapture = null;
+                this.recordingActive = false;
+                this.recordingClock.Stop();
+                if (activeCapture is not null)
+                {
+                    try
+                    {
+                        await activeCapture.StopAsync();
+                    }
+                    catch (Exception ex)
+                    {
+                        captureFailure ??= ex;
+                    }
+                }
+
+                if (!accept || captureFailure is not null || currentRecordingPath is null
+                    || !File.Exists(currentRecordingPath) || new FileInfo(currentRecordingPath).Length <= 44)
+                {
+                    if (captureFailure is not null && !this.IsDisposed && !this.closing)
+                    {
+                        WindowMainStaticHelpers.ShowErrorWithCopyButton(this, "Microphone recording", captureFailure);
+                    }
+
+                    this.DeleteRecordingFile();
+                    this.ResetRecordingUi();
+                    return;
+                }
+
+                this.label_recordStatus.Text = "Analyzing pitch (pYIN)...";
+                List<MidiNoteData> notes = await this.AnalyzeRecordingToMidiNotesAsync(currentRecordingPath!);
+                if (notes.Count == 0)
+                {
+                    this.DeleteRecordingFile();
+                    this.ResetRecordingUi();
+                    if (!this.IsDisposed && !this.closing)
+                    {
+                        WindowMainStaticHelpers.ShowErrorWithCopyButton(
+                            this,
+                            "Microphone recording",
+                            new InvalidOperationException("No voiced pitch was detected in the recording. Sing closer to the microphone or try again."));
+                    }
+
+                    return;
+                }
+
+                this.StoreRecordingAsCollectionSample();
+                this.StartGhostPreview(notes, addToHistory: true);
+                this.label_recordStatus.Text = $"{notes.Count} note(s) added to clipboard. Click in the piano roll to place.";
+            }
+            catch (Exception ex)
+            {
+                this.DeleteRecordingFile();
+                this.ResetRecordingUi();
+                if (!this.IsDisposed && !this.closing)
+                {
+                    WindowMainStaticHelpers.ShowErrorWithCopyButton(this, "Microphone pitch analysis", ex);
+                }
+            }
+            finally
+            {
+                this.recordingFinalizing = false;
+            }
+        }
+
+        private Task<List<MidiNoteData>> AnalyzeRecordingToMidiNotesAsync(string filePath)
+        {
+            AudioObj? audio = AudioObj.FromFile(filePath);
+            if (audio is null || audio.Channels <= 0 || audio.SampleRate <= 0 || audio.Data.Length < audio.Channels)
+            {
+                return Task.FromException<List<MidiNoteData>>(
+                    new InvalidOperationException("The recorded file could not be read as audio."));
+            }
+
+            float[] mono = audio.Channels == 1
+                ? audio.Data
+                : AverageToMono(audio.Data, audio.Channels);
+            int rate = audio.SampleRate;
+            int hop = Math.Max(1, rate / 100);
+            double minimumHz = 55;
+            double maximumHz = Math.Min(900, rate * 0.45);
+            audio.Dispose();
+
+            return Task.Run(
+                () =>
+                {
+                    CancellationTokenSource cts = new();
+                    try
+                    {
+                        PitchFrame[] frames = PitchTracker.Track(mono, rate, hop, minimumHz, maximumHz, 1, cts.Token);
+                        return BuildMidiNotesFromPitchFrames(
+                            frames,
+                            rate,
+                            hop,
+                            this.midiFile.TicksPerQuarterNote,
+                            this.Bpm,
+                            a4: this.PitchFrequency,
+                            minVoicedProbability: 0.5,
+                            minNoteTicks: Math.Max(1, this.GridTicks));
+                    }
+                    finally
+                    {
+                        cts.Dispose();
+                    }
+                });
+        }
+
+        private void StoreRecordingAsCollectionSample()
+        {
+            if (this.recordingPath is null || !File.Exists(this.recordingPath))
+            {
+                return;
+            }
+
+            try
+            {
+                AudioObj? recorded = AudioObj.FromFile(this.recordingPath);
+                if (recorded is null)
+                {
+                    return;
+                }
+
+                using (recorded)
+                {
+                    MidiRenderOptions options = this.CaptureRenderOptions();
+                    string collectionName = CreateCustomMidiCollectionName(options.Bpm, options.Instrument, options.CustomSynthSettings);
+                    AudioCollectionView renderedCollection = GetOrCreateCustomMidiCollection(collectionName);
+                    string sampleName = CreateUniqueSampleName(
+                        renderedCollection,
+                        $"Singing_{DateTime.Now:yyyyMMdd_HHmmss}");
+                    recorded.Rename(sampleName);
+                    renderedCollection.AudioC.Audios.Add(recorded.Clone());
+                }
+            }
+            catch (Exception ex)
+            {
+                LogManager.Log($"Could not store microphone recording in collection: {ex}");
+            }
+        }
+
+        private void ResetRecordingUi()
+        {
+            if (this.IsDisposed)
+            {
+                return;
+            }
+
+            this.button_record.Enabled = true;
+            this.button_stopRecording.Enabled = false;
+            this.comboBox_inputDevice.Enabled = false;
+            this.comboBox_inputDevice.Visible = false;
+            this.label_recordStatus.Visible = false;
+            this.progressBar_inputLevel.Visible = false;
+            this.button_stopRecording.Visible = false;
+        }
+
+        private void DeleteRecordingFile()
+        {
+            try
+            {
+                if (this.recordingPath is not null && File.Exists(this.recordingPath))
+                {
+                    File.Delete(this.recordingPath);
+                }
+            }
+            catch (Exception exception)
+            {
+                Debug.WriteLine($"Unable to delete temporary recording file: {exception.Message}");
+            }
+
+            this.recordingPath = null;
+        }
+
+        private static float[] AverageToMono(float[] interleaved, int channels)
+        {
+            int frames = interleaved.Length / channels;
+            float[] mono = new float[frames];
+            for (int frame = 0; frame < frames; frame++)
+            {
+                double sum = 0;
+                int offset = frame * channels;
+                for (int channel = 0; channel < channels; channel++)
+                {
+                    sum += interleaved[offset + channel];
+                }
+
+                mono[frame] = (float)(sum / channels);
+            }
+
+            return mono;
+        }
+
+        /// <summary>
+        /// Converts a pYIN pitch frame trajectory into quantized MIDI notes.
+        /// Frames with voiced probability below minVoicedProbability are treated as silence.
+        /// Consecutive voiced frames with the same rounded MIDI note number are merged.
+        /// Notes shorter than minNoteTicks are dropped.
+        /// </summary>
+        internal static List<MidiNoteData> BuildMidiNotesFromPitchFrames(
+            IReadOnlyList<PitchFrame> frames,
+            int sampleRate,
+            int hopSize,
+            int ticksPerQuarterNote,
+            double bpm,
+            double a4,
+            double minVoicedProbability,
+            long minNoteTicks)
+        {
+            if (frames.Count == 0)
+            {
+                return [];
+            }
+
+            double secondsPerTick = 60.0 / Math.Clamp(bpm, 20.0, 400.0) / Math.Max(1, ticksPerQuarterNote);
+            double secondsPerFrame = hopSize / (double)Math.Max(1, sampleRate);
+            List<MidiNoteData> notes = [];
+            int currentNote = -1;
+            long currentStartFrame = -1;
+            int currentVoicedFrames = 0;
+            for (int index = 0; index < frames.Count; index++)
+            {
+                double frequencyHz = frames[index].FrequencyHz;
+                double voicedProbability = frames[index].VoicedProbability;
+                bool voiced = frequencyHz > 0 && voicedProbability >= minVoicedProbability;
+                if (!voiced)
+                {
+                    if (currentVoicedFrames > 0)
+                    {
+                        long durationTicks = Math.Max(1, (long)Math.Round(currentVoicedFrames * secondsPerFrame / secondsPerTick));
+                        if (durationTicks >= minNoteTicks)
+                        {
+                            notes.Add(new MidiNoteData
+                            {
+                                NoteNumber = currentNote,
+                                Channel = 0,
+                                Velocity = 100,
+                                StartTick = Math.Max(0, (long)Math.Round(currentStartFrame * secondsPerFrame / secondsPerTick)),
+                                DurationTicks = durationTicks
+                            });
+                        }
+
+                        currentVoicedFrames = 0;
+                    }
+
+                    continue;
+                }
+
+                int roundedNote = RoundFrequencyToMidiNote(frequencyHz, a4);
+                if (roundedNote == currentNote)
+                {
+                    currentVoicedFrames++;
+                }
+                else
+                {
+                    if (currentVoicedFrames > 0)
+                    {
+                        long durationTicks = Math.Max(1, (long)Math.Round(currentVoicedFrames * secondsPerFrame / secondsPerTick));
+                        if (durationTicks >= minNoteTicks)
+                        {
+                            notes.Add(new MidiNoteData
+                            {
+                                NoteNumber = currentNote,
+                                Channel = 0,
+                                Velocity = 100,
+                                StartTick = Math.Max(0, (long)Math.Round(currentStartFrame * secondsPerFrame / secondsPerTick)),
+                                DurationTicks = durationTicks
+                            });
+                        }
+                    }
+
+                    currentNote = roundedNote;
+                    currentStartFrame = index;
+                    currentVoicedFrames = 1;
+                }
+            }
+
+            if (currentVoicedFrames > 0)
+            {
+                long durationTicks = Math.Max(1, (long)Math.Round(currentVoicedFrames * secondsPerFrame / secondsPerTick));
+                if (durationTicks >= minNoteTicks)
+                {
+                    notes.Add(new MidiNoteData
+                    {
+                        NoteNumber = currentNote,
+                        Channel = 0,
+                        Velocity = 100,
+                        StartTick = Math.Max(0, (long)Math.Round(currentStartFrame * secondsPerFrame / secondsPerTick)),
+                        DurationTicks = durationTicks
+                    });
+                }
+            }
+
+            return notes;
+        }
+
+        internal static int RoundFrequencyToMidiNote(double frequencyHz, double a4)
+        {
+            double a4Reference = Math.Clamp(a4, 20.0, 1000.0);
+            double semitones = 12.0 * Math.Log2(Math.Max(1e-6, frequencyHz) / a4Reference);
+            int note = 69 + (int)Math.Round(semitones);
+            return Math.Clamp(note, 0, 127);
+        }
+
         private void ApplyMidiFile(MidiFileData file)
         {
             this.midiFile = NormalizeEditorFile(file, this.Bpm);
@@ -3119,12 +3582,19 @@ namespace ModularAudience.Forms.Modules.Dialogs
             try
             {
                 this.saveRenderCts?.Cancel();
+                this.recordingCts?.Cancel();
+                this.timer_recording.Stop();
+                this.button_record.Enabled = false;
+                this.button_stopRecording.Enabled = false;
+                await this.StopRecordingCaptureCoreAsync();
                 await this.StopPlaybackAsync();
                 Task[] renders = this.activeRenders.ToArray();
                 if (renders.Length > 0)
                 {
                     await Task.WhenAll(renders);
                 }
+
+                this.DeleteRecordingFile();
             }
             catch (OperationCanceledException)
             {
@@ -3146,13 +3616,42 @@ namespace ModularAudience.Forms.Modules.Dialogs
         protected override void OnFormClosed(FormClosedEventArgs e)
         {
             this.timer_previewCaret.Stop();
+            this.timer_recording.Stop();
             this.previewAudio?.Dispose();
             this.playbackCts?.Dispose();
             this.saveRenderCts?.Dispose();
+            this.recordingCts?.Dispose();
+            this.recordingCapture?.Dispose();
             this.customSample?.Dispose();
             this.sampleRenderCache.Dispose();
             this.customInstrumentSampleCache.Dispose();
+            this.DeleteRecordingFile();
             base.OnFormClosed(e);
+        }
+
+        private async Task StopRecordingCaptureCoreAsync()
+        {
+            MicrophoneAudioCapture? activeCapture = this.recordingCapture;
+            this.recordingCapture = null;
+            this.recordingActive = false;
+            this.recordingClock.Stop();
+            this.timer_recording.Stop();
+            if (activeCapture is null)
+            {
+                return;
+            }
+
+            try
+            {
+                await activeCapture.StopAsync();
+            }
+            catch (Exception exception)
+            {
+                LogManager.Log($"Could not stop microphone recording: {exception.Message}");
+            }
+
+            this.recordingCts?.Dispose();
+            this.recordingCts = null;
         }
     }
 }

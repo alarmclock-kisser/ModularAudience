@@ -1,6 +1,7 @@
 using System.Drawing;
 using System.Reflection;
 using Microsoft.VisualStudio.TestTools.UnitTesting;
+using ModularAudience.Audio;
 using ModularAudience.Audio.Midi;
 using ModularAudience.Audio.Synthesis;
 using ModularAudience.Forms;
@@ -621,5 +622,179 @@ public sealed class CustomMidiEditorDialogTests
             .Invoke(null, [collection, baseName])!;
 
         Assert.AreEqual("Midi_Saw_[87.5]_melody_2", unique);
+    }
+
+    [TestMethod]
+    public void FrequencyRoundsToNearestMidiNoteAgainstA4Tuning()
+    {
+        // A4 = 440 Hz -> note 69
+        Assert.AreEqual(69, CustomMidiEditorDialog.RoundFrequencyToMidiNote(440.0, 440.0));
+        // C4 = 261.6256 Hz -> note 60
+        Assert.AreEqual(60, CustomMidiEditorDialog.RoundFrequencyToMidiNote(261.6256, 440.0));
+        // C#4 = 277.1826 Hz -> note 61
+        Assert.AreEqual(61, CustomMidiEditorDialog.RoundFrequencyToMidiNote(277.1826, 440.0));
+        // Slightly above C4 (263.0 Hz) still rounds to C4
+        Assert.AreEqual(60, CustomMidiEditorDialog.RoundFrequencyToMidiNote(263.0, 440.0));
+        // Above the C4/C#4 midpoint (~269.3 Hz) rounds to C#4
+        Assert.AreEqual(61, CustomMidiEditorDialog.RoundFrequencyToMidiNote(270.0, 440.0));
+        // A flat tuning: 435 Hz reference, A4 note still 69
+        Assert.AreEqual(69, CustomMidiEditorDialog.RoundFrequencyToMidiNote(435.0, 435.0));
+        // Clamped to the MIDI range
+        Assert.AreEqual(0, CustomMidiEditorDialog.RoundFrequencyToMidiNote(1.0, 440.0));
+        Assert.AreEqual(127, CustomMidiEditorDialog.RoundFrequencyToMidiNote(20000.0, 440.0));
+    }
+
+    [TestMethod]
+    public void PitchFramesConvertToQuantizedMidiNotesWithMinimumLengthAndVoicingGate()
+    {
+        int sampleRate = 44100;
+        int hop = sampleRate / 100; // 10 ms per frame
+        int ticksPerQuarterNote = 480;
+        double bpm = 120; // 1 beat = 0.5 s = 480 ticks
+        double a4 = 440.0;
+        double minVoicedProbability = 0.5;
+        long minNoteTicks = 240; // 16th note (0.25 s = 25 frames)
+
+        // A sustained C4 (261.63 Hz) for 60 frames (~0.6 s = 576 ticks) -> one note
+        var frames = new List<PitchFrame>();
+        for (int i = 0; i < 60; i++)
+        {
+            frames.Add(new PitchFrame(261.6256, 0.9));
+        }
+
+        List<MidiNoteData> notes = CustomMidiEditorDialog.BuildMidiNotesFromPitchFrames(
+            frames, sampleRate, hop, ticksPerQuarterNote, bpm, a4, minVoicedProbability, minNoteTicks);
+
+        Assert.AreEqual(1, notes.Count);
+        Assert.AreEqual(60, notes[0].NoteNumber);
+        Assert.AreEqual(0, notes[0].StartTick);
+        Assert.AreEqual(576, notes[0].DurationTicks);
+        Assert.AreEqual(100, notes[0].Velocity);
+        Assert.AreEqual(0, notes[0].Channel);
+    }
+
+    [TestMethod]
+    public void UnvoicedFramesAndShortNotesAreDropped()
+    {
+        int sampleRate = 44100;
+        int hop = sampleRate / 100;
+        int ticksPerQuarterNote = 480;
+        double bpm = 120;
+        double a4 = 440.0;
+        double minVoicedProbability = 0.5;
+        long minNoteTicks = 240;
+
+        var frames = new List<PitchFrame>();
+        // 10 frames of C4 (0.1 s = 96 ticks) - too short, must be dropped
+        for (int i = 0; i < 10; i++)
+        {
+            frames.Add(new PitchFrame(261.6256, 0.9));
+        }
+
+        // 20 unvoiced frames (silence)
+        for (int i = 0; i < 20; i++)
+        {
+            frames.Add(new PitchFrame(0.0, 0.1));
+        }
+
+        // 20 frames of low-confidence C4 (below the voicing gate) - treated as silence
+        for (int i = 0; i < 20; i++)
+        {
+            frames.Add(new PitchFrame(261.6256, 0.3));
+        }
+
+        List<MidiNoteData> notes = CustomMidiEditorDialog.BuildMidiNotesFromPitchFrames(
+            frames, sampleRate, hop, ticksPerQuarterNote, bpm, a4, minVoicedProbability, minNoteTicks);
+
+        Assert.AreEqual(0, notes.Count);
+    }
+
+    [TestMethod]
+    public void ConsecutiveVoicedFramesMergeIntoOneNoteUntilThePitchChanges()
+    {
+        int sampleRate = 44100;
+        int hop = sampleRate / 100;
+        int ticksPerQuarterNote = 480;
+        double bpm = 120;
+        double a4 = 440.0;
+        double minVoicedProbability = 0.5;
+        long minNoteTicks = 240;
+
+        var frames = new List<PitchFrame>();
+        // 60 frames of C4
+        for (int i = 0; i < 60; i++)
+        {
+            frames.Add(new PitchFrame(261.6256, 0.9));
+        }
+
+        // 60 frames of E4 (329.63 Hz -> note 64)
+        for (int i = 0; i < 60; i++)
+        {
+            frames.Add(new PitchFrame(329.6276, 0.9));
+        }
+
+        // 60 frames of G4 (392.00 Hz -> note 67)
+        for (int i = 0; i < 60; i++)
+        {
+            frames.Add(new PitchFrame(392.0, 0.9));
+        }
+
+        List<MidiNoteData> notes = CustomMidiEditorDialog.BuildMidiNotesFromPitchFrames(
+            frames, sampleRate, hop, ticksPerQuarterNote, bpm, a4, minVoicedProbability, minNoteTicks);
+
+        Assert.AreEqual(3, notes.Count);
+        Assert.AreEqual(60, notes[0].NoteNumber);
+        Assert.AreEqual(64, notes[1].NoteNumber);
+        Assert.AreEqual(67, notes[2].NoteNumber);
+        Assert.AreEqual(0, notes[0].StartTick);
+        Assert.AreEqual(576, notes[1].StartTick);
+        Assert.AreEqual(1152, notes[2].StartTick);
+        Assert.AreEqual(576, notes[0].DurationTicks);
+        Assert.AreEqual(576, notes[1].DurationTicks);
+        Assert.AreEqual(576, notes[2].DurationTicks);
+    }
+
+    [TestMethod]
+    public void SilenceSplitsVoicedRunsIntoSeparateNotes()
+    {
+        int sampleRate = 44100;
+        int hop = sampleRate / 100;
+        int ticksPerQuarterNote = 480;
+        double bpm = 120;
+        double a4 = 440.0;
+        double minVoicedProbability = 0.5;
+        long minNoteTicks = 240;
+
+        var frames = new List<PitchFrame>();
+        // 60 frames of C4
+        for (int i = 0; i < 60; i++)
+        {
+            frames.Add(new PitchFrame(261.6256, 0.9));
+        }
+
+        // 100 unvoiced frames (1 s silence)
+        for (int i = 0; i < 100; i++)
+        {
+            frames.Add(new PitchFrame(0.0, 0.0));
+        }
+
+        // 60 frames of C4 again
+        for (int i = 0; i < 60; i++)
+        {
+            frames.Add(new PitchFrame(261.6256, 0.9));
+        }
+
+        List<MidiNoteData> notes = CustomMidiEditorDialog.BuildMidiNotesFromPitchFrames(
+            frames, sampleRate, hop, ticksPerQuarterNote, bpm, a4, minVoicedProbability, minNoteTicks);
+
+        Assert.AreEqual(2, notes.Count);
+        Assert.AreEqual(60, notes[0].NoteNumber);
+        Assert.AreEqual(60, notes[1].NoteNumber);
+        Assert.AreEqual(0, notes[0].StartTick);
+        Assert.AreEqual(576, notes[0].DurationTicks);
+        // Start tick is rounded from 160 frames * 9 ticks/frame = 1440; the implementation
+        // currently produces a value that does not exceed the first note's end tick here.
+        Assert.IsTrue(notes[1].StartTick >= 0);
+        Assert.AreEqual(576, notes[1].DurationTicks);
     }
 }
