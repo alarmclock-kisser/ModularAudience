@@ -683,10 +683,11 @@ public sealed class CustomMidiEditorDialogTests
         double a4 = 440.0;
         double minVoicedProbability = 0.5;
         long minNoteTicks = 240;
+        long minShortNoteTicks = 48;
 
         var frames = new List<PitchFrame>();
-        // 10 frames of C4 (0.1 s = 96 ticks) - too short, must be dropped
-        for (int i = 0; i < 10; i++)
+        // 3 frames of C4 (~0.03 s = 28.8 ticks) - below the short-note floor, must be dropped
+        for (int i = 0; i < 3; i++)
         {
             frames.Add(new PitchFrame(261.6256, 0.9));
         }
@@ -704,9 +705,65 @@ public sealed class CustomMidiEditorDialogTests
         }
 
         List<MidiNoteData> notes = CustomMidiEditorDialog.BuildMidiNotesFromPitchFrames(
-            frames, sampleRate, hop, ticksPerQuarterNote, bpm, a4, minVoicedProbability, minNoteTicks);
+            frames, sampleRate, hop, ticksPerQuarterNote, bpm, a4, minVoicedProbability, minNoteTicks, minShortNoteTicks);
 
         Assert.AreEqual(0, notes.Count);
+    }
+
+    [TestMethod]
+    public void ShortTransientNotesSurviveBelowTheRegularMinimumLength()
+    {
+        int sampleRate = 44100;
+        int hop = sampleRate / 100;
+        int ticksPerQuarterNote = 480;
+        double bpm = 120;
+        double a4 = 440.0;
+        double minVoicedProbability = 0.3;
+        long minNoteTicks = 240; // a quarter note - far too long for a "du" syllable
+        long minShortNoteTicks = 48; // ~0.05 s floor for quick transients
+
+        var frames = new List<PitchFrame>();
+        // A long held C4 (60 frames)
+        for (int i = 0; i < 60; i++)
+        {
+            frames.Add(new PitchFrame(261.6256, 0.9));
+        }
+
+        // Silence
+        for (int i = 0; i < 20; i++)
+        {
+            frames.Add(new PitchFrame(0.0, 0.0));
+        }
+
+        // A short 6-frame C4 "du" (0.06 s = 57.6 ticks): below minNoteTicks but above the short floor
+        for (int i = 0; i < 6; i++)
+        {
+            frames.Add(new PitchFrame(261.6256, 0.8));
+        }
+
+        // Silence
+        for (int i = 0; i < 20; i++)
+        {
+            frames.Add(new PitchFrame(0.0, 0.0));
+        }
+
+        // Another short 6-frame E4 "du" (0.06 s = 57.6 ticks) above the short floor
+        for (int i = 0; i < 6; i++)
+        {
+            frames.Add(new PitchFrame(329.6276, 0.8));
+        }
+
+        List<MidiNoteData> notes = CustomMidiEditorDialog.BuildMidiNotesFromPitchFrames(
+            frames, sampleRate, hop, ticksPerQuarterNote, bpm, a4, minVoicedProbability, minNoteTicks, minShortNoteTicks);
+
+        // The long note plus both short transients must all be present
+        Assert.AreEqual(3, notes.Count);
+        Assert.AreEqual(60, notes[0].NoteNumber);
+        Assert.AreEqual(576, notes[0].DurationTicks);
+        Assert.AreEqual(60, notes[1].NoteNumber);
+        Assert.IsTrue(notes[1].DurationTicks < minNoteTicks);
+        Assert.AreEqual(64, notes[2].NoteNumber);
+        Assert.IsTrue(notes[2].DurationTicks < minNoteTicks);
     }
 
     [TestMethod]

@@ -103,10 +103,12 @@ namespace ModularAudience.Forms.Modules.Dialogs
 
         private MicrophoneAudioCapture? recordingCapture;
         private string? recordingPath;
+        private string? recordingSourcePath;
         private readonly Stopwatch recordingClock = new();
         private bool recordingActive;
         private bool recordingStarting;
         private bool recordingFinalizing;
+        private bool recordingFromSample;
         private CancellationTokenSource? recordingCts;
 
         private sealed class CollectionSnapshot : IDisposable
@@ -2942,9 +2944,137 @@ namespace ModularAudience.Forms.Modules.Dialogs
             }
         }
 
+        private void button_record_MouseClick(object? sender, MouseEventArgs e)
+        {
+            if (e.Button != MouseButtons.Right || this.closing || this.IsDisposed)
+            {
+                return;
+            }
+
+            this.button_record.Capture = false;
+            this.contextMenuStrip_record.Show(this.button_record, e.Location);
+        }
+
+        private void BuildRecordContextMenu()
+        {
+            this.contextMenuStrip_record.Items.Clear();
+            ToolStripMenuItem selectSample = new("Select Sample")
+            {
+                Enabled = this.recordingActive || this.recordingStarting || this.recordingFinalizing
+            };
+            foreach (AudioCollectionView view in WindowMain.CollectionViews.Where(view => !view.IsDisposed))
+            {
+                string viewLabel = view.Text;
+                foreach (AudioObj audio in view.AudioC.Audios
+                             .Where(audio => audio.Channels > 0 && audio.SampleRate > 0 && audio.Data.Length >= audio.Channels)
+                             .DistinctBy(audio => audio.Id))
+                {
+                    AudioObj selected = audio;
+                    selectSample.DropDownItems.Add(new ToolStripMenuItem(
+                        $"{viewLabel}  —  {selected.Name}", null,
+                        (_, _) => this.AnalyzeSampleFile(selected.FilePath)));
+                }
+            }
+
+            if (selectSample.DropDownItems.Count == 0)
+            {
+                selectSample.DropDownItems.Add(new ToolStripMenuItem("No audio samples are currently open") { Enabled = false });
+                selectSample.Enabled = false;
+            }
+
+            this.contextMenuStrip_record.Items.Add(selectSample);
+        }
+
+        private async void AnalyzeSampleFile(string filePath)
+        {
+            if (this.recordingActive || this.recordingStarting || this.recordingFinalizing
+                || this.closing || this.IsDisposed)
+            {
+                return;
+            }
+
+            if (!File.Exists(filePath))
+            {
+                WindowMainStaticHelpers.ShowErrorWithCopyButton(
+                    this,
+                    "Sample to MIDI",
+                    new FileNotFoundException("The selected sample file could not be found.", filePath));
+                return;
+            }
+
+            this.recordingFromSample = true;
+            this.recordingSourcePath = filePath;
+            this.label_recordStatus.Visible = true;
+            this.label_recordStatus.Text = "Analyzing pitch (pYIN)...";
+            this.button_record.Enabled = false;
+            this.button_record.Text = "Analyzing...";
+            try
+            {
+                List<MidiNoteData> notes = await this.AnalyzeRecordingToMidiNotesAsync(filePath);
+                if (notes.Count == 0)
+                {
+                    WindowMainStaticHelpers.ShowErrorWithCopyButton(
+                        this,
+                        "Sample to MIDI",
+                        new InvalidOperationException("No voiced pitch was detected in the sample. Try a louder recording or another sample."));
+                    return;
+                }
+
+                this.StoreSampleAsCollectionSample();
+                this.StartGhostPreview(notes, addToHistory: true);
+                this.button_record.Enabled = true;
+                this.button_record.Text = "Record";
+                this.label_recordStatus.Text = $"{notes.Count} note(s) in clipboard. Click in the piano roll to place.";
+            }
+            catch (Exception ex)
+            {
+                this.button_record.Enabled = true;
+                this.button_record.Text = "Record";
+                WindowMainStaticHelpers.ShowErrorWithCopyButton(this, "Sample pitch analysis", ex);
+            }
+            finally
+            {
+                this.recordingFromSample = false;
+                this.recordingSourcePath = null;
+            }
+        }
+
+        private void StoreSampleAsCollectionSample()
+        {
+            if (this.recordingSourcePath is null || !File.Exists(this.recordingSourcePath))
+            {
+                return;
+            }
+
+            try
+            {
+                AudioObj? source = AudioObj.FromFile(this.recordingSourcePath);
+                if (source is null)
+                {
+                    return;
+                }
+
+                using (source)
+                {
+                    MidiRenderOptions options = this.CaptureRenderOptions();
+                    string collectionName = CreateCustomMidiCollectionName(options.Bpm, options.Instrument, options.CustomSynthSettings);
+                    AudioCollectionView renderedCollection = GetOrCreateCustomMidiCollection(collectionName);
+                    string sampleName = CreateUniqueSampleName(
+                        renderedCollection,
+                        $"Singing_{Path.GetFileNameWithoutExtension(this.recordingSourcePath)}_{DateTime.Now:yyyyMMdd_HHmmss}");
+                    source.Rename(sampleName);
+                    renderedCollection.AudioC.Audios.Add(source.Clone());
+                }
+            }
+            catch (Exception ex)
+            {
+                LogManager.Log($"Could not store sample in collection: {ex}");
+            }
+        }
+
         private async void button_record_Click(object? sender, EventArgs e)
         {
-            if (this.recordingFinalizing || this.closing || this.IsDisposed)
+            if (this.recordingFromSample || this.recordingFinalizing || this.closing || this.IsDisposed)
             {
                 return;
             }
@@ -2963,7 +3093,7 @@ namespace ModularAudience.Forms.Modules.Dialogs
                     WindowMainStaticHelpers.ShowErrorWithCopyButton(
                         this,
                         "Microphone recording",
-                        new InvalidOperationException("No microphone input device was found. Connect a microphone and try again."));
+                        new InvalidOperationException("No microphone input device was found. Connect a microphone and try again. Right-click the Record button to analyze an existing sample instead."));
                     return;
                 }
 
@@ -2975,8 +3105,7 @@ namespace ModularAudience.Forms.Modules.Dialogs
 
                 this.comboBox_inputDevice.SelectedIndex = Math.Clamp(this.comboBox_inputDevice.Items.Count - 1, 0, this.comboBox_inputDevice.Items.Count - 1);
                 this.comboBox_inputDevice.Visible = true;
-                this.label_recordStatus.Visible = true;
-                this.progressBar_inputLevel.Visible = true;
+                this.panel_inputLevel.Visible = true;
                 this.label_recordStatus.Text = "Starting microphone...";
                 this.progressBar_inputLevel.Value = 0;
                 await this.BeginRecordingCoreAsync();
@@ -3187,7 +3316,7 @@ namespace ModularAudience.Forms.Modules.Dialogs
                 this.StartGhostPreview(notes, addToHistory: true);
                 this.button_record.Enabled = true;
                 this.button_record.Text = "Record";
-                this.label_recordStatus.Visible = true;
+                this.panel_inputLevel.Visible = true;
                 this.label_recordStatus.Text = $"{notes.Count} note(s) in clipboard. Click in the piano roll to place.";
             }
             catch (Exception ex)
@@ -3237,8 +3366,9 @@ namespace ModularAudience.Forms.Modules.Dialogs
                             this.midiFile.TicksPerQuarterNote,
                             this.Bpm,
                             a4: this.PitchFrequency,
-                            minVoicedProbability: 0.5,
-                            minNoteTicks: Math.Max(1, this.GridTicks));
+                            minVoicedProbability: 0.3,
+                            minNoteTicks: Math.Max(1, this.GridTicks),
+                            minShortNoteTicks: 48);
                     }
                     finally
                     {
@@ -3291,8 +3421,7 @@ namespace ModularAudience.Forms.Modules.Dialogs
             this.button_record.Text = "Record";
             this.comboBox_inputDevice.Enabled = false;
             this.comboBox_inputDevice.Visible = false;
-            this.label_recordStatus.Visible = false;
-            this.progressBar_inputLevel.Visible = false;
+            this.panel_inputLevel.Visible = false;
         }
 
         private void DeleteRecordingFile()
@@ -3335,7 +3464,9 @@ namespace ModularAudience.Forms.Modules.Dialogs
         /// Converts a pYIN pitch frame trajectory into quantized MIDI notes.
         /// Frames with voiced probability below minVoicedProbability are treated as silence.
         /// Consecutive voiced frames with the same rounded MIDI note number are merged.
-        /// Notes shorter than minNoteTicks are dropped.
+        /// Notes shorter than minNoteTicks are dropped, except short transient notes
+        /// (e.g. fast "du" syllables) which are kept down to minShortNoteTicks so that
+        /// quick accents are not filtered out as noise.
         /// </summary>
         internal static List<MidiNoteData> BuildMidiNotesFromPitchFrames(
             IReadOnlyList<PitchFrame> frames,
@@ -3345,7 +3476,8 @@ namespace ModularAudience.Forms.Modules.Dialogs
             double bpm,
             double a4,
             double minVoicedProbability,
-            long minNoteTicks)
+            long minNoteTicks,
+            long minShortNoteTicks = 48)
         {
             if (frames.Count == 0)
             {
@@ -3354,6 +3486,7 @@ namespace ModularAudience.Forms.Modules.Dialogs
 
             double secondsPerTick = 60.0 / Math.Clamp(bpm, 20.0, 400.0) / Math.Max(1, ticksPerQuarterNote);
             double secondsPerFrame = hopSize / (double)Math.Max(1, sampleRate);
+            long shortNoteTicks = Math.Max(1, Math.Min(minShortNoteTicks, minNoteTicks));
             List<MidiNoteData> notes = [];
             int currentNote = -1;
             long currentStartFrame = -1;
@@ -3368,7 +3501,7 @@ namespace ModularAudience.Forms.Modules.Dialogs
                     if (currentVoicedFrames > 0)
                     {
                         long durationTicks = Math.Max(1, (long)Math.Round(currentVoicedFrames * secondsPerFrame / secondsPerTick));
-                        if (durationTicks >= minNoteTicks)
+                        if (durationTicks >= shortNoteTicks)
                         {
                             notes.Add(new MidiNoteData
                             {
@@ -3396,7 +3529,7 @@ namespace ModularAudience.Forms.Modules.Dialogs
                     if (currentVoicedFrames > 0)
                     {
                         long durationTicks = Math.Max(1, (long)Math.Round(currentVoicedFrames * secondsPerFrame / secondsPerTick));
-                        if (durationTicks >= minNoteTicks)
+                        if (durationTicks >= shortNoteTicks)
                         {
                             notes.Add(new MidiNoteData
                             {
@@ -3418,7 +3551,7 @@ namespace ModularAudience.Forms.Modules.Dialogs
             if (currentVoicedFrames > 0)
             {
                 long durationTicks = Math.Max(1, (long)Math.Round(currentVoicedFrames * secondsPerFrame / secondsPerTick));
-                if (durationTicks >= minNoteTicks)
+                if (durationTicks >= shortNoteTicks)
                 {
                     notes.Add(new MidiNoteData
                     {
