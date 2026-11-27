@@ -513,11 +513,6 @@ namespace ModularAudience.Forms.Modules.Dialogs
             this.SetView(this.viewStartTick, this.viewStartTick + visibleLength);
             this.pixelsPerTick = this.CalculatePixelsPerTick(this.viewEndTick - this.viewStartTick);
             this.UpdateScrollBar();
-            if (this.ghostPreviewActive)
-            {
-                this.ghostNotes = QuantizeNotesToGrid(this.ghostNotes);
-            }
-
             this.pictureBox_editor.Invalidate();
         }
 
@@ -1126,32 +1121,9 @@ namespace ModularAudience.Forms.Modules.Dialogs
             this.StartGhostPreview(chosen.Notes, addToHistory: false);
         }
 
-        /// <summary>
-        /// Snaps each note's start and duration to the editor's current grid
-        /// (TicksPerQuarterNote / Resolution) so that recorded or sample-derived
-        /// notes render aligned to the grid the user is working in.
-        /// </summary>
-        private List<MidiNoteData> QuantizeNotesToGrid(IReadOnlyList<MidiNoteData> notes)
-        {
-            long grid = Math.Max(1, this.GridTicks);
-            return notes.Select(note =>
-            {
-                long startTick = Math.Max(0, (long)Math.Round(note.StartTick / (double)grid) * grid);
-                long durationTicks = Math.Max(1, (long)Math.Round(Math.Max(1, note.DurationTicks) / (double)grid) * grid);
-                return new MidiNoteData
-                {
-                    NoteNumber = note.NoteNumber,
-                    Channel = note.Channel,
-                    Velocity = note.Velocity,
-                    StartTick = startTick,
-                    DurationTicks = durationTicks
-                };
-            }).ToList();
-        }
-
         private void StartGhostPreview(IEnumerable<MidiNoteData> notes, bool addToHistory)
         {
-            List<MidiNoteData> normalized = NormalizeNotes(QuantizeNotesToGrid(notes.ToList()));
+            List<MidiNoteData> normalized = NormalizeNotes(notes);
             if (normalized.Count == 0)
             {
                 return;
@@ -2984,29 +2956,31 @@ namespace ModularAudience.Forms.Modules.Dialogs
 
             PitchAnalysisConfig config = PitchAnalysisConfigStore.Shared.Load();
 
+            ToolStripMenuItem medianParent = new("Median window");
             ToolStripControlHost medianItem = new(new NumericUpDown
             {
                 Minimum = 1,
                 Maximum = 51,
                 Value = Math.Clamp(config.MedianWindow, 1, 51)
             });
-            medianItem.Text = "Median window";
             medianItem.Tag = "median";
             medianItem.AutoSize = false;
-            medianItem.Size = new Size(170, 30);
-            ((NumericUpDown)medianItem.Control).ValueChanged += (_, _) => this.SavePitchAnalysisFromMenu();
+            medianItem.Size = new Size(90, 28);
+            ((NumericUpDown)medianItem.Control).ValueChanged += (_, _) => this.SavePitchAnalysisFromMenu("median", medianItem);
+            medianParent.DropDownItems.Add(medianItem);
 
+            ToolStripMenuItem hysteresisParent = new("Hysteresis");
             ToolStripControlHost hysteresisItem = new(new NumericUpDown
             {
                 Minimum = 1,
                 Maximum = 30,
                 Value = Math.Clamp(config.HysteresisFrames, 1, 30)
             });
-            hysteresisItem.Text = "Hysteresis";
             hysteresisItem.Tag = "hysteresis";
             hysteresisItem.AutoSize = false;
-            hysteresisItem.Size = new Size(170, 30);
-            ((NumericUpDown)hysteresisItem.Control).ValueChanged += (_, _) => this.SavePitchAnalysisFromMenu();
+            hysteresisItem.Size = new Size(90, 28);
+            ((NumericUpDown)hysteresisItem.Control).ValueChanged += (_, _) => this.SavePitchAnalysisFromMenu("hysteresis", hysteresisItem);
+            hysteresisParent.DropDownItems.Add(hysteresisItem);
 
             ToolStripSeparator separator = new();
 
@@ -3034,34 +3008,30 @@ namespace ModularAudience.Forms.Modules.Dialogs
                 selectSample.Enabled = false;
             }
 
-            this.contextMenuStrip_record.Items.Add(medianItem);
-            this.contextMenuStrip_record.Items.Add(hysteresisItem);
+            this.contextMenuStrip_record.Items.Add(medianParent);
+            this.contextMenuStrip_record.Items.Add(hysteresisParent);
             this.contextMenuStrip_record.Items.Add(separator);
             this.contextMenuStrip_record.Items.Add(selectSample);
         }
 
-        private void SavePitchAnalysisFromMenu()
+        private void SavePitchAnalysisFromMenu(string tag, ToolStripControlHost host)
         {
-            int median = 5;
-            int hysteresis = 3;
-            foreach (ToolStripItem item in this.contextMenuStrip_record.Items)
+            if (host.Control is not NumericUpDown numeric)
             {
-                if (item is ToolStripControlHost host && host.Control is NumericUpDown numeric)
-                {
-                    if (host.Tag as string == "median")
-                    {
-                        median = (int)numeric.Value;
-                    }
-                    else if (host.Tag as string == "hysteresis")
-                    {
-                        hysteresis = (int)numeric.Value;
-                    }
-                }
+                return;
             }
 
+            int value = (int)numeric.Value;
             PitchAnalysisConfig config = PitchAnalysisConfigStore.Shared.Load();
-            config.MedianWindow = median;
-            config.HysteresisFrames = hysteresis;
+            if (tag == "median")
+            {
+                config.MedianWindow = Math.Clamp(value, 1, 51);
+            }
+            else if (tag == "hysteresis")
+            {
+                config.HysteresisFrames = Math.Clamp(value, 1, 30);
+            }
+
             PitchAnalysisConfigStore.Shared.Save(config);
         }
 
@@ -3100,7 +3070,6 @@ namespace ModularAudience.Forms.Modules.Dialogs
                     return;
                 }
 
-                this.StoreSampleAsCollectionSample();
                 this.StartGhostPreview(notes, addToHistory: true);
                 this.button_record.Enabled = true;
                 this.button_record.Text = "Record";
@@ -3116,39 +3085,6 @@ namespace ModularAudience.Forms.Modules.Dialogs
             {
                 this.recordingFromSample = false;
                 this.recordingSourcePath = null;
-            }
-        }
-
-        private void StoreSampleAsCollectionSample()
-        {
-            if (this.recordingSourcePath is null || !File.Exists(this.recordingSourcePath))
-            {
-                return;
-            }
-
-            try
-            {
-                AudioObj? source = AudioObj.FromFile(this.recordingSourcePath);
-                if (source is null)
-                {
-                    return;
-                }
-
-                using (source)
-                {
-                    MidiRenderOptions options = this.CaptureRenderOptions();
-                    string collectionName = CreateCustomMidiCollectionName(options.Bpm, options.Instrument, options.CustomSynthSettings);
-                    AudioCollectionView renderedCollection = GetOrCreateCustomMidiCollection(collectionName);
-                    string sampleName = CreateUniqueSampleName(
-                        renderedCollection,
-                        $"Singing_{Path.GetFileNameWithoutExtension(this.recordingSourcePath)}_{DateTime.Now:yyyyMMdd_HHmmss}");
-                    source.Rename(sampleName);
-                    renderedCollection.AudioC.Audios.Add(source.Clone());
-                }
-            }
-            catch (Exception ex)
-            {
-                LogManager.Log($"Could not store sample in collection: {ex}");
             }
         }
 
@@ -3433,8 +3369,6 @@ namespace ModularAudience.Forms.Modules.Dialogs
             audio.Dispose();
 
             PitchAnalysisConfig config = PitchAnalysisConfigStore.Shared.Load();
-            double resolutionValue = this.Resolution;
-            int effectiveTicksPerQuarterNote = Math.Max(1, (int)Math.Round(this.midiFile.TicksPerQuarterNote / resolutionValue));
             return Task.Run(
                 () =>
                 {
@@ -3446,7 +3380,7 @@ namespace ModularAudience.Forms.Modules.Dialogs
                             frames,
                             rate,
                             hop,
-                            effectiveTicksPerQuarterNote,
+                            this.midiFile.TicksPerQuarterNote,
                             this.Bpm,
                             a4: this.PitchFrequency,
                             minVoicedProbability: 0.3,

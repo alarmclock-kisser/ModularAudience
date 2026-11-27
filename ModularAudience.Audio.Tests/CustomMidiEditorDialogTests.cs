@@ -644,46 +644,6 @@ public sealed class CustomMidiEditorDialogTests
         Assert.AreEqual(127, CustomMidiEditorDialog.RoundFrequencyToMidiNote(20000.0, 440.0));
     }
 
-    [STATestMethod]
-    public void GhostPreviewNotesAreQuantizedToTheEditorGrid()
-    {
-        using CustomMidiEditorDialog editor = new();
-        NumericUpDown resolution = Field<NumericUpDown>(editor, "numericUpDown_resolution");
-        resolution.Value = 8;
-
-        // GridTicks = 960 / 8 = 120
-        List<MidiNoteData> notes =
-        [
-            new() { NoteNumber = 60, Channel = 0, Velocity = 100, StartTick = 130, DurationTicks = 250 },
-            new() { NoteNumber = 64, Channel = 0, Velocity = 100, StartTick = 400, DurationTicks = 110 },
-            new() { NoteNumber = 67, Channel = 0, Velocity = 100, StartTick = 700, DurationTicks = 300 }
-        ];
-
-        var quantized = InvokeQuantize(editor, notes);
-
-        // 130 -> 120 (nearest multiple of 120)
-        // 250 -> 240
-        Assert.AreEqual(120, quantized[0].StartTick);
-        Assert.AreEqual(240, quantized[0].DurationTicks);
-        // 400 -> 360 (nearest multiple of 120)
-        // 110 -> 120
-        Assert.AreEqual(360, quantized[1].StartTick);
-        Assert.AreEqual(120, quantized[1].DurationTicks);
-        // 700 -> 720 (nearest multiple of 120)
-        // 300 -> 240 (nearest multiple of 120)
-        Assert.AreEqual(720, quantized[2].StartTick);
-        Assert.AreEqual(240, quantized[2].DurationTicks);
-        // Note numbers and velocity are preserved
-        Assert.AreEqual(60, quantized[0].NoteNumber);
-        Assert.AreEqual(100, quantized[0].Velocity);
-    }
-
-    private static List<MidiNoteData> InvokeQuantize(CustomMidiEditorDialog editor, List<MidiNoteData> notes)
-    {
-        var method = typeof(CustomMidiEditorDialog).GetMethod("QuantizeNotesToGrid", System.Reflection.BindingFlags.NonPublic | System.Reflection.BindingFlags.Instance)!;
-        return (List<MidiNoteData>)method.Invoke(editor, [notes])!;
-    }
-
     [TestMethod]
     public void PitchFramesConvertToQuantizedMidiNotesWithMinimumLengthAndVoicingGate()
     {
