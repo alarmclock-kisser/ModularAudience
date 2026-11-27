@@ -4,8 +4,10 @@ using ModularAudience.Audio.Synthesis;
 using ModularAudience.Audio.Vocal;
 using ModularAudience.Generators;
 using ModularAudience.Forms.Helpers;
+using System.ComponentModel;
 using System.Diagnostics;
 using System.Drawing.Drawing2D;
+using System.Windows.Forms;
 
 namespace ModularAudience.Forms.Modules.Dialogs
 {
@@ -511,6 +513,11 @@ namespace ModularAudience.Forms.Modules.Dialogs
             this.SetView(this.viewStartTick, this.viewStartTick + visibleLength);
             this.pixelsPerTick = this.CalculatePixelsPerTick(this.viewEndTick - this.viewStartTick);
             this.UpdateScrollBar();
+            if (this.ghostPreviewActive)
+            {
+                this.ghostNotes = QuantizeNotesToGrid(this.ghostNotes);
+            }
+
             this.pictureBox_editor.Invalidate();
         }
 
@@ -1119,9 +1126,32 @@ namespace ModularAudience.Forms.Modules.Dialogs
             this.StartGhostPreview(chosen.Notes, addToHistory: false);
         }
 
+        /// <summary>
+        /// Snaps each note's start and duration to the editor's current grid
+        /// (TicksPerQuarterNote / Resolution) so that recorded or sample-derived
+        /// notes render aligned to the grid the user is working in.
+        /// </summary>
+        private List<MidiNoteData> QuantizeNotesToGrid(IReadOnlyList<MidiNoteData> notes)
+        {
+            long grid = Math.Max(1, this.GridTicks);
+            return notes.Select(note =>
+            {
+                long startTick = Math.Max(0, (long)Math.Round(note.StartTick / (double)grid) * grid);
+                long durationTicks = Math.Max(1, (long)Math.Round(Math.Max(1, note.DurationTicks) / (double)grid) * grid);
+                return new MidiNoteData
+                {
+                    NoteNumber = note.NoteNumber,
+                    Channel = note.Channel,
+                    Velocity = note.Velocity,
+                    StartTick = startTick,
+                    DurationTicks = durationTicks
+                };
+            }).ToList();
+        }
+
         private void StartGhostPreview(IEnumerable<MidiNoteData> notes, bool addToHistory)
         {
-            List<MidiNoteData> normalized = NormalizeNotes(notes);
+            List<MidiNoteData> normalized = NormalizeNotes(QuantizeNotesToGrid(notes.ToList()));
             if (normalized.Count == 0)
             {
                 return;
@@ -2191,8 +2221,11 @@ namespace ModularAudience.Forms.Modules.Dialogs
 
             int width = Math.Max(1, this.pictureBox_editor.ClientSize.Width - KeyLabelWidth);
             long visibleLength = Math.Max(this.GridTicks, (long)Math.Ceiling(width / this.pixelsPerTick));
+            // Extend the editor length first so SetView can clamp the visible
+            // window to the full new width instead of the (now too short) old
+            // editor length, which would leave a blank area on the right.
+            this.editorLengthTicks = Math.Max(this.editorLengthTicks, this.viewStartTick + visibleLength);
             this.SetView(this.viewStartTick, this.viewStartTick + visibleLength);
-            this.editorLengthTicks = Math.Max(this.editorLengthTicks, this.viewEndTick);
             this.UpdateScrollBar();
             this.pictureBox_editor.Invalidate();
         }
@@ -2944,23 +2977,42 @@ namespace ModularAudience.Forms.Modules.Dialogs
             }
         }
 
-        private void button_record_MouseClick(object? sender, MouseEventArgs e)
+        private void contextMenuStrip_record_Opening(object? sender, CancelEventArgs e)
         {
-            if (e.Button != MouseButtons.Right || this.closing || this.IsDisposed)
-            {
-                return;
-            }
-
-            this.button_record.Capture = false;
-            this.contextMenuStrip_record.Show(this.button_record, e.Location);
-        }
-
-        private void BuildRecordContextMenu()
-        {
+            e.Cancel = this.recordingActive || this.recordingStarting || this.recordingFinalizing;
             this.contextMenuStrip_record.Items.Clear();
+
+            PitchAnalysisConfig config = PitchAnalysisConfigStore.Shared.Load();
+
+            ToolStripControlHost medianItem = new(new NumericUpDown
+            {
+                Minimum = 1,
+                Maximum = 51,
+                Value = Math.Clamp(config.MedianWindow, 1, 51)
+            });
+            medianItem.Text = "Median window";
+            medianItem.Tag = "median";
+            medianItem.AutoSize = false;
+            medianItem.Size = new Size(170, 30);
+            ((NumericUpDown)medianItem.Control).ValueChanged += (_, _) => this.SavePitchAnalysisFromMenu();
+
+            ToolStripControlHost hysteresisItem = new(new NumericUpDown
+            {
+                Minimum = 1,
+                Maximum = 30,
+                Value = Math.Clamp(config.HysteresisFrames, 1, 30)
+            });
+            hysteresisItem.Text = "Hysteresis";
+            hysteresisItem.Tag = "hysteresis";
+            hysteresisItem.AutoSize = false;
+            hysteresisItem.Size = new Size(170, 30);
+            ((NumericUpDown)hysteresisItem.Control).ValueChanged += (_, _) => this.SavePitchAnalysisFromMenu();
+
+            ToolStripSeparator separator = new();
+
             ToolStripMenuItem selectSample = new("Select Sample")
             {
-                Enabled = this.recordingActive || this.recordingStarting || this.recordingFinalizing
+                Enabled = !e.Cancel
             };
             foreach (AudioCollectionView view in WindowMain.CollectionViews.Where(view => !view.IsDisposed))
             {
@@ -2982,7 +3034,35 @@ namespace ModularAudience.Forms.Modules.Dialogs
                 selectSample.Enabled = false;
             }
 
+            this.contextMenuStrip_record.Items.Add(medianItem);
+            this.contextMenuStrip_record.Items.Add(hysteresisItem);
+            this.contextMenuStrip_record.Items.Add(separator);
             this.contextMenuStrip_record.Items.Add(selectSample);
+        }
+
+        private void SavePitchAnalysisFromMenu()
+        {
+            int median = 5;
+            int hysteresis = 3;
+            foreach (ToolStripItem item in this.contextMenuStrip_record.Items)
+            {
+                if (item is ToolStripControlHost host && host.Control is NumericUpDown numeric)
+                {
+                    if (host.Tag as string == "median")
+                    {
+                        median = (int)numeric.Value;
+                    }
+                    else if (host.Tag as string == "hysteresis")
+                    {
+                        hysteresis = (int)numeric.Value;
+                    }
+                }
+            }
+
+            PitchAnalysisConfig config = PitchAnalysisConfigStore.Shared.Load();
+            config.MedianWindow = median;
+            config.HysteresisFrames = hysteresis;
+            PitchAnalysisConfigStore.Shared.Save(config);
         }
 
         private async void AnalyzeSampleFile(string filePath)
@@ -3105,7 +3185,7 @@ namespace ModularAudience.Forms.Modules.Dialogs
 
                 this.comboBox_inputDevice.SelectedIndex = Math.Clamp(this.comboBox_inputDevice.Items.Count - 1, 0, this.comboBox_inputDevice.Items.Count - 1);
                 this.comboBox_inputDevice.Visible = true;
-                this.panel_inputLevel.Visible = true;
+                this.panel_recording.Visible = true;
                 this.label_recordStatus.Text = "Starting microphone...";
                 this.progressBar_inputLevel.Value = 0;
                 await this.BeginRecordingCoreAsync();
@@ -3316,7 +3396,7 @@ namespace ModularAudience.Forms.Modules.Dialogs
                 this.StartGhostPreview(notes, addToHistory: true);
                 this.button_record.Enabled = true;
                 this.button_record.Text = "Record";
-                this.panel_inputLevel.Visible = true;
+                this.panel_recording.Visible = true;
                 this.label_recordStatus.Text = $"{notes.Count} note(s) in clipboard. Click in the piano roll to place.";
             }
             catch (Exception ex)
@@ -3352,6 +3432,9 @@ namespace ModularAudience.Forms.Modules.Dialogs
             double maximumHz = Math.Min(900, rate * 0.45);
             audio.Dispose();
 
+            PitchAnalysisConfig config = PitchAnalysisConfigStore.Shared.Load();
+            double resolutionValue = this.Resolution;
+            int effectiveTicksPerQuarterNote = Math.Max(1, (int)Math.Round(this.midiFile.TicksPerQuarterNote / resolutionValue));
             return Task.Run(
                 () =>
                 {
@@ -3363,12 +3446,14 @@ namespace ModularAudience.Forms.Modules.Dialogs
                             frames,
                             rate,
                             hop,
-                            this.midiFile.TicksPerQuarterNote,
+                            effectiveTicksPerQuarterNote,
                             this.Bpm,
                             a4: this.PitchFrequency,
                             minVoicedProbability: 0.3,
                             minNoteTicks: Math.Max(1, this.GridTicks),
-                            minShortNoteTicks: 48);
+                            minShortNoteTicks: 48,
+                            medianWindow: config.MedianWindow,
+                            hysteresisFrames: config.HysteresisFrames);
                     }
                     finally
                     {
@@ -3421,7 +3506,7 @@ namespace ModularAudience.Forms.Modules.Dialogs
             this.button_record.Text = "Record";
             this.comboBox_inputDevice.Enabled = false;
             this.comboBox_inputDevice.Visible = false;
-            this.panel_inputLevel.Visible = false;
+            this.panel_recording.Visible = false;
         }
 
         private void DeleteRecordingFile()
@@ -3462,11 +3547,12 @@ namespace ModularAudience.Forms.Modules.Dialogs
 
         /// <summary>
         /// Converts a pYIN pitch frame trajectory into quantized MIDI notes.
-        /// Frames with voiced probability below minVoicedProbability are treated as silence.
-        /// Consecutive voiced frames with the same rounded MIDI note number are merged.
-        /// Notes shorter than minNoteTicks are dropped, except short transient notes
-        /// (e.g. fast "du" syllables) which are kept down to minShortNoteTicks so that
-        /// quick accents are not filtered out as noise.
+        /// Applies median filtering and hysteresis so that small pitch wobble
+        /// (1–2 cent drift) does not produce spurious notes. A note is only
+        /// accepted after a short minimum sustain, which suppresses single-frame
+        /// noise spikes. Notes shorter than minNoteTicks are dropped, except short
+        /// transient notes (e.g. fast "du" syllables) which are kept down to
+        /// minShortNoteTicks so that quick accents are not filtered out.
         /// </summary>
         internal static List<MidiNoteData> BuildMidiNotesFromPitchFrames(
             IReadOnlyList<PitchFrame> frames,
@@ -3477,7 +3563,9 @@ namespace ModularAudience.Forms.Modules.Dialogs
             double a4,
             double minVoicedProbability,
             long minNoteTicks,
-            long minShortNoteTicks = 48)
+            long minShortNoteTicks = 48,
+            int medianWindow = 5,
+            int hysteresisFrames = 3)
         {
             if (frames.Count == 0)
             {
@@ -3487,82 +3575,133 @@ namespace ModularAudience.Forms.Modules.Dialogs
             double secondsPerTick = 60.0 / Math.Clamp(bpm, 20.0, 400.0) / Math.Max(1, ticksPerQuarterNote);
             double secondsPerFrame = hopSize / (double)Math.Max(1, sampleRate);
             long shortNoteTicks = Math.Max(1, Math.Min(minShortNoteTicks, minNoteTicks));
+
+            // Median filter window (in frames). Default 5 frames = 50 ms at 100 fps hop.
+            medianWindow = Math.Clamp(medianWindow, 1, 51);
+            if (medianWindow % 2 == 0)
+            {
+                medianWindow++; // keep the window odd so the median is a real sample
+            }
+
+            // Hysteresis: a new note must persist for this many consecutive frames
+            // before it replaces the current note. Default 3 frames = 30 ms.
+            int noteChangeFrames = Math.Clamp(hysteresisFrames, 1, 30);
+
+            // Step 1: median-filter the frequency to suppress single-frame spikes.
+            double[] filtered = new double[frames.Count];
+            for (int i = 0; i < frames.Count; i++)
+            {
+                int from = Math.Max(0, i - medianWindow / 2);
+                int to = Math.Min(frames.Count, i + medianWindow / 2 + 1);
+                double[] window = new double[to - from];
+                for (int j = from; j < to; j++)
+                {
+                    window[j - from] = frames[j].FrequencyHz;
+                }
+
+                Array.Sort(window);
+                filtered[i] = window[window.Length / 2];
+            }
+
+            // Step 2: build note runs with hysteresis.
             List<MidiNoteData> notes = [];
             int currentNote = -1;
             long currentStartFrame = -1;
             int currentVoicedFrames = 0;
-            for (int index = 0; index < frames.Count; index++)
+            // Pending note candidate (different from currentNote) and its frame count.
+            int pendingNote = -1;
+            int pendingFrames = 0;
+
+            void FlushCurrent()
             {
-                double frequencyHz = frames[index].FrequencyHz;
-                double voicedProbability = frames[index].VoicedProbability;
-                bool voiced = frequencyHz > 0 && voicedProbability >= minVoicedProbability;
+                if (currentVoicedFrames > 0 && currentNote >= 0)
+                {
+                    long durationTicks = Math.Max(1, (long)Math.Round(currentVoicedFrames * secondsPerFrame / secondsPerTick));
+                    if (durationTicks >= shortNoteTicks)
+                    {
+                        notes.Add(new MidiNoteData
+                        {
+                            NoteNumber = currentNote,
+                            Channel = 0,
+                            Velocity = 100,
+                            StartTick = Math.Max(0, (long)Math.Round(currentStartFrame * secondsPerFrame / secondsPerTick)),
+                            DurationTicks = durationTicks
+                        });
+                    }
+                }
+
+                currentVoicedFrames = 0;
+                currentNote = -1;
+                currentStartFrame = -1;
+            }
+
+            for (int i = 0; i < frames.Count; i++)
+            {
+                bool voiced = filtered[i] > 0 && frames[i].VoicedProbability >= minVoicedProbability;
                 if (!voiced)
                 {
-                    if (currentVoicedFrames > 0)
-                    {
-                        long durationTicks = Math.Max(1, (long)Math.Round(currentVoicedFrames * secondsPerFrame / secondsPerTick));
-                        if (durationTicks >= shortNoteTicks)
-                        {
-                            notes.Add(new MidiNoteData
-                            {
-                                NoteNumber = currentNote,
-                                Channel = 0,
-                                Velocity = 100,
-                                StartTick = Math.Max(0, (long)Math.Round(currentStartFrame * secondsPerFrame / secondsPerTick)),
-                                DurationTicks = durationTicks
-                            });
-                        }
-
-                        currentVoicedFrames = 0;
-                    }
-
+                    // Silence: discard any pending candidate and flush the current note.
+                    pendingNote = -1;
+                    pendingFrames = 0;
+                    FlushCurrent();
                     continue;
                 }
 
-                int roundedNote = RoundFrequencyToMidiNote(frequencyHz, a4);
-                if (roundedNote == currentNote)
+                int candidateNote = RoundFrequencyToMidiNote(filtered[i], a4);
+                if (candidateNote == currentNote)
                 {
+                    // Same note: extend.
+                    if (currentVoicedFrames == 0)
+                    {
+                        currentStartFrame = i;
+                    }
+
                     currentVoicedFrames++;
+                    pendingNote = -1;
+                    pendingFrames = 0;
+                }
+                else if (candidateNote == pendingNote)
+                {
+                    // Reinforce the pending candidate.
+                    pendingFrames++;
+                    if (pendingFrames >= noteChangeFrames)
+                    {
+                        // Promote: the pending note has sustained long enough.
+                        FlushCurrent();
+                        currentNote = candidateNote;
+                        // Backdate the start to where the candidate first appeared
+                        // so the note begins at the true onset, not after the
+                        // hysteresis threshold.
+                        currentStartFrame = i - pendingFrames + 1;
+                        currentVoicedFrames = pendingFrames;
+                        pendingNote = -1;
+                        pendingFrames = 0;
+                    }
                 }
                 else
                 {
+                    // New candidate: start tracking it.
                     if (currentVoicedFrames > 0)
                     {
-                        long durationTicks = Math.Max(1, (long)Math.Round(currentVoicedFrames * secondsPerFrame / secondsPerTick));
-                        if (durationTicks >= shortNoteTicks)
-                        {
-                            notes.Add(new MidiNoteData
-                            {
-                                NoteNumber = currentNote,
-                                Channel = 0,
-                                Velocity = 100,
-                                StartTick = Math.Max(0, (long)Math.Round(currentStartFrame * secondsPerFrame / secondsPerTick)),
-                                DurationTicks = durationTicks
-                            });
-                        }
+                        // The current note continues for now; the candidate is
+                        // pending until it sustains for noteChangeFrames.
+                        pendingNote = candidateNote;
+                        pendingFrames = 1;
                     }
-
-                    currentNote = roundedNote;
-                    currentStartFrame = index;
-                    currentVoicedFrames = 1;
-                }
-            }
-
-            if (currentVoicedFrames > 0)
-            {
-                long durationTicks = Math.Max(1, (long)Math.Round(currentVoicedFrames * secondsPerFrame / secondsPerTick));
-                if (durationTicks >= shortNoteTicks)
-                {
-                    notes.Add(new MidiNoteData
+                    else
                     {
-                        NoteNumber = currentNote,
-                        Channel = 0,
-                        Velocity = 100,
-                        StartTick = Math.Max(0, (long)Math.Round(currentStartFrame * secondsPerFrame / secondsPerTick)),
-                        DurationTicks = durationTicks
-                    });
+                        // No current note: accept immediately (no hysteresis needed).
+                        currentNote = candidateNote;
+                        currentStartFrame = i;
+                        currentVoicedFrames = 1;
+                        pendingNote = -1;
+                        pendingFrames = 0;
+                    }
                 }
             }
+
+            // Flush the final note.
+            FlushCurrent();
 
             return notes;
         }

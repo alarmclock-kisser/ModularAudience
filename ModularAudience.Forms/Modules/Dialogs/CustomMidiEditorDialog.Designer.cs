@@ -66,7 +66,7 @@ namespace ModularAudience.Forms.Modules.Dialogs
             this.timer_recording = new System.Windows.Forms.Timer(this.components);
             this.comboBox_inputDevice = new ComboBox();
             this.label_recordStatus = new Label();
-            this.panel_inputLevel = new Panel();
+            this.panel_recording = new Panel();
             this.progressBar_inputLevel = new ProgressBar();
             this.contextMenuStrip_playFromHere = new ContextMenuStrip(this.components);
             this.toolStripMenuItem_playFromHere = new ToolStripMenuItem();
@@ -85,7 +85,7 @@ namespace ModularAudience.Forms.Modules.Dialogs
             this.panel_actions.SuspendLayout();
             this.flowLayoutPanel_left.SuspendLayout();
             ((System.ComponentModel.ISupportInitialize)this.numericUpDown_pitchFrequency).BeginInit();
-            this.panel_inputLevel.SuspendLayout();
+            this.panel_recording.SuspendLayout();
             this.flowLayoutPanel_right.SuspendLayout();
             this.contextMenuStrip_playFromHere.SuspendLayout();
             this.contextMenuStrip_save.SuspendLayout();
@@ -239,7 +239,7 @@ namespace ModularAudience.Forms.Modules.Dialogs
             this.numericUpDown_resolution.Name = "numericUpDown_resolution";
             this.numericUpDown_resolution.Size = new Size(55, 23);
             this.numericUpDown_resolution.TabIndex = 3;
-            this.numericUpDown_resolution.Value = new decimal(new int[] { 4, 0, 0, 0 });
+            this.numericUpDown_resolution.Value = new decimal(new int[] { 8, 0, 0, 0 });
             this.numericUpDown_resolution.ValueChanged += this.numericUpDown_resolution_ValueChanged;
             // 
             // label_bpm
@@ -348,6 +348,7 @@ namespace ModularAudience.Forms.Modules.Dialogs
             // panel_actions
             // 
             this.panel_actions.Controls.Add(this.flowLayoutPanel_right);
+            this.panel_actions.Controls.Add(this.panel_recording);
             this.panel_actions.Controls.Add(this.flowLayoutPanel_left);
             this.panel_actions.Dock = DockStyle.Fill;
             this.panel_actions.Location = new Point(8, 17);
@@ -363,8 +364,7 @@ namespace ModularAudience.Forms.Modules.Dialogs
             this.flowLayoutPanel_left.Controls.Add(this.label_pitchFrequency);
             this.flowLayoutPanel_left.Controls.Add(this.numericUpDown_pitchFrequency);
             this.flowLayoutPanel_left.Controls.Add(this.comboBox_inputDevice);
-            this.flowLayoutPanel_left.Controls.Add(this.panel_inputLevel);
-            this.flowLayoutPanel_left.Dock = DockStyle.Fill;
+            this.flowLayoutPanel_left.Dock = DockStyle.Left;
             this.flowLayoutPanel_left.Location = new Point(0, 0);
             this.flowLayoutPanel_left.Margin = new Padding(0);
             this.flowLayoutPanel_left.Name = "flowLayoutPanel_left";
@@ -384,27 +384,27 @@ namespace ModularAudience.Forms.Modules.Dialogs
             this.comboBox_inputDevice.Visible = false;
             this.comboBox_inputDevice.SelectedIndexChanged += this.comboBox_inputDevice_SelectedIndexChanged;
             //
-            // panel_inputLevel
+            // panel_recording
             //
-            this.panel_inputLevel.Controls.Add(this.label_recordStatus);
-            this.panel_inputLevel.Controls.Add(this.progressBar_inputLevel);
-            this.panel_inputLevel.Dock = DockStyle.Fill;
-            this.panel_inputLevel.Location = new Point(517, 8);
-            this.panel_inputLevel.Margin = new Padding(3, 0, 3, 0);
-            this.panel_inputLevel.Name = "panel_inputLevel";
-            this.panel_inputLevel.Size = new Size(180, 23);
-            this.panel_inputLevel.TabIndex = 6;
-            this.panel_inputLevel.Visible = false;
+            this.panel_recording.Controls.Add(this.label_recordStatus);
+            this.panel_recording.Controls.Add(this.progressBar_inputLevel);
+            this.panel_recording.Dock = DockStyle.Fill;
+            this.panel_recording.Location = new Point(390, 0);
+            this.panel_recording.Margin = new Padding(0);
+            this.panel_recording.Name = "panel_recording";
+            this.panel_recording.Size = new Size(130, 39);
+            this.panel_recording.TabIndex = 1;
+            this.panel_recording.Visible = false;
             //
             // label_recordStatus
             //
             this.label_recordStatus.AutoEllipsis = true;
             this.label_recordStatus.Dock = DockStyle.Left;
             this.label_recordStatus.Enabled = false;
-            this.label_recordStatus.Location = new Point(3, 0);
-            this.label_recordStatus.Margin = new Padding(3, 8, 3, 0);
+            this.label_recordStatus.Location = new Point(8, 8);
+            this.label_recordStatus.Margin = new Padding(8, 8, 3, 0);
             this.label_recordStatus.Name = "label_recordStatus";
-            this.label_recordStatus.Size = new Size(120, 15);
+            this.label_recordStatus.Size = new Size(110, 15);
             this.label_recordStatus.TabIndex = 5;
             this.label_recordStatus.TextAlign = ContentAlignment.MiddleLeft;
             //
@@ -412,10 +412,11 @@ namespace ModularAudience.Forms.Modules.Dialogs
             //
             this.progressBar_inputLevel.Dock = DockStyle.Fill;
             this.progressBar_inputLevel.Enabled = false;
-            this.progressBar_inputLevel.Location = new Point(126, 0);
+            this.progressBar_inputLevel.Location = new Point(121, 8);
+            this.progressBar_inputLevel.Margin = new Padding(3, 8, 8, 8);
             this.progressBar_inputLevel.Name = "progressBar_inputLevel";
-            this.progressBar_inputLevel.Size = new Size(50, 23);
-            this.progressBar_inputLevel.TabIndex = 7;
+            this.progressBar_inputLevel.Size = new Size(15, 23);
+            this.progressBar_inputLevel.TabIndex = 6;
 
             // 
             // button_play
@@ -489,7 +490,7 @@ namespace ModularAudience.Forms.Modules.Dialogs
             this.button_record.Text = "Record";
             this.button_record.UseVisualStyleBackColor = true;
             this.button_record.Click += this.button_record_Click;
-            this.button_record.MouseClick += this.button_record_MouseClick;
+            this.button_record.ContextMenuStrip = this.contextMenuStrip_record;
             // 
             // button_save
             // 
@@ -566,6 +567,7 @@ namespace ModularAudience.Forms.Modules.Dialogs
             // contextMenuStrip_record
             //
             this.contextMenuStrip_record.Name = "contextMenuStrip_record";
+            this.contextMenuStrip_record.Opening += this.contextMenuStrip_record_Opening;
             //
             // CustomMidiEditorDialog
             //
@@ -594,7 +596,7 @@ namespace ModularAudience.Forms.Modules.Dialogs
             this.flowLayoutPanel_left.ResumeLayout(false);
             this.flowLayoutPanel_left.PerformLayout();
             ((System.ComponentModel.ISupportInitialize)this.numericUpDown_pitchFrequency).EndInit();
-            this.panel_inputLevel.ResumeLayout(false);
+            this.panel_recording.ResumeLayout(false);
             this.flowLayoutPanel_right.ResumeLayout(false);
             this.contextMenuStrip_playFromHere.ResumeLayout(false);
             this.contextMenuStrip_save.ResumeLayout(false);
@@ -642,7 +644,7 @@ namespace ModularAudience.Forms.Modules.Dialogs
         private System.Windows.Forms.Timer timer_recording;
         private ComboBox comboBox_inputDevice;
         private Label label_recordStatus;
-        private Panel panel_inputLevel;
+        private Panel panel_recording;
         private ProgressBar progressBar_inputLevel;
         private ContextMenuStrip contextMenuStrip_playFromHere;
         private ToolStripMenuItem toolStripMenuItem_playFromHere;

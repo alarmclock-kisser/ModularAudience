@@ -45,7 +45,7 @@ public sealed class CustomMidiEditorDialogTests
         Assert.AreEqual(1m, trackNumber.Minimum);
         Assert.AreEqual(1m, trackNumber.Maximum);
         Assert.AreEqual(440m, pitch.Value);
-        Assert.AreEqual(4m, resolution.Value);
+        Assert.AreEqual(8m, resolution.Value);
         Assert.AreEqual("Import", import.Text);
         Assert.AreEqual("Sine", Field<Label>(editor, "label_instrument").Text);
         Assert.AreEqual("Piano Roll", Field<Label>(editor, "label_trackName").Text);
@@ -644,6 +644,46 @@ public sealed class CustomMidiEditorDialogTests
         Assert.AreEqual(127, CustomMidiEditorDialog.RoundFrequencyToMidiNote(20000.0, 440.0));
     }
 
+    [STATestMethod]
+    public void GhostPreviewNotesAreQuantizedToTheEditorGrid()
+    {
+        using CustomMidiEditorDialog editor = new();
+        NumericUpDown resolution = Field<NumericUpDown>(editor, "numericUpDown_resolution");
+        resolution.Value = 8;
+
+        // GridTicks = 960 / 8 = 120
+        List<MidiNoteData> notes =
+        [
+            new() { NoteNumber = 60, Channel = 0, Velocity = 100, StartTick = 130, DurationTicks = 250 },
+            new() { NoteNumber = 64, Channel = 0, Velocity = 100, StartTick = 400, DurationTicks = 110 },
+            new() { NoteNumber = 67, Channel = 0, Velocity = 100, StartTick = 700, DurationTicks = 300 }
+        ];
+
+        var quantized = InvokeQuantize(editor, notes);
+
+        // 130 -> 120 (nearest multiple of 120)
+        // 250 -> 240
+        Assert.AreEqual(120, quantized[0].StartTick);
+        Assert.AreEqual(240, quantized[0].DurationTicks);
+        // 400 -> 360 (nearest multiple of 120)
+        // 110 -> 120
+        Assert.AreEqual(360, quantized[1].StartTick);
+        Assert.AreEqual(120, quantized[1].DurationTicks);
+        // 700 -> 720 (nearest multiple of 120)
+        // 300 -> 240 (nearest multiple of 120)
+        Assert.AreEqual(720, quantized[2].StartTick);
+        Assert.AreEqual(240, quantized[2].DurationTicks);
+        // Note numbers and velocity are preserved
+        Assert.AreEqual(60, quantized[0].NoteNumber);
+        Assert.AreEqual(100, quantized[0].Velocity);
+    }
+
+    private static List<MidiNoteData> InvokeQuantize(CustomMidiEditorDialog editor, List<MidiNoteData> notes)
+    {
+        var method = typeof(CustomMidiEditorDialog).GetMethod("QuantizeNotesToGrid", System.Reflection.BindingFlags.NonPublic | System.Reflection.BindingFlags.Instance)!;
+        return (List<MidiNoteData>)method.Invoke(editor, [notes])!;
+    }
+
     [TestMethod]
     public void PitchFramesConvertToQuantizedMidiNotesWithMinimumLengthAndVoicingGate()
     {
@@ -809,6 +849,36 @@ public sealed class CustomMidiEditorDialogTests
         Assert.AreEqual(576, notes[0].DurationTicks);
         Assert.AreEqual(576, notes[1].DurationTicks);
         Assert.AreEqual(576, notes[2].DurationTicks);
+    }
+
+    [TestMethod]
+    public void PitchJitterAroundTheNoteBoundaryDoesNotProduceSpuriousNotes()
+    {
+        int sampleRate = 44100;
+        int hop = sampleRate / 100;
+        int ticksPerQuarterNote = 480;
+        double bpm = 120;
+        double a4 = 440.0;
+        double minVoicedProbability = 0.3;
+        long minNoteTicks = 240;
+
+        var frames = new List<PitchFrame>();
+        // C4 (261.63 Hz) with ±20 Hz jitter alternating between C4 and C#4
+        // (277.18 Hz). Without median filtering + hysteresis this would
+        // produce a rapid C4/C#4 alternation (the "chaotic" behaviour).
+        for (int i = 0; i < 60; i++)
+        {
+            double freq = i % 2 == 0 ? 261.6256 : 277.18;
+            frames.Add(new PitchFrame(freq, 0.9));
+        }
+
+        List<MidiNoteData> notes = CustomMidiEditorDialog.BuildMidiNotesFromPitchFrames(
+            frames, sampleRate, hop, ticksPerQuarterNote, bpm, a4, minVoicedProbability, minNoteTicks);
+
+        // The jitter must be suppressed: a single sustained C4 note, not a
+        // rapid C4/C#4 alternation.
+        Assert.AreEqual(1, notes.Count);
+        Assert.AreEqual(60, notes[0].NoteNumber);
     }
 
     [TestMethod]
